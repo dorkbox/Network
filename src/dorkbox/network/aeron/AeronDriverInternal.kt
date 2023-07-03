@@ -855,6 +855,22 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     }
 
     /**
+     * Deletes the logfile for this publication
+     */
+    fun deleteLogFile(publication: Publication) {
+        getMediaDriverFile(publication).delete()
+    }
+
+    /**
+     * Deletes the logfile for this image (within a subscription, an image is the "connection" with a publication).
+     */
+    fun deleteLogFile(image: Image) {
+        val file = getMediaDriverFile(image)
+        driverLogger.debug { "Deleting log file: $image" }
+        file.delete()
+    }
+
+    /**
      * expose the internal counters of the Aeron driver
      */
     fun driverCounters(counterFunction: (counterId: Int, counterValue: Long, typeId: Int, keyBuffer: DirectBuffer?, label: String?) -> Unit) {

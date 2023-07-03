@@ -580,6 +580,20 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
     }
 
     /**
+     * Deletes the logfile for this publication
+     */
+    fun deleteLogFile(publication: Publication) {
+        internal.deleteLogFile(publication)
+    }
+
+    /**
+     * Deletes the logfile for this image (within a subscription, an image is the "connection" with a publication).
+     */
+    fun deleteLogFile(image: Image) {
+        internal.deleteLogFile(image)
+    }
+
+    /**
      * expose the internal counters of the Aeron driver
      */
     fun driverCounters(counterFunction: (counterId: Int, counterValue: Long, typeId: Int, keyBuffer: DirectBuffer?, label: String?) -> Unit) =

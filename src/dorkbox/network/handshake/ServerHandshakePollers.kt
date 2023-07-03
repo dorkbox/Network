@@ -107,10 +107,13 @@ internal object ServerHandshakePollers {
             } catch (e: Exception) {
                 server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error de-serializing handshake message!!", e))
                 null
-            } ?: run {
+            }
+
+
+            if (message == null) {
                 // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                 // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                driver.getMediaDriverFile(image).delete()
+                driver.deleteLogFile(image)
 
                 return
             }
@@ -135,7 +138,7 @@ internal object ServerHandshakePollers {
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                        driver.getMediaDriverFile(image).delete()
+                        driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
                         return@launch
@@ -149,7 +152,7 @@ internal object ServerHandshakePollers {
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                        driver.getMediaDriverFile(image).delete()
+                        driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
                         return@launch
@@ -177,7 +180,7 @@ internal object ServerHandshakePollers {
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                        driver.getMediaDriverFile(image).delete()
+                        driver.deleteLogFile(image)
 
                         driver.close(publication, logInfo)
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error processing IPC handshake", e))
@@ -189,7 +192,7 @@ internal object ServerHandshakePollers {
                     if (publication == null) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                        driver.getMediaDriverFile(image).delete()
+                        driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] No publication back to IPC"))
                         return@launch
@@ -210,7 +213,7 @@ internal object ServerHandshakePollers {
 
                     // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                     // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                    driver.getMediaDriverFile(image).delete()
+                    driver.deleteLogFile(image)
 
                     driver.close(publication, logInfo)
                 }
@@ -287,7 +290,8 @@ internal object ServerHandshakePollers {
             if (clientAddress == null) {
                 // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                 // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                driver.getMediaDriverFile(image).delete()
+                driver.deleteLogFile(image)
+
 
                 // Server is the "source", client mirrors the server
                 server.listenerManager.notifyError(ServerHandshakeException("[$sessionId/$streamId] Connection from $clientAddressString not allowed! Invalid IP address!"))
@@ -302,7 +306,7 @@ internal object ServerHandshakePollers {
                 if (ipInfo.ipType == IpInfo.Companion.IpListenType.IPv4Wildcard) {
                     // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                     // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                    driver.getMediaDriverFile(image).delete()
+                    driver.deleteLogFile(image)
 
                     // we DO NOT want to listen to IPv4 traffic, but we received IPv4 traffic!
                     server.listenerManager.notifyError(ServerHandshakeException("[$sessionId/$streamId] Connection from $clientAddressString not allowed! IPv4 connections not permitted!"))
@@ -327,10 +331,12 @@ internal object ServerHandshakePollers {
             } catch (e: Exception) {
                 server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error de-serializing handshake message!!", e))
                 null
-            } ?: run {
+            }
+
+            if (message == null) {
                 // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                 // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                driver.getMediaDriverFile(image).delete()
+                driver.deleteLogFile(image)
 
                 return
             }
@@ -359,7 +365,7 @@ internal object ServerHandshakePollers {
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                        driver.getMediaDriverFile(image).delete()
+                        driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
                         return@launch
@@ -373,7 +379,7 @@ internal object ServerHandshakePollers {
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                        driver.getMediaDriverFile(image).delete()
+                        driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
                         return@launch
@@ -400,14 +406,14 @@ internal object ServerHandshakePollers {
                         } else {
                             // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                             // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                            driver.getMediaDriverFile(image).delete()
+                            driver.deleteLogFile(image)
 
                             driver.close(publication, logInfo)
                         }
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                        driver.getMediaDriverFile(image).delete()
+                        driver.deleteLogFile(image)
 
                         driver.close(publication, logInfo)
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error processing IPC handshake", e))
@@ -420,7 +426,7 @@ internal object ServerHandshakePollers {
                     if (publication == null) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                        driver.getMediaDriverFile(image).delete()
+                        driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] No publication back to $clientAddressString"))
                         return@launch
@@ -441,7 +447,7 @@ internal object ServerHandshakePollers {
 
                     // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                     // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
-                    driver.getMediaDriverFile(image).delete()
+                    driver.deleteLogFile(image)
 
                     driver.close(publication, logInfo)
                 }
