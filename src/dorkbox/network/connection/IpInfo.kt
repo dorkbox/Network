@@ -228,48 +228,4 @@ internal class IpInfo(config: ServerConfiguration) {
             formattedListenAddressString
         }
     }
-
-
-    // localhost/loopback IP might not always be 127.0.0.1 or ::1
-    // We want to listen on BOTH IPv4 and IPv6 (config option lets us configure this)
-//    val listenIPv4Address: InetAddress? =
-//        if (canUseIPv4) {
-//            formatCommonAddress(config.listenIpAddress, true) { null } // if it's not a valid IP, the lambda will return null
-//        }
-//        else {
-//            null
-//        }
-
-
-//    val listenIPv6Address: InetAddress? =
-//        if (canUseIPv6) {
-//            EndPoint.formatCommonAddress(config.listenIpAddress, false) { null } // if it's not a valid IP, the lambda will return null
-//        }
-//        else {
-//            null
-//        }
-//
-//    val listenAddressString: String by lazy {
-//        if (listenIPv6Address == IPv6.WILDCARD) {
-//            IPv6.WILDCARD_STRING
-//        } else {
-//            IPv4.WILDCARD_STRING
-//        }
-//    }
-//
-//    val listenAddressPrettyString: String by lazy {
-//        if (listenIPv4Address == null) {
-//            "IPC"
-//        }
-//        else {
-//            "IPC"
-//        }
-//        val listenAddressString = IP.toString(listenAddress!!)
-//
-//        val prettyAddressString = when (listenAddress) {
-//            IPv4.WILDCARD -> listenAddressString
-//            IPv6.WILDCARD -> IPv4.WILDCARD.hostAddress + "/" + listenAddressString
-//            else -> listenAddressString
-//        }
-//    }
 }
