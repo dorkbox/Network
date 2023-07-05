@@ -17,8 +17,11 @@
 package dorkbox.network.aeron
 
 import dorkbox.network.Configuration
+import dorkbox.network.exceptions.AeronDriverException
+import dorkbox.util.Sys
 import io.aeron.driver.MediaDriver
 import io.aeron.exceptions.DriverTimeoutException
+import mu.KLogger
 import java.io.Closeable
 import java.io.File
 import java.util.concurrent.*
@@ -29,7 +32,7 @@ import java.util.concurrent.*
  * @throws IllegalStateException if the configuration has already been used to create a context
  * @throws IllegalArgumentException if the aeron media driver directory cannot be setup
  */
-internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorHandler: (Throwable) -> Unit) : Closeable {
+internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLogger, aeronErrorHandler: (Throwable) -> Unit) : Closeable {
     companion object {
         private fun create(config: Configuration.MediaDriverConfig, aeronErrorHandler: (Throwable) -> Unit): MediaDriver.Context {
             // LOW-LATENCY SETTINGS
@@ -125,7 +128,11 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
 
     private fun isRunning(context: MediaDriver.Context): Boolean {
         // if the media driver is running, it will be a quick connection. Usually 100ms or so
-        return context.isDriverActive(context.driverTimeoutMs()) { }
+        return try {
+            context.isDriverActive(context.driverTimeoutMs()) { }
+        } catch (e: Exception) {
+            false
+        }
     }
 
     init {
@@ -144,14 +151,16 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
 
         // sometimes when starting up, if a PREVIOUS run was corrupted (during startup, for example)
         // we ONLY do this during the initial startup check because it will delete the directory, and we don't always want to do this.
-        //
 
-        var isRunning = try {
+        val isRunning = try {
             context.isDriverActive(driverTimeout) { }
         } catch (e: DriverTimeoutException) {
             // we have to delete the directory, since it was corrupted, and we try again.
-            if (aeronDir.deleteRecursively()) {
+            if (!config.forceAllowSharedAeronDriver && aeronDir.deleteRecursively()) {
                 context.isDriverActive(driverTimeout) { }
+            } else if (config.forceAllowSharedAeronDriver) {
+                // we are expecting a shared directory. SOMETHING is screwed up!
+                throw AeronDriverException("Aeron was expected to be running, and the current location is corrupted. Not doing anything!", e)
             } else {
                 // unable to delete the directory
                 throw e
@@ -170,26 +179,17 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
         } else {
             // maybe it's a mistake because we restarted too quickly! A brief pause to fix this!
 
-            // wait for it to close!
-            val timeoutInNanos = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong())
-            val closeTimeoutTime = System.nanoTime()
-            while (isRunning(context) && System.nanoTime() - closeTimeoutTime < timeoutInNanos) {
-                Thread.sleep(timeoutInNanos)
+            val timeoutInNs = TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong()) + context.publicationLingerTimeoutNs()
+            val timeoutInMs = TimeUnit.NANOSECONDS.toMillis(timeoutInNs)
+            logger.warn { "Aeron is currently running, waiting ${Sys.getTimePrettyFull(timeoutInNs)} for it to close." }
+
+            // wait for it to close! wait longer.
+            val startTime = System.nanoTime()
+            while (isRunning(context) && System.nanoTime() - startTime < timeoutInNs) {
+                Thread.sleep(timeoutInMs)
             }
 
-            isRunning = try {
-                context.isDriverActive(driverTimeout) { }
-            } catch (e: DriverTimeoutException) {
-                // we have to delete the directory, since it was corrupted, and we try again.
-                if (aeronDir.deleteRecursively()) {
-                    context.isDriverActive(driverTimeout) { }
-                } else {
-                    // unable to delete the directory
-                    throw e
-                }
-            }
-
-            require(!isRunning || config.forceAllowSharedAeronDriver) { "Aeron is currently running, and this is the first instance created by this JVM. " +
+            require(!isRunning(context) || config.forceAllowSharedAeronDriver) { "Aeron is currently running, and this is the first instance created by this JVM. " +
                     "You must use `config.forceAllowSharedAeronDriver` to be able to re-use a shared aeron process at: $aeronDir" }
         }
 

@@ -417,7 +417,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
                 var driver = driverConfigurations.get(driverId)
                 if (driver == null) {
-                    driver = AeronDriverInternal(endPoint, mediaDriverConfig)
+                    driver = AeronDriverInternal(endPoint, mediaDriverConfig, logger)
 
                     driverConfigurations.put(driverId, driver)
 

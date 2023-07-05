@@ -39,7 +39,7 @@ import org.agrona.concurrent.BackoffIdleStrategy
 import java.io.File
 import java.util.concurrent.*
 
-internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: Configuration.MediaDriverConfig) {
+internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: Configuration.MediaDriverConfig, logger: KLogger) {
     companion object {
         // on close, the publication CAN linger (in case a client goes away, and then comes back)
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
@@ -138,7 +138,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         // @throws IllegalStateException if the configuration has already been used to create a context
         // @throws IllegalArgumentException if the aeron media driver directory cannot be setup
-        context = AeronContext(config, aeronErrorHandler)
+        context = AeronContext(config, logger, aeronErrorHandler)
 
         addEndpoint(endPoint)
     }
