@@ -727,7 +727,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             return@withLock false
         }
 
-        val removed = AeronDriver.driverConfigurations.remove(driverId)
+        val removed = AeronDriver.driverConfigurations[driverId]
         if (removed == null) {
             logger.debug { "Aeron Driver [$driverId]: already closed. Ignoring close request." }
             return@withLock false
@@ -834,6 +834,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         // reset our contextDefine value, so that this configuration can safely be reused
         config.contextDefined = false
 
+        // actually remove it, since we've passed all the checks to guarantee it's closed...
+        AeronDriver.driverConfigurations.remove(driverId)
         closed = true
 
         return true
