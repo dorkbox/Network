@@ -76,13 +76,12 @@ internal class HandshakeMessage private constructor() {
             return hello
         }
 
-        fun doneFromClient(connectKey: Long, sessionIdSub: Int, streamIdSub: Int, portSub: Int): HandshakeMessage {
+        fun doneFromClient(connectKey: Long, sessionIdSub: Int, streamIdSub: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = DONE
             hello.connectKey = connectKey // THIS MUST NEVER CHANGE! (the server/client expect this)
             hello.sessionId = sessionIdSub
             hello.streamId = streamIdSub
-            hello.port = portSub
             return hello
         }
 

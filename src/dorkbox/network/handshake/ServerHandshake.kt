@@ -335,6 +335,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
+                portPubMdc = 0,
                 portPub = 0,
                 portSub = 0,
                 reliable = true
@@ -410,6 +411,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
         publicKey: ByteArray,
         clientAddress: InetAddress,
         clientAddressString: String,
+        portSub: Int,
+        portPub: Int,
+        mdcPortPub: Int,
         isReliable: Boolean,
         message: HandshakeMessage,
         aeronLogInfo: String,
@@ -527,11 +531,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
         }
 
 
-
-        // the pub/sub do not necessarily have to be the same. They can be ANY port
-        val portPub = message.port
-        val portSub = server.port
-
         val logType = if (clientAddress is Inet4Address) {
             "IPv4"
         } else {
@@ -554,6 +553,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
+                portPubMdc = mdcPortPub,
                 portPub = portPub,
                 portSub = portSub,
                 reliable = isReliable

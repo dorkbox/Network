@@ -83,7 +83,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
     companion object {
         // connections are extremely difficult to diagnose when the connection timeout is short
-        internal const val DEBUG_CONNECTIONS = true
+        internal const val DEBUG_CONNECTIONS = false
 
         internal const val IPC_NAME = "IPC"
 
@@ -189,6 +189,20 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     private val streamingManager = StreamingManager<CONNECTION>(logger, messageDispatch, config)
 
     private val pingManager = PingManager<CONNECTION>()
+
+    /**
+     * The primary machine port that the server will listen for connections on
+     */
+    @Volatile
+    var port1: Int = 0
+        internal set
+
+    /**
+     * The secondary machine port that the server will use to work around NAT firewalls (this is required, and will be different from the primary)
+     */
+    @Volatile
+    var port2: Int = 0
+        internal set
 
     init {
         if (DEBUG_CONNECTIONS) {

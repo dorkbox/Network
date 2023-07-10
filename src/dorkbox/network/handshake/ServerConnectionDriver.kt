@@ -33,16 +33,16 @@ import java.net.InetAddress
 internal class ServerConnectionDriver(val pubSub: PubSub) {
     companion object {
         suspend fun build(isIpc: Boolean,
-                  aeronDriver: AeronDriver,
-                  sessionIdPub: Int, sessionIdSub: Int,
-                  streamIdPub: Int, streamIdSub: Int,
+                          aeronDriver: AeronDriver,
+                          sessionIdPub: Int, sessionIdSub: Int,
+                          streamIdPub: Int, streamIdSub: Int,
 
-                  ipInfo: IpInfo,
-                  remoteAddress: InetAddress?,
-                  remoteAddressString: String,
-                  portPub: Int, portSub: Int,
-                  reliable: Boolean,
-                  logInfo: String): ServerConnectionDriver {
+                          ipInfo: IpInfo,
+                          remoteAddress: InetAddress?,
+                          remoteAddressString: String,
+                          portPubMdc: Int, portPub: Int, portSub: Int,
+                          reliable: Boolean,
+                          logInfo: String): ServerConnectionDriver {
 
             val pubSub: PubSub
 
@@ -66,6 +66,7 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
                     streamIdSub = streamIdSub,
                     remoteAddress = remoteAddress!!,
                     remoteAddressString = remoteAddressString,
+                    portPubMdc = portPubMdc,
                     portPub = portPub,
                     portSub = portSub,
                     reliable = reliable,
@@ -109,7 +110,9 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
             sessionIdPub: Int, sessionIdSub: Int,
             streamIdPub: Int, streamIdSub: Int,
             remoteAddress: InetAddress, remoteAddressString: String,
-            portPub: Int, portSub: Int,
+            portPubMdc: Int, // this is the MDC port - used to dynamically discover the portPub value (but we manually save this info)
+            portPub: Int,
+            portSub: Int,
             reliable: Boolean,
             logInfo: String
         ): PubSub {
@@ -122,11 +125,12 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
 
             // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
 
+            // we explicitly have the publisher "connect to itself", because we are using MDC to work around NAT
+
             // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
             // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
             val publicationUri = uri(CommonContext.UDP_MEDIA, sessionIdPub, reliable)
-                .controlEndpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + portPub) // this is the port of the client subscription!
-                .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+                .controlEndpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + portPubMdc) // this is the control port! (listens to status messages and NAK from client)
 
 
             // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe

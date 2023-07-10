@@ -89,7 +89,7 @@ class MultiClientTest : BaseTest() {
         }
 
 
-        server.bind(2000)
+        server.bind(2000, 2001)
 
         // start up the drivers first
         runBlocking {
@@ -104,9 +104,9 @@ class MultiClientTest : BaseTest() {
         ).asCoroutineDispatcher()
 
         runBlocking {
-            clients.forEach {
+            clients.forEachIndexed { count, client ->
                 launch(differentThreadLaunchers) {
-                    it.connect(LOCALHOST, 2000, 30)
+                    client.connect(LOCALHOST, 2000, 2001, 30)
                 }
             }
         }

@@ -115,11 +115,11 @@ class MultipleServerTest : BaseTest() {
         }
 
         for (count in 0 until total) {
-            servers[count].bind(2000 + count)
+            servers[count].bind(2000 + (count*2))
         }
 
         for (count in 0 until total) {
-            clients[count].connect(LOCALHOST, 2000+count)
+            clients[count].connect(LOCALHOST, 2000 + (count*2))
         }
 
         waitForThreads()
@@ -234,12 +234,12 @@ class MultipleServerTest : BaseTest() {
         }
 
         for (count in 0 until total) {
-            servers[count].bind(2000+count)
+            servers[count].bindIpc()
         }
 
 
         for (count in 0 until total) {
-            clients[count].connect(LOCALHOST, 2000+count)
+            clients[count].connectIpc()
         }
 
         waitForThreads()

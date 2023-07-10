@@ -247,6 +247,10 @@ internal object ServerHandshakePollers {
         private val handshaker = server.handshaker
         private val handshakeTimeoutNs = handshake.handshakeTimeoutNs
 
+        private val serverPortSub = server.port1
+        // MDC 'dynamic control mode' means that the server will to listen for status messages and NAK (from the client) on a port.
+        private val mdcPortPub = server.port2
+
         // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
         private val publications = ExpiringMap.builder()
             .apply {
@@ -349,11 +353,11 @@ internal object ServerHandshakePollers {
                 if (messageState == HandshakeMessage.HELLO) {
                     // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
 
-                    // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
-                    // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
+                    // we explicitly have the publisher "connect to itself", because we are using MDC to work around NAT.
+                    // It will "auto-connect" to the correct client port (negotiated by the MDC client subscription negotiating on the
+                    // control port of the server)
                     val publicationUri = uriHandshake(CommonContext.UDP_MEDIA, isReliable)
-                        .controlEndpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
-                        .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+                        .controlEndpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + mdcPortPub)
 
 
                     // this will always connect to the CLIENT handshake subscription!
@@ -382,7 +386,6 @@ internal object ServerHandshakePollers {
                         return@launch
                     }
 
-
                     try {
                         val success = handshake.processUdpHandshakeMessageServer(
                             server = server,
@@ -391,6 +394,9 @@ internal object ServerHandshakePollers {
                             publicKey = message.publicKey!!,
                             clientAddress = clientAddress,
                             clientAddressString = clientAddressString,
+                            portPub = message.port,
+                            portSub = serverPortSub,
+                            mdcPortPub = mdcPortPub,
                             isReliable = isReliable,
                             message = message,
                             aeronLogInfo = logInfo,
@@ -520,7 +526,7 @@ internal object ServerHandshakePollers {
                 aeronDriver = server.aeronDriver,
                 isIpc = false,
                 ipInfo = server.ipInfo,
-                port = server.port,
+                port = server.port1,
                 streamIdSub = config.udpId,
                 sessionIdSub = 9,
                 logInfo = "HANDSHAKE-IPv4"
@@ -568,7 +574,7 @@ internal object ServerHandshakePollers {
                 aeronDriver = server.aeronDriver,
                 isIpc = false,
                 ipInfo = server.ipInfo,
-                port = server.port,
+                port = server.port1,
                 streamIdSub = config.udpId,
                 sessionIdSub = 0,
                 logInfo = "HANDSHAKE-IPv6"
@@ -617,7 +623,7 @@ internal object ServerHandshakePollers {
                 aeronDriver = server.aeronDriver,
                 isIpc = false,
                 ipInfo = server.ipInfo,
-                port = server.port,
+                port = server.port1,
                 streamIdSub = config.udpId,
                 sessionIdSub = 0,
                 logInfo = "HANDSHAKE-IPv4+6"

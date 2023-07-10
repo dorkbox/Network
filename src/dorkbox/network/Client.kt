@@ -175,13 +175,6 @@ open class Client<CONNECTION : Connection>(
         private set
 
     /**
-     * The machine port of the remote machine that the client has connected to. This will be 0 for IPC connections
-     */
-    @Volatile
-    var port: Int = 0
-        private set
-
-    /**
      * The default connection reliability type (ie: can the lower-level network stack throw away data that has errors, for example real-time-voice)
      */
     @Volatile
@@ -231,7 +224,8 @@ open class Client<CONNECTION : Connection>(
             remoteAddress = address,
             remoteAddressString = addressString,
             remoteAddressPrettyString = addressPrettyString,
-            port = port,
+            port1 = port1,
+            port2 = port2,
             connectionTimeoutSec = connectionTimeoutSec,
             reliable = reliable,
         )
@@ -249,7 +243,8 @@ open class Client<CONNECTION : Connection>(
      */
     fun connectIpc(connectionTimeoutSec: Int = 30) = runBlocking {
         connect(remoteAddress = null, // required!
-                port = 0,
+                port1 = 0,
+                port2 = 0,
                 remoteAddressString = IPC_NAME,
                 remoteAddressPrettyString = IPC_NAME,
                 connectionTimeoutSec = connectionTimeoutSec)
@@ -277,7 +272,9 @@ open class Client<CONNECTION : Connection>(
      * ### Case does not matter, and "localhost" is the default.
      *
      * @param remoteAddress The network or if localhost, IPC address for the client to connect to
-     * @param port The network host port to connect to
+     * @param port1 The network host port1 to connect to
+     * @param port2 The network host port2 to connect to. The server uses this to work around NAT firewalls. By default, this is port1+1,
+     *              but can also be configured independently. This is required, and must be different from port1.
      * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
      * @param reliable true if we want to create a reliable connection, can the lower-level network stack throw away data that has errors, (IE: real-time-voice traffic)
      *
@@ -287,7 +284,8 @@ open class Client<CONNECTION : Connection>(
      */
      fun connect(
         remoteAddress: InetAddress,
-        port: Int,
+        port1: Int,
+        port2: Int = port1+1,
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true) = runBlocking {
 
@@ -300,7 +298,8 @@ open class Client<CONNECTION : Connection>(
         connect(remoteAddress = remoteAddress,
                 remoteAddressString = remoteAddressString,
                 remoteAddressPrettyString = remoteAddressString,
-                port = port,
+                port1 = port1,
+                port2 = port2,
                 connectionTimeoutSec = connectionTimeoutSec,
                 reliable = reliable)
     }
@@ -327,7 +326,10 @@ open class Client<CONNECTION : Connection>(
      * ### Case does not matter, and "localhost" is the default.
      *
      * @param remoteAddress The network host name or ip address
-     * @param port The network host port to connect to
+     * @param port1 The network host port1 to connect to
+     * @param port2 The network host port2 to connect to. The server uses this to work around NAT firewalls. By default, this is port1+1,
+     *              but can also be configured independently. This is required, and must be different from port1.
+     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
      * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
      * @param reliable true if we want to create a reliable connection, can the lower-level network stack throw away data that has errors, (IE: real-time-voice traffic)
      *
@@ -337,7 +339,8 @@ open class Client<CONNECTION : Connection>(
      */
     fun connect(
         remoteAddress: String,
-        port: Int,
+        port1: Int,
+        port2: Int = port1+1,
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true) {
             fun connect(dnsResolveType: ResolvedAddressTypes) = runBlocking {
@@ -363,7 +366,8 @@ open class Client<CONNECTION : Connection>(
                         // we check again, because the inetAddress that comes back from DNS, might not be what we expect
                         remoteAddressString = remoteAddressAsIp,
                         remoteAddressPrettyString = formattedString,
-                        port = port,
+                        port1 = port1,
+                        port2 = port2,
                         connectionTimeoutSec = connectionTimeoutSec,
                         reliable = reliable)
             }
@@ -372,7 +376,8 @@ open class Client<CONNECTION : Connection>(
                 // this is default IPC settings
                 remoteAddress.isEmpty() && config.enableIpc -> runBlocking {
                     connect(remoteAddress = null, // required!
-                            port = 0,
+                            port1 = 0,
+                            port2 = 0,
                             remoteAddressString = IPC_NAME,
                             remoteAddressPrettyString = IPC_NAME,
                             connectionTimeoutSec = connectionTimeoutSec)
@@ -409,7 +414,10 @@ open class Client<CONNECTION : Connection>(
      * ### Case does not matter, and "localhost" is the default.
      *
      * @param remoteAddress The network or if localhost for the client to connect to
-     * @param port The network host port to connect to
+     * @param port1 The network host port1 to connect to
+     * @param port2 The network host port2 to connect to. The server uses this to work around NAT firewalls. By default, this is port1+1,
+     *              but can also be configured independently. This is required, and must be different from port1.
+     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
      * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely.
      * @param reliable true if we want to create a reliable connection, can the lower-level network stack throw away data that has errors, (IE: real-time-voice traffic)
      *
@@ -421,11 +429,12 @@ open class Client<CONNECTION : Connection>(
      */
     @Suppress("DuplicatedCode")
     private suspend fun connect(
-        remoteAddress: InetAddress? = null,
+        remoteAddress: InetAddress?,
         remoteAddressString: String,
         remoteAddressPrettyString: String,
-        port: Int = 0,
-        connectionTimeoutSec: Int = 30,
+        port1: Int,
+        port2: Int,
+        connectionTimeoutSec: Int,
         reliable: Boolean = true)
     {
         // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
@@ -439,15 +448,22 @@ open class Client<CONNECTION : Connection>(
                     remoteAddress = remoteAddress,
                     remoteAddressString = remoteAddressString,
                     remoteAddressPrettyString = remoteAddressPrettyString,
-                    port = port,
+                    port1 = port1,
+                    port2 = port2,
                     connectionTimeoutSec = connectionTimeoutSec,
                     reliable = reliable)
             }
             return
         }
 
-        require(port > 0 || remoteAddress == null) { "port must be > 0" }
-        require(port < 65535) { "port must be < 65535" }
+
+        if ((config.enableIPv4 || config.enableIPv6) && remoteAddress != null) {
+            require(port1 != port2) { "port1 cannot be the same as port2" }
+            require(port1 > 0) { "port1 must be > 0" }
+            require(port2 > 0) { "port2 must be > 0" }
+            require(port1 < 65535) { "port1 must be < 65535" }
+            require(port2 < 65535) { "port2 must be < 65535" }
+        }
 
         // the lifecycle of a client is the ENDPOINT (measured via the network event poller) and CONNECTION (measure from connection closed)
         if (!waitForClose()) {
@@ -502,7 +518,9 @@ open class Client<CONNECTION : Connection>(
         this.addressString = remoteAddressString
         this.addressPrettyString = remoteAddressString
 
-        this.port = port
+        this.port1 = port1
+        this.port2 = port2
+
         this.reliable = reliable
         this.connectionTimeoutSec = connectionTimeoutSec
 
@@ -568,8 +586,9 @@ open class Client<CONNECTION : Connection>(
                     autoChangeToIpc = autoChangeToIpc,
                     remoteAddress = remoteAddress,
                     remoteAddressString = remoteAddressString,
-                    remotePort = port,
-                    port = config.port,
+                    remotePort1 = port1,
+                    clientListenPort = config.port,
+                    remotePort2 = port2,
                     handshakeTimeoutNs = handshakeTimeoutNs,
                     reliable = reliable,
                     logger = logger
@@ -643,7 +662,7 @@ open class Client<CONNECTION : Connection>(
                 } else if (isIPC) {
                     "IPC"
                 } else {
-                    "$remoteAddressPrettyString:$port"
+                    "$remoteAddressPrettyString:$port1:$port2"
                 }
 
                 // we timed out. Throw the appropriate exception
@@ -730,7 +749,8 @@ open class Client<CONNECTION : Connection>(
             aeronDriver = aeronDriver,
             handshakeTimeoutNs = handshakeTimeoutNs,
             handshakeConnection = handshakeConnection,
-            connectionInfo = connectionInfo
+            connectionInfo = connectionInfo,
+            port2Server = port2
         )
 
         val pubSub = clientConnection.connectionInfo
@@ -795,7 +815,7 @@ open class Client<CONNECTION : Connection>(
                 // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
                 removeConnection(newConnection)
 
-                // we already removed the connection, we can call it again without side affects
+                // we already removed the connection, we can call it again without side effects
                 newConnection.close()
 
                 // remove ourselves from processing

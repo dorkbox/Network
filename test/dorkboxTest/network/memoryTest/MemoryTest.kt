@@ -45,7 +45,7 @@ class MemoryTest : BaseTest() {
 
                 val server = Server<Connection>(configuration)
                 server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
-                server.bind()
+                server.bindIpc()
             }
 
 
@@ -87,7 +87,7 @@ class MemoryTest : BaseTest() {
 
                 val server = Server<Connection>(configuration)
                 server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
-                server.bind()
+                server.bindIpc()
             }
 
 
@@ -148,7 +148,7 @@ class MemoryTest : BaseTest() {
                 client
             }
 
-            server.bind()
+            server.bindIpc()
             client.connectIpc()
 
             Thread.sleep(Long.MAX_VALUE)

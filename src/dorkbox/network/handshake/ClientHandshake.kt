@@ -258,8 +258,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                                     HandshakeMessage.doneFromClient(
                                         connectKey = connectKey,
                                         sessionIdSub = handshakePubSub.sessionIdSub,
-                                        streamIdSub = handshakePubSub.streamIdSub,
-                                        portSub = handshakePubSub.portSub
+                                        streamIdSub = handshakePubSub.streamIdSub
                                     ))
         } catch (e: Exception) {
             handshakeConnection.close()

@@ -174,13 +174,6 @@ open class Server<CONNECTION : Connection>(
     @Volatile
     internal lateinit var handshake: ServerHandshake<CONNECTION>
 
-    /**
-     * The machine port that the server will listen for connections on
-     */
-    @Volatile
-    var port: Int = 0
-        private set
-
     private val string0: String by lazy {
         "EndPoint [Server: $${storage.publicKey!!.toHexString()}]"
     }
@@ -197,16 +190,34 @@ open class Server<CONNECTION : Connection>(
     }
 
     /**
-     * Binds the server to AERON configuration
+     * Binds the server IPC only, using the previously set AERON configuration
+     */
+    fun bindIpc() {
+        require(config.enableIpc) { "IPC is not enabled, yet requested. Unable to continue." }
+
+        if (config.enableIPv4) { logger.warn { "IPv4 is enabled, but only IPC will be used." }}
+        if (config.enableIPv6) { logger.warn { "IPv6 is enabled, but only IPC will be used." }}
+
+        bind(0,0)
+    }
+
+    /**
+     * Binds the server to UDP ports, using the previously set AERON configuration
      *
-     * @param port this is the network port which will be listening for incoming connections
+     * @param port1 this is the network port which will be listening for incoming connections
+     * @param port2 this is the network port that the server will use to work around NAT firewalls. By default, this is port1+1, but
+     *              can also be configured independently. This is required, and must be different from port1.
      */
     @Suppress("DuplicatedCode")
-    fun bind(port: Int = 0)  = runBlocking {
-        // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
+    fun bind(port1: Int, port2: Int = port1+1)  = runBlocking {
+        if (config.enableIPv4 || config.enableIPv6) {
+            require(port1 != port2) { "port1 cannot be the same as port2" }
+            require(port1 > 0) { "port1 must be > 0" }
+            require(port2 > 0) { "port2 must be > 0" }
+            require(port1 < 65535) { "port1 must be < 65535" }
+            require(port2 < 65535) { "port2 must be < 65535" }
+        }
 
-        require(port > 0 || config.enableIpc) { "port must be > 0" }
-        require(port < 65535) { "port must be < 65535" }
 
         // the lifecycle of a server is the ENDPOINT (measured via the network event poller)
         if (endpointIsRunning.value) {
@@ -229,7 +240,8 @@ open class Server<CONNECTION : Connection>(
             return@runBlocking
         }
 
-        this@Server.port = port
+        this@Server.port1 = port1
+        this@Server.port2 = port2
 
         config as ServerConfiguration
 

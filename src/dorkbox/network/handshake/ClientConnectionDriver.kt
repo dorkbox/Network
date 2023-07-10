@@ -43,7 +43,8 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             handshakeConnection: ClientHandshakeDriver,
-            connectionInfo: ClientConnectionInfo
+            connectionInfo: ClientConnectionInfo,
+            port2Server: Int, // this is the port2 value from the server
         ): ClientConnectionDriver {
             val handshakePubSub = handshakeConnection.pubSub
             val reliable = handshakePubSub.reliable
@@ -98,6 +99,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
                     remoteAddressString = remoteAddressString,
                     portPub = portPub,
                     portSub = portSub,
+                    port2Server = port2Server,
                     reliable = reliable,
                     logInfo = logInfo
                 )
@@ -159,6 +161,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             remoteAddressString: String,
             portPub: Int,
             portSub: Int,
+            port2Server: Int, // this is the port2 value from the server
             reliable: Boolean,
             logInfo: String,
         ): PubSub {
@@ -191,8 +194,8 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
             // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
             val subscriptionUri = uri(CommonContext.UDP_MEDIA, sessionIdSub, reliable)
-                .endpoint(isRemoteIpv4, localAddressString, 0) // 0 for MDC!
-                .controlEndpoint(isRemoteIpv4, remoteAddressString, portSub)
+                .endpoint(isRemoteIpv4, localAddressString, portSub)
+                .controlEndpoint(isRemoteIpv4, remoteAddressString, port2Server)
                 .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, false)

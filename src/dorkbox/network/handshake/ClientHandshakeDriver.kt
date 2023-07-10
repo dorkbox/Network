@@ -60,8 +60,9 @@ internal class ClientHandshakeDriver(
             autoChangeToIpc: Boolean,
             remoteAddress: InetAddress?,
             remoteAddressString: String,
-            remotePort: Int,
-            port: Int,
+            remotePort1: Int,
+            remotePort2: Int,
+            clientListenPort: Int,
             handshakeTimeoutNs: Long,
             reliable: Boolean,
             logger: KLogger
@@ -152,8 +153,9 @@ internal class ClientHandshakeDriver(
                     handshakeTimeoutNs = handshakeTimeoutNs,
                     remoteAddress = remoteAddress,
                     remoteAddressString = remoteAddressString,
-                    portPub = remotePort,
-                    portSub = port,
+                    portPub = remotePort1,
+                    portSub = clientListenPort,
+                    port2Server = remotePort2,
                     sessionIdPub = sessionIdPub,
                     streamIdPub = streamIdPub,
                     reliable = reliable,
@@ -224,8 +226,9 @@ internal class ClientHandshakeDriver(
             handshakeTimeoutNs: Long,
             remoteAddress: InetAddress,
             remoteAddressString: String,
-            portPub: Int,
+            portPub: Int, // this is the port1 value from the server
             portSub: Int,
+            port2Server: Int, // this is the port2 value from the server
             sessionIdPub: Int,
             streamIdPub: Int,
             reliable: Boolean,
@@ -277,8 +280,8 @@ internal class ClientHandshakeDriver(
                 // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
                 // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
                 val subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, reliable)
-                    .endpoint(isRemoteIpv4, localAddressString, 0) // 0 for MDC!
-                    .controlEndpoint(isRemoteIpv4, remoteAddressString, portSub)
+                    .endpoint(isRemoteIpv4, localAddressString, portSub)
+                    .controlEndpoint(isRemoteIpv4, remoteAddressString, port2Server)
                     .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
                 subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, false)
@@ -300,8 +303,8 @@ internal class ClientHandshakeDriver(
                         // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
                         // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
                         val subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, reliable)
-                            .endpoint(isRemoteIpv4, localAddressString, 0) // 0 for MDC!
-                            .controlEndpoint(isRemoteIpv4, remoteAddressString, portSub)
+                            .endpoint(isRemoteIpv4, localAddressString, portSub)
+                            .controlEndpoint(isRemoteIpv4, remoteAddressString, port2Server)
                             .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
                         subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, false)

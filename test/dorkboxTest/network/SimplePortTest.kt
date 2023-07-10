@@ -181,7 +181,7 @@ class SimplePortTest : BaseTest() {
 
                 if (this.isNetwork && this.remotePort != 2400) {
                     stopEndPoints()
-                    Assert.fail("Wrong port!")
+                    Assert.fail("Wrong port: ${this.remotePort}!!")
                 }
 
                 received.set(true)
@@ -214,17 +214,21 @@ class SimplePortTest : BaseTest() {
             client
         }
 
-        server.bind(12312)
+        val port1 = 1200
+        val port2 = 1201
+
+        server.bind(port1, port2)
+
         when (clientType) {
             ConnectType.IPC -> { client.connectIpc() }
-            ConnectType.IPC4 -> { client.connect(IPv4.LOCALHOST, 12312) }
-            ConnectType.IPC6 -> { client.connect(IPv6.LOCALHOST, 12312) }
-            ConnectType.IPC46 -> { client.connect(IPv4.LOCALHOST, 12312) }
-            ConnectType.IPC64 -> { client.connect(IPv6.LOCALHOST, 12312) }
-            ConnectType.IP4 -> { client.connect(IPv4.LOCALHOST, 12312) }
-            ConnectType.IP6 -> { client.connect(IPv6.LOCALHOST, 12312) }
-            ConnectType.IP46 -> { client.connect(IPv4.LOCALHOST, 12312) }
-            ConnectType.IP64 -> { client.connect(IPv6.LOCALHOST, 12312) }
+            ConnectType.IPC4 -> { client.connect(IPv4.LOCALHOST, port1, port2) }
+            ConnectType.IPC6 -> { client.connect(IPv6.LOCALHOST, port1, port2) }
+            ConnectType.IPC46 -> { client.connect(IPv4.LOCALHOST, port1, port2) }
+            ConnectType.IPC64 -> { client.connect(IPv6.LOCALHOST, port1, port2) }
+            ConnectType.IP4 -> { client.connect(IPv4.LOCALHOST, port1, port2) }
+            ConnectType.IP6 -> { client.connect(IPv6.LOCALHOST, port1, port2) }
+            ConnectType.IP46 -> { client.connect(IPv4.LOCALHOST, port1, port2) }
+            ConnectType.IP64 -> { client.connect(IPv6.LOCALHOST, port1, port2) }
         }
 
 
