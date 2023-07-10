@@ -199,7 +199,7 @@ open class Client<CONNECTION : Connection>(
     private var connection0: CONNECTION? = null
 
     private val string0: String by lazy {
-        "EndPoint [Client: $${storage.publicKey!!.toHexString()}]"
+        "EndPoint [Client: $${storage.publicKey.toHexString()}]"
     }
 
     final override fun newException(message: String, cause: Throwable?): Throwable {

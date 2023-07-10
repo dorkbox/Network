@@ -117,7 +117,7 @@ internal class CryptoManagement(val logger: KLogger,
         this.publicKey = keyFactory.generatePublic(XECPublicKeySpec(X25519KeySpec, BigInteger(publicKeyBytes))) as XECPublicKey
         this.privateKey = keyFactory.generatePrivate(XECPrivateKeySpec(X25519KeySpec, privateKeyBytes)) as XECPrivateKey
 
-        this.privateKeyBytes = privateKeyBytes!!
+        this.privateKeyBytes = privateKeyBytes
         this.publicKeyBytes = publicKeyBytes
     }
 
