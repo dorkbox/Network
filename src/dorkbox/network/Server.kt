@@ -175,7 +175,7 @@ open class Server<CONNECTION : Connection>(
     internal lateinit var handshake: ServerHandshake<CONNECTION>
 
     private val string0: String by lazy {
-        "EndPoint [Server: $${storage.publicKey!!.toHexString()}]"
+        "EndPoint [Server: $${storage.publicKey.toHexString()}]"
     }
 
     final override fun newException(message: String, cause: Throwable?): Throwable {

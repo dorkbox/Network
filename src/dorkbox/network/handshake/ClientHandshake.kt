@@ -194,7 +194,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             handshaker.writeMessage(pubSub.pub, handshakeConnection.details,
                                     HandshakeMessage.helloFromClient(
                                         connectKey = connectKey,
-                                        publicKey = client.storage.publicKey!!,
+                                        publicKey = client.storage.publicKey,
                                         streamIdSub = pubSub.streamIdSub,
                                         portSub = pubSub.portSub
                                     ))

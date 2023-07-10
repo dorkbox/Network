@@ -29,12 +29,8 @@ import dorkbox.network.connection.Connection
 import dorkbox.storage.Storage
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
+import org.agrona.concurrent.SigInt
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
@@ -75,7 +71,7 @@ class AeronRmiClientServer {
 
             // rootLogger.setLevel(Level.INFO);
 //        rootLogger.level = Level.DEBUG
-//            rootLogger.level = Level.TRACE
+            rootLogger.level = Level.TRACE
 //        rootLogger.setLevel(Level.ALL);
 
 
@@ -114,16 +110,25 @@ class AeronRmiClientServer {
             val acs = AeronRmiClientServer()
 
             try {
-                val configuration = ClientConfiguration()
-                configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-
-                configuration.enableIpc = false
-                configuration.enableIPv6 = false
-
-                configuration.publicationTermBufferLength = io.aeron.logbuffer.LogBufferDescriptor.TERM_MIN_LENGTH
-
                 if (args.contains("client")) {
+                    val configuration = ClientConfiguration()
+                    configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
+                    configuration.applicationId = "aeron_test"
+                    configuration.uniqueAeronDirectory = true
+
+                    configuration.enableIpc = false
+                    configuration.enableIPv6 = false
+
+
                     val client = acs.client(0, configuration)
+
+                    SigInt.register {
+                        client.logger.info { "Shutting down via sig-int command" }
+                        runBlocking {
+                            client.close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
+                        }
+                    }
+
                     client.connect("172.31.73.222", 2000) // UDP connection via loopback
 
                     runBlocking {
@@ -132,6 +137,12 @@ class AeronRmiClientServer {
                     client.close()
                 } else if (args.contains("server")) {
                     val server = acs.server()
+                    SigInt.register {
+                        server.logger.info { "Shutting down via sig-int command" }
+                        runBlocking {
+                            server.close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
+                        }
+                    }
                     runBlocking {
                         server.waitForClose()
                     }
@@ -140,15 +151,29 @@ class AeronRmiClientServer {
     //                acs.client("localhost")
 
                     val clients = mutableListOf<Client<Connection>>()
+                    val configuration = ClientConfiguration()
+                    configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
+                    configuration.applicationId = "aeron_test"
+                    configuration.uniqueAeronDirectory = true
+
+                    configuration.enableIpc = false
+                    configuration.enableIPv6 = false
+                    configuration.port = 2001
+
                     repeat(10) {
-                        acs.client(it, configuration).also { clients.add(it) }
+                        acs.client(it, configuration.copy()).also { clients.add(it) }
                     }
 
                     println("Starting")
 
                     clients.forEachIndexed { index, client ->
-//                        client.connect()
                         client.connect("172.31.73.222", 2000)
+                        SigInt.register {
+                            client.logger.info { "Shutting down via sig-int command" }
+                            runBlocking {
+                                client.close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
+                            }
+                        }
                     }
 
                     System.err.println("DONE")
@@ -180,44 +205,44 @@ class AeronRmiClientServer {
             if (index == 9) {
                 println("PROBLEMS!!")
             }
-            logger.error("$index: starting dispatch")
-            try {
-                GlobalScope.async(Dispatchers.Default) {
-                    var startTime = System.nanoTime()
-                    logger.error("$index: started dispatch")
-
-                    var previousCount = 0
-                    while (true) {
-                        val counter = counter.getAndIncrement()
-                        try {
-    //                    ping()
-    //                    RemoteObject.cast(remoteObject).async {
-                            val value = "$index"
-                            val mooTwoValue = remoteObject.mooTwo(value)
-                            if (mooTwoValue != "moo-two: $value") {
-                                throw Exception("Value not the same!")
-                            }
-    //                    remoteObject.mooTwo("count $counter")
-    //                    }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                            logger.error { "$index: ERROR with client " }
-                            return@async
-                        }
-
-                        val elapsedTime = ( System.nanoTime() - startTime) / 1_000_000_000.0
-                        if (index == 0 && elapsedTime > 1.0) {
-                            logger.error {
-                                val perSecond = ((counter - previousCount) / elapsedTime).toInt()
-                                "Count: $perSecond/sec}" }
-                            startTime = System.nanoTime()
-                            previousCount = counter
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+//            logger.error("$index: starting dispatch")
+//            try {
+//                GlobalScope.async(Dispatchers.Default) {
+//                    var startTime = System.nanoTime()
+//                    logger.error("$index: started dispatch")
+//
+//                    var previousCount = 0
+//                    while (true) {
+//                        val counter = counter.getAndIncrement()
+//                        try {
+//    //                    ping()
+//    //                    RemoteObject.cast(remoteObject).async {
+//                            val value = "$index"
+//                            val mooTwoValue = remoteObject.mooTwo(value)
+//                            if (mooTwoValue != "moo-two: $value") {
+//                                throw Exception("Value not the same!")
+//                            }
+//    //                    remoteObject.mooTwo("count $counter")
+//    //                    }
+//                        } catch (e: Exception) {
+//                            e.printStackTrace()
+//                            logger.error { "$index: ERROR with client " }
+//                            return@async
+//                        }
+//
+//                        val elapsedTime = ( System.nanoTime() - startTime) / 1_000_000_000.0
+//                        if (index == 0 && elapsedTime > 1.0) {
+//                            logger.error {
+//                                val perSecond = ((counter - previousCount) / elapsedTime).toInt()
+//                                "Count: $perSecond/sec" }
+//                            startTime = System.nanoTime()
+//                            previousCount = counter
+//                        }
+//                    }
+//                }
+//            } catch (e: Exception) {
+//                e.printStackTrace()
+//            }
         }
 
         client.onDisconnect {
@@ -242,6 +267,8 @@ class AeronRmiClientServer {
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.listenIpAddress = "*"
         configuration.maxClientCount = 50
+
+        configuration.applicationId = "aeron_test"
 
         configuration.enableIpc = true
         configuration.enableIPv6 = false
