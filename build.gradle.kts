@@ -52,6 +52,8 @@ object Extras {
 ///////////////////////////////
 GradleUtils.load("$projectDir/../../gradle.properties", Extras)
 GradleUtils.defaults()
+GradleUtils.compileConfiguration(JavaVersion.VERSION_11)
+GradleUtils.jpms(JavaVersion.VERSION_11) // this is a bit of a hack to workaround JPMS support with a kotlin-only build.
 
 
 //val kotlin = project.extensions.getByType(org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension::class.java).sourceSets.getByName("main").kotlin

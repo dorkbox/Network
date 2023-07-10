@@ -42,7 +42,7 @@ module dorkbox.network {
 
     requires kotlin.stdlib;
     requires kotlin.stdlib.jdk8;
-    requires kotlinx.coroutines.core.jvm;
+    requires kotlinx.coroutines.core;
 
     // requires kotlinx.coroutines.core.jvm;
 
