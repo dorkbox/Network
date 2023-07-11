@@ -29,7 +29,6 @@ import dorkbox.util.Sys
 import io.aeron.*
 import io.aeron.driver.reports.LossReportReader
 import io.aeron.driver.reports.LossReportUtil
-import io.aeron.samples.SamplesUtil
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -38,6 +37,7 @@ import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.IoUtil
+import org.agrona.LangUtil
 import org.agrona.SemanticVersion
 import org.agrona.concurrent.AtomicBuffer
 import org.agrona.concurrent.UnsafeBuffer
@@ -46,6 +46,10 @@ import org.agrona.concurrent.ringbuffer.RingBufferDescriptor
 import org.agrona.concurrent.status.CountersReader
 import org.slf4j.Logger
 import java.io.File
+import java.io.IOException
+import java.io.RandomAccessFile
+import java.nio.MappedByteBuffer
+import java.nio.channels.FileChannel
 
 fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, port: Int): ChannelUriStringBuilder {
     this.endpoint(AeronDriver.address(isIpv4, addressString, port))
@@ -186,7 +190,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         private fun aeronCounters(aeronLocation: File): CountersReader? {
             val resolve = aeronLocation.resolve("cnc.dat")
             return if (resolve.exists()) {
-                val cncByteBuffer = SamplesUtil.mapExistingFileReadOnly(resolve)
+                val cncByteBuffer = mapExistingFileReadOnly(resolve)
                 val cncMetaDataBuffer: DirectBuffer = CncFileDescriptor.createMetaDataBuffer(cncByteBuffer)
 
                CountersReader(
@@ -228,7 +232,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
          * @return the number of errors for the Aeron driver
          */
         fun driverErrors(aeronLocation: File, errorAction: (observationCount: Int, firstObservationTimestamp: Long, lastObservationTimestamp: Long, encodedException: String) -> Unit): Int {
-            val errorMmap = SamplesUtil.mapExistingFileReadOnly(aeronLocation.resolve("cnc.dat"))
+            val errorMmap = mapExistingFileReadOnly(aeronLocation.resolve("cnc.dat"))
 
             try {
                 val buffer: AtomicBuffer = CommonContext.errorLogBuffer(errorMmap)
@@ -257,7 +261,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
             val lossReportFile = aeronLocation.resolve(LossReportUtil.LOSS_REPORT_FILE_NAME)
             return if (lossReportFile.exists()) {
-                val mappedByteBuffer = SamplesUtil.mapExistingFileReadOnly(lossReportFile)
+                val mappedByteBuffer = mapExistingFileReadOnly(lossReportFile)
                 val buffer: AtomicBuffer = UnsafeBuffer(mappedByteBuffer)
 
                 LossReportReader.read(buffer, lossStats)
@@ -270,7 +274,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
          * @return the internal heartbeat of the Aeron driver in the specified aeron directory
          */
         fun driverHeartbeatMs(aeronLocation: File): Long {
-            val cncByteBuffer = SamplesUtil.mapExistingFileReadOnly(aeronLocation.resolve("cnc.dat"))
+            val cncByteBuffer = mapExistingFileReadOnly(aeronLocation.resolve("cnc.dat"))
             val cncMetaDataBuffer: DirectBuffer = CncFileDescriptor.createMetaDataBuffer(cncByteBuffer)
 
             val toDriverBuffer = CncFileDescriptor.createToDriverBuffer(cncByteBuffer, cncMetaDataBuffer)
@@ -283,7 +287,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
          * @return the internal version of the Aeron driver in the specified aeron directory
          */
         fun driverVersion(aeronLocation: File): String {
-            val cncByteBuffer = SamplesUtil.mapExistingFileReadOnly(aeronLocation.resolve("cnc.dat"))
+            val cncByteBuffer = mapExistingFileReadOnly(aeronLocation.resolve("cnc.dat"))
             val cncMetaDataBuffer: DirectBuffer = CncFileDescriptor.createMetaDataBuffer(cncByteBuffer)
 
             val cncVersion = cncMetaDataBuffer.getInt(CncFileDescriptor.cncVersionOffset(0))
@@ -397,6 +401,30 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
             require(mediaDriverConfig.id != 0) { "There has been a severe error when calculating the media configuration ID. Aborting" }
 
             return mediaDriverConfig
+        }
+
+        /**
+         * Map an existing file as a read only buffer.
+         *
+         * @param location of file to map.
+         * @return the mapped file.
+         */
+        fun mapExistingFileReadOnly(location: File): MappedByteBuffer? {
+            if (!location.exists()) {
+                val msg = "file not found: " + location.absolutePath
+                throw IllegalStateException(msg)
+            }
+            var mappedByteBuffer: MappedByteBuffer? = null
+            try {
+                RandomAccessFile(location, "r").use { file ->
+                    file.channel.use { channel ->
+                        mappedByteBuffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
+                    }
+                }
+            } catch (ex: IOException) {
+                LangUtil.rethrowUnchecked(ex)
+            }
+            return mappedByteBuffer
         }
     }
 

@@ -52,7 +52,12 @@ object Extras {
 ///////////////////////////////
 GradleUtils.load("$projectDir/../../gradle.properties", Extras)
 GradleUtils.defaults()
-GradleUtils.compileConfiguration(JavaVersion.VERSION_11)
+// because of the api changes for stacktrace stuff, it's best for us to ONLY support 11+
+GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
+    // see: https://kotlinlang.org/docs/reference/using-gradle.html
+    // enable the use of inline classes. see https://kotlinlang.org/docs/reference/inline-classes.html
+    freeCompilerArgs = listOf("-Xinline-classes")
+}
 GradleUtils.jpms(JavaVersion.VERSION_11) // this is a bit of a hack to workaround JPMS support with a kotlin-only build.
 
 
@@ -61,18 +66,6 @@ GradleUtils.jpms(JavaVersion.VERSION_11) // this is a bit of a hack to workaroun
 //    setSrcDirs(project.files("src"))
 //    include("**/*.kt") // want to include kotlin files for the source. 'setSrcDirs' resets includes...
 //}
-
-
-
-
-// because of the api changes for stacktrace stuff, it's best for us to ONLY support 11+
-GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
-    // see: https://kotlinlang.org/docs/reference/using-gradle.html
-    // enable the use of inline classes. see https://kotlinlang.org/docs/reference/inline-classes.html
-    freeCompilerArgs = listOf("-Xinline-classes")
-}
-//GradleUtils.jpms(JavaVersion.VERSION_11)
-//NOTE: we do not support JPMS yet, as there are some libraries missing support for it still, notably kotlin!
 
 
 // if we are sending a SMALL byte array, then we SEND IT DIRECTLY in a more optimized manner (because we can count size info!)
@@ -86,7 +79,7 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
 //     --- this remote outputStream is a file, raw??? this is setup by createInputStream() on the remote end
 // - state-machine for kryo class registrations?
 
-// ratelimiter, "other" package
+// ratelimiter, "other" package, send-on-idle
 // rest of unit tests
 // getConnectionUpgradeType
 // ability to send with a function callback (using RMI waiter type stuff for callbacks)
@@ -195,11 +188,12 @@ dependencies {
     api("net.java.dev.jna:jna-platform-jpms:${jnaVersion}")
 
 
-    // we include ALL of aeron, in case we need to debug aeron behavior
     // https://github.com/real-logic/aeron
     val aeronVer = "1.41.4"
-    api("io.aeron:aeron-all:$aeronVer")
-//    api("org.agrona:agrona:1.16.0") // sources for this isn't included in aeron-all!
+    api("io.aeron:aeron-driver:$aeronVer")
+    // ALL of aeron, in case we need to debug aeron behavior
+//    api("io.aeron:aeron-all:$aeronVer")
+//    api("org.agrona:agrona:1.18.2") // sources for this aren't included in aeron-all!
 
     // https://github.com/EsotericSoftware/kryo
     api("com.esotericsoftware:kryo:5.5.0") {
@@ -229,6 +223,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("ch.qos.logback:logback-classic:1.4.5")
+    testImplementation("io.aeron:aeron-all:$aeronVer")
 }
 
 publishToSonatype {
