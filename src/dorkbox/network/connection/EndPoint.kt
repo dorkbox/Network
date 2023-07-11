@@ -92,29 +92,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
         internal val lanAddress = IP.lanAddress()
 
-        /**
-         * @return the error code text for the specified number
-         */
-        internal fun errorCodeName(result: Long): String {
-            return when (result) {
-                // The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
-                Publication.NOT_CONNECTED -> "Not connected"
-
-                // The offer failed due to back pressure from the subscribers preventing further transmission.
-                Publication.BACK_PRESSURED -> "Back pressured"
-
-                // The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
-                Publication.ADMIN_ACTION -> "Administrative action"
-
-                // The Publication has been closed and should no longer be used.
-                Publication.CLOSED -> "Publication is closed"
-
-                // If this happens then the publication should be closed and a new one added. To make it less likely to happen then increase the term buffer length.
-                Publication.MAX_POSITION_EXCEEDED -> "Maximum term position exceeded"
-
-                else -> throw IllegalStateException("Unknown error code: $result")
-            }
-        }
+        const val HAS_TCP = (1 shl 1).toByte()
+        const val HAS_UDP = (1 shl 2).toByte()
     }
 
     val logger: KLogger = KotlinLogging.logger(loggerName)
@@ -717,7 +696,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
              */
             if (result == Publication.NOT_CONNECTED) {
                 if (abortEarly) {
-                    listenerManager.notifyError(newException("[${publication.sessionId()}] Unable to send message. (Connection in non-connected state, aborted attempt! ${errorCodeName(result)})"))
+                    listenerManager.notifyError(newException("[${publication.sessionId()}] Unable to send message. (Connection in non-connected state, aborted attempt! ${AeronDriver.errorCodeName(result)})"))
                     return false
                 }
 
@@ -732,7 +711,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                     continue
                 } else if (publication.isConnected) {
                     // more critical error sending the message. we shouldn't retry or anything.
-                    val errorMessage = "[${publication.sessionId()}] Error sending message. (Connection in non-connected state longer than linger timeout. ${errorCodeName(result)})"
+                    val errorMessage = "[${publication.sessionId()}] Error sending message. (Connection in non-connected state longer than linger timeout. ${AeronDriver.errorCodeName(result)})"
 
                     // either client or server. No other choices. We create an exception, because it's more useful!
                     val exception = newException(errorMessage)
@@ -774,7 +753,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             }
 
             // more critical error sending the message. we shouldn't retry or anything.
-            val errorMessage = "[${publication.sessionId()}] Error sending message. (${errorCodeName(result)})"
+            val errorMessage = "[${publication.sessionId()}] Error sending message. (${AeronDriver.errorCodeName(result)})"
 
             // either client or server. No other choices. We create an exception, because it's more useful!
             val exception = newException(errorMessage)

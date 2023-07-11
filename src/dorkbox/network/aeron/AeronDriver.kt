@@ -187,6 +187,30 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
             }
         }
 
+        /**
+         * @return the error code text for the specified number
+         */
+        internal fun errorCodeName(result: Long): String {
+            return when (result) {
+                // The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
+                Publication.NOT_CONNECTED -> "Not connected"
+
+                // The offer failed due to back pressure from the subscribers preventing further transmission.
+                Publication.BACK_PRESSURED -> "Back pressured"
+
+                // The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
+                Publication.ADMIN_ACTION -> "Administrative action"
+
+                // The Publication has been closed and should no longer be used.
+                Publication.CLOSED -> "Publication is closed"
+
+                // If this happens then the publication should be closed and a new one added. To make it less likely to happen then increase the term buffer length.
+                Publication.MAX_POSITION_EXCEEDED -> "Maximum term position exceeded"
+
+                else -> throw IllegalStateException("Unknown error code: $result")
+            }
+        }
+
         private fun aeronCounters(aeronLocation: File): CountersReader? {
             val resolve = aeronLocation.resolve("cnc.dat")
             return if (resolve.exists()) {

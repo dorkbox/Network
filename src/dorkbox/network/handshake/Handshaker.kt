@@ -102,7 +102,7 @@ internal class Handshaker<CONNECTION : Connection>(
                         // this exception will be a ClientException or a ServerException
                         val exception = newException(
                             "[$aeronLogInfo] Error sending message. (Connection in non-connected state longer than linger timeout. ${
-                                EndPoint.errorCodeName(result)
+                                AeronDriver.errorCodeName(result)
                             })",
                             null
                         )
@@ -135,7 +135,7 @@ internal class Handshaker<CONNECTION : Connection>(
 
                 // more critical error sending the message. we shouldn't retry or anything.
                 // this exception will be a ClientException or a ServerException
-                val exception = newException("[$aeronLogInfo] Error sending handshake message. $message (${EndPoint.errorCodeName(result)})", null)
+                val exception = newException("[$aeronLogInfo] Error sending handshake message. $message (${AeronDriver.errorCodeName(result)})", null)
                 exception.cleanStackTraceInternal()
                 listenerManager.notifyError(exception)
                 throw exception
