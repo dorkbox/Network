@@ -113,7 +113,7 @@ class AeronRmiClientServer {
                 if (args.contains("client")) {
                     val configuration = ClientConfiguration()
                     configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-                    configuration.applicationId = "aeron_test"
+                    configuration.appId = "aeron_test"
                     configuration.uniqueAeronDirectory = true
 
                     configuration.enableIpc = false
@@ -153,7 +153,7 @@ class AeronRmiClientServer {
                     val clients = mutableListOf<Client<Connection>>()
                     val configuration = ClientConfiguration()
                     configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-                    configuration.applicationId = "aeron_test"
+                    configuration.appId = "aeron_test"
                     configuration.uniqueAeronDirectory = true
 
                     configuration.enableIpc = false
@@ -268,7 +268,7 @@ class AeronRmiClientServer {
         configuration.listenIpAddress = "*"
         configuration.maxClientCount = 50
 
-        configuration.applicationId = "aeron_test"
+        configuration.appId = "aeron_test"
 
         configuration.enableIpc = true
         configuration.enableIPv6 = false

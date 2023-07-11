@@ -120,7 +120,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             StreamingState.START -> {
                 // message.totalSize > maxInMemory, then write to a temp file INSTEAD
                 if (message.totalSize > maxStreamSizeInMemoryInBytes) {
-                    val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                    val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
                     val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
 
                     val prettySize = Sys.getSizePretty(message.totalSize)
@@ -148,7 +148,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                         output.flush()
                         output.close()
 
-                        val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                        val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
                         val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
 
                         val fileInputStream = FileInputStream(tempFileLocation)
@@ -171,7 +171,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                         throw endPoint.newException(errorMessage, e)
                     } finally {
                         if (output is FileWriter) {
-                            val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                            val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
                             val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
                             tempFileLocation.delete()
                         }
@@ -182,7 +182,7 @@ internal class StreamingManager<CONNECTION : Connection>(
 
                 if (streamedMessage == null) {
                     if (output is FileWriter) {
-                        val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                        val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
                         val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
                         tempFileLocation.delete()
                     }
@@ -218,7 +218,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             StreamingState.FAILED -> {
                 val output = streamingDataInMemory.remove(streamId)
                 if (output is FileWriter) {
-                    val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                    val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
                     val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
                     tempFileLocation.delete()
                 }
@@ -239,7 +239,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             StreamingState.UNKNOWN ->  {
                 val output = streamingDataInMemory.remove(streamId)
                 if (output is FileWriter) {
-                    val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                    val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
                     val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
                     tempFileLocation.delete()
                 }

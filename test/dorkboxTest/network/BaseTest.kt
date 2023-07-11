@@ -93,7 +93,7 @@ abstract class BaseTest {
         fun clientConfig(block: Configuration.() -> Unit = {}): ClientConfiguration {
 
             val configuration = ClientConfiguration()
-            configuration.applicationId = "network_test"
+            configuration.appId = "network_test"
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
 
             configuration.enableIpc = false
@@ -105,7 +105,7 @@ abstract class BaseTest {
 
         fun serverConfig(block: ServerConfiguration.() -> Unit = {}): ServerConfiguration {
             val configuration = ServerConfiguration()
-            configuration.applicationId = "network_test"
+            configuration.appId = "network_test"
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
 
             configuration.enableIpc = false

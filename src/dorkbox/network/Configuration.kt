@@ -293,7 +293,7 @@ abstract class Configuration protected constructor() {
      *
      * This is a human-readable string, and it MUST be configured the same for both the clint/server
      */
-    var applicationId = ""
+    var appId = ""
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -716,12 +716,12 @@ abstract class Configuration protected constructor() {
     open fun validate() {
         // have to do some basic validation of our configuration
 
-        require(applicationId.isNotEmpty()) { "The application ID must be set, as it prevents an listener from responding to differently configured applications. This is a human-readable string, and it MUST be configured the same for both the clint/server!"}
+        require(appId.isNotEmpty()) { "The application ID must be set, as it prevents an listener from responding to differently configured applications. This is a human-readable string, and it MUST be configured the same for both the clint/server!"}
 
         // The applicationID is used to create the prefix for the aeron directory -- EVEN IF the directory name is specified.
-        require(applicationId.length < 32) { "The application ID is too long, it must be < 32 characters" }
+        require(appId.length < 32) { "The application ID is too long, it must be < 32 characters" }
 
-        require(isAppIdValid(applicationId)) { "The application ID is not valid. It may only be the following characters: $appIdRegexString" }
+        require(isAppIdValid(appId)) { "The application ID is not valid. It may only be the following characters: $appIdRegexString" }
 
         // can't disable everything!
         require(enableIpc || enableIPv4 || enableIPv6) { "At least one of IPC/IPv4/IPv6 must be enabled!" }
@@ -830,14 +830,14 @@ abstract class Configuration protected constructor() {
             logger.warn { "Forcing the Aeron driver to be shared between processes. THIS IS DANGEROUS!" }
         } else if (dir != null) {
             // we have defined an aeron directory
-            dir = File(dir.absolutePath + "_$applicationId")
+            dir = File(dir.absolutePath + "_$appId")
         } else {
             val baseFileLocation = defaultAeronLogLocation(logger)
             val aeronLogDirectory = if (uniqueAeronDirectory) {
                 // this is incompatible with IPC, and will not be set if IPC is enabled (error will be thrown on validate)
-                File(baseFileLocation, "aeron_${applicationId}_${mediaDriverIdNoDir()}")
+                File(baseFileLocation, "aeron_${appId}_${mediaDriverIdNoDir()}")
             } else {
-                File(baseFileLocation, "aeron_$applicationId")
+                File(baseFileLocation, "aeron_$appId")
             }
             dir = aeronLogDirectory.absoluteFile
         }
@@ -959,7 +959,7 @@ abstract class Configuration protected constructor() {
 
     abstract fun copy(): dorkbox.network.Configuration
     protected fun copy(config: dorkbox.network.Configuration) {
-        config.applicationId = applicationId
+        config.appId = appId
         config.forceAllowSharedAeronDriver = forceAllowSharedAeronDriver
         config.enableIPv4 = enableIPv4
         config.enableIPv6 = enableIPv6
@@ -1022,7 +1022,7 @@ abstract class Configuration protected constructor() {
         // some values are defined here. Not necessary to list them twice
         if (!mediaDriverEquals(other)) return false
 
-        if (applicationId != other.applicationId) return false
+        if (appId != other.appId) return false
         if (enableIPv4 != other.enableIPv4) return false
         if (enableIPv6 != other.enableIPv6) return false
         if (enableIpc != other.enableIpc) return false
@@ -1051,7 +1051,7 @@ abstract class Configuration protected constructor() {
     override fun hashCode(): Int {
         var result = mediaDriverId()
 
-        result = 31 * result + applicationId.hashCode()
+        result = 31 * result + appId.hashCode()
         result = 31 * result + forceAllowSharedAeronDriver.hashCode()
         result = 31 * result + enableIPv4.hashCode()
         result = 31 * result + enableIPv6.hashCode()
