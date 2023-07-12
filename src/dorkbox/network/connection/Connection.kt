@@ -136,7 +136,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     val rmi: RmiSupportConnection<out Connection>
 
-    // we customize the toString() value for this connection, and it's just better to cache it's value (since it's a modestly complex string)
+    // we customize the toString() value for this connection, and it's just better to cache its value (since it's a modestly complex string)
     private val toString0: String
 
 
@@ -153,8 +153,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         //   - long running
         //   - re-entrant with the client
         messageHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-            // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
-
+            // Subscriptions are NOT multi-thread safe, so only processed on the thread that calls .poll()!
             endPoint.dataReceive(buffer, offset, length, header, this@Connection)
         }
 
