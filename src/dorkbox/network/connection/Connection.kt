@@ -70,8 +70,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     private val sendIdleStrategy: IdleStrategy
 
-    private val writeKryo: KryoExtra<Connection>
-
     /**
      * This is the client UUID. This is useful determine if the same client is connecting multiple times to a server (instead of only using IP address)
      */
@@ -149,9 +147,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
 
     init {
-        @Suppress("UNCHECKED_CAST")
-        writeKryo = endPoint.serialization.initKryo() as KryoExtra<Connection>
-
         sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
 
 
@@ -215,47 +210,45 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Safely sends objects to a destination, if `abortEarly` is true, there are no retries if sending the message fails.
      *
-     * NOTE: this is dispatched to the IO context!! (since network calls are IO/blocking calls)
-     *
-     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
+     *  @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
     internal suspend fun send(message: Any, abortEarly: Boolean): Boolean {
-        // we use a mutex because we do NOT want different threads/coroutines to be able to send data over the SAME connections at the SAME time.
-        // NOTE: additionally we want to propagate back-pressure to the calling coroutines, PER CONNECTION!
+        var success = false
 
-        val success = writeMutex.withLock {
-            // we reset the sending timeout strategy when a message was successfully sent.
-            sendIdleStrategy.reset()
+        // this is dispatched to the IO context!! (since network calls are IO/blocking calls)
+        withContext(Dispatchers.IO) {
+            // we use a mutex because we do NOT want different threads/coroutines to be able to send data over the SAME connections at the SAME time.
+            // exclusive publications are not thread safe/concurrent!
+            writeMutex.withLock {
+                // we reset the sending timeout strategy when a message was successfully sent.
+                sendIdleStrategy.reset()
 
-            try {
-                // The handshake sessionId IS NOT globally unique
-                logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
-                val write = endPoint.write(writeKryo, message, publication, sendIdleStrategy, this@Connection, abortEarly)
-                write
-            } catch (e: Throwable) {
-                // make sure we atomically create the listener manager, if necessary
-                listenerManager.getAndUpdate { origManager ->
-                    origManager ?: ListenerManager(logger)
+                try {
+                    // The handshake sessionId IS NOT globally unique
+                    logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
+                    success = endPoint.write(message, publication, sendIdleStrategy, this@Connection, abortEarly)
+                } catch (e: Throwable) {
+                    // make sure we atomically create the listener manager, if necessary
+                    listenerManager.getAndUpdate { origManager ->
+                        origManager ?: ListenerManager(logger)
+                    }
+
+                    val listenerManager = listenerManager.value!!
+
+                    if (message is MethodResponse && message.result is Exception) {
+                        val result = message.result as Exception
+                        val newException = SerializationException("Error serializing message ${message.javaClass.simpleName}: '$message'", result)
+                        listenerManager.notifyError(this@Connection, newException)
+                    } else if (message is ClientException || message is ServerException) {
+                        val newException = TransmitException("Error with message ${message.javaClass.simpleName}: '$message'", e)
+                        listenerManager.notifyError(this@Connection, newException)
+                    } else {
+                        val newException = TransmitException("Error sending message ${message.javaClass.simpleName}: '$message'", e)
+                        listenerManager.notifyError(this@Connection, newException)
+                    }
                 }
-
-                val listenerManager = listenerManager.value!!
-
-                if (message is MethodResponse && message.result is Exception) {
-                    val result = message.result as Exception
-                    val newException = SerializationException("Error serializing message ${message.javaClass.simpleName}: '$message'", result)
-                    listenerManager.notifyError(this@Connection, newException)
-                } else if (message is ClientException || message is ServerException) {
-                    val newException = TransmitException("Error with message ${message.javaClass.simpleName}: '$message'", e)
-                    listenerManager.notifyError(this@Connection, newException)
-                } else {
-                    val newException = TransmitException("Error sending message ${message.javaClass.simpleName}: '$message'", e)
-                    listenerManager.notifyError(this@Connection, newException)
-                }
-
-                false
             }
         }
-
 
         return success
     }

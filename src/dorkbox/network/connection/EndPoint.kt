@@ -36,10 +36,12 @@ import dorkbox.network.rmi.ResponseManager
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.RmiManagerGlobal
 import dorkbox.network.rmi.messages.RmiMessage
-import dorkbox.network.serialization.KryoExtra
+import dorkbox.network.serialization.KryoReader
+import dorkbox.network.serialization.KryoWriter
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.serialization.SettingsStore
 import io.aeron.Publication
+import io.aeron.logbuffer.FrameDescriptor
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
@@ -118,10 +120,19 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      */
     val serialization: Serialization<CONNECTION>
 
-    // These are GLOBAL, single threaded only kryo instances.
-    // The readKryo WILL RE-CONFIGURED during the client handshake! (it is all the same thread, so object visibility is not a problem)
+    /**
+     * The largest size a SINGLE message via AERON can be. We chunk messages larger than this, so we can send very large files using aeron.
+     */
+    internal val maxMessageSize = FrameDescriptor.computeMaxMessageLength(config.publicationTermBufferLength)
+
+    /**
+     * Read and Write can be concurrent (different buffers are used)
+     * GLOBAL, single threaded only kryo instances.
+     *
+     * This WILL RE-CONFIGURED during the client handshake! (it is all the same thread, so object visibility is not a problem)
+     */
     @Volatile
-    internal var readKryo: KryoExtra<CONNECTION>
+    internal lateinit var readKryo: KryoReader<CONNECTION>
 
     internal val handshaker: Handshaker<CONNECTION>
 
@@ -194,19 +205,15 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
         serialization = config.serialization as Serialization<CONNECTION>
+        serialization.finishInit(type, maxMessageSize)
+
 
         // we are done with initial configuration, now finish serialization
-        val kryo = serialization.initGlobalKryo()
-        serialization.finishInit(type, kryo)
-
-
-        // the initial kryo created for serialization is reused as the read kryo
-        readKryo = if (type == Server::class.java) {
-            serialization.initKryo(kryo)
-        } else {
-            // these will be reassigned by the client Connect method!
-            kryo
+        // the CLIENT will reassign these in the `connect0` method (because it registers what the server says to register)
+        if (type == Server::class.java) {
+            readKryo = serialization.newReadKryo(maxMessageSize)
         }
+
 
         // we have to be able to specify the property store
         storage = SettingsStore(config.settingsStore, logger)
@@ -458,14 +465,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * This will split a message if it's too large to send in a single network message.
      *
-     * NOTE: we use exclusive publications, and they are not thread safe/concurrent!
-     *
-     * THIS IS CALLED FROM WITHIN A MUTEX!!
-     *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    open fun write(
-        writeKryo: KryoExtra<Connection>,
+    open suspend fun write(
         message: Any,
         publication: Publication,
         sendIdleStrategy: IdleStrategy,
@@ -474,31 +476,40 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     ): Boolean {
         // NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
 
-        // since ANY thread can call 'send', we have to take kryo instances in a safe way
-        // the maximum size that this buffer can be is:
-        //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
-        val buffer = writeKryo.write(connection, message)
-        val objectSize = buffer.position()
-        val internalBuffer = buffer.internalBuffer
+        @Suppress("UNCHECKED_CAST")
+        connection as CONNECTION
+
+        val kryo = serialization.getWriteKryo();
+
+        try {
+            // since ANY thread can call 'send', we have to take kryo instances in a safe way
+            // the maximum size that this buffer can be is:
+            //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
+            val buffer = kryo.write(connection, message)
+            val objectSize = buffer.position()
+            val internalBuffer = buffer.internalBuffer
 
 
-        // one small problem! What if the message is too big to send all at once?
-        val maxMessageLength = publication.maxMessageLength()
-        return if (objectSize >= maxMessageLength) {
-            // we must split up the message! It's too large for Aeron to manage.
-            // this will split up the message, construct the necessary control message and state, then CALL the sendData
-            // method directly for each subsequent message.
-            streamingManager.send(
-                publication = publication,
-                internalBuffer = internalBuffer,
-                objectSize = objectSize,
-                endPoint = this,
-                kryo = writeKryo,
-                sendIdleStrategy = sendIdleStrategy,
-                connection = connection
-            )
-        } else {
-            dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection, abortEarly)
+            // one small problem! What if the message is too big to send all at once?
+            return if (objectSize >= maxMessageSize) {
+                // we must split up the message! It's too large for Aeron to manage.
+                // this will split up the message, construct the necessary control message and state, then CALL the sendData
+                // method directly for each subsequent message.
+                streamingManager.send(
+                    publication = publication,
+                    internalBuffer = internalBuffer,
+                    objectSize = objectSize,
+                    maxMessageSize = maxMessageSize,
+                    endPoint = this,
+                    kryo = kryo,
+                    sendIdleStrategy = sendIdleStrategy,
+                    connection = connection
+                )
+            } else {
+                dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection, abortEarly)
+            }
+        } finally {
+            serialization.returnWriteKryo(kryo)
         }
     }
 
@@ -511,13 +522,13 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    open fun writeUnsafe(writeKryo: KryoExtra<Connection>, message: Any, publication: Publication, sendIdleStrategy: IdleStrategy, connection: Connection): Boolean {
+    open fun writeUnsafe(message: Any, publication: Publication, sendIdleStrategy: IdleStrategy, connection: CONNECTION, kryo: KryoWriter<CONNECTION>): Boolean {
         // NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
 
         // since ANY thread can call 'send', we have to take kryo instances in a safe way
         // the maximum size that this buffer can be is:
         //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
-        val buffer = writeKryo.write(connection, message)
+        val buffer = kryo.write(connection, message)
         val objectSize = buffer.position()
         val internalBuffer = buffer.internalBuffer
 
@@ -533,7 +544,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * must be EXPLICITLY used by the implementation, and if a custom message processor is to be used (ie: a state machine) you must
      * guarantee that Ping, RMI, Streaming object, etc. are not used (as it would not function without this custom
      */
-    open fun processMessage(message: Any?, connection: CONNECTION) {
+    open fun processMessage(message: Any?, connection: CONNECTION, readKryo: KryoReader<CONNECTION>) {
         // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept data BEFORE it goes to a coroutine
         when (message) {
             // the remote endPoint will send this message if it is closing the connection.
@@ -630,7 +641,13 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * @param header The aeron header information
      * @param connection The connection this message happened on
      */
-    internal fun dataReceive(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection) {
+    internal fun dataReceive(
+        buffer: DirectBuffer,
+        offset: Int,
+        length: Int,
+        header: Header,
+        connection: Connection
+    ) {
         // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
         @Suppress("UNCHECKED_CAST")
         connection as CONNECTION
@@ -639,7 +656,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
             val message = readKryo.read(buffer, offset, length, connection)
             logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
-            processMessage(message, connection)
+            processMessage(message, connection, readKryo)
         } catch (e: Exception) {
             listenerManager.notifyError(connection, newException("Error de-serializing message", e))
         }

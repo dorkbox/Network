@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
+ */
+/*
  * Copyright (c) 2008, Nathan Sweet
  * All rights reserved.
  *
@@ -42,7 +43,7 @@ import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
-import dorkbox.network.serialization.KryoExtra
+import dorkbox.network.serialization.KryoReader
 import org.agrona.collections.Int2ObjectHashMap
 import java.lang.reflect.Method
 
@@ -83,7 +84,7 @@ class MethodRequestSerializer<CONNECTION: Connection>(private val methodCache: I
         val methodIndex = RmiUtils.unpackRight(methodInfo)
         val isGlobal = input.readBoolean()
 
-        kryo as KryoExtra<CONNECTION>
+        kryo as KryoReader<CONNECTION>
 
         val cachedMethod = try {
             methodCache[methodClassId][methodIndex]

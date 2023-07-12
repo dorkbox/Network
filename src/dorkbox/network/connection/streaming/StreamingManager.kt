@@ -29,7 +29,8 @@ import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.exceptions.StreamingException
 import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
-import dorkbox.network.serialization.KryoExtra
+import dorkbox.network.serialization.KryoReader
+import dorkbox.network.serialization.KryoWriter
 import dorkbox.os.OS
 import dorkbox.util.Sys
 import io.aeron.Publication
@@ -108,7 +109,7 @@ internal class StreamingManager<CONNECTION : Connection>(
     */
     fun processControlMessage(
         message: StreamingControl,
-        kryo: KryoExtra<CONNECTION>,
+        kryo: KryoReader<CONNECTION>,
         endPoint: EndPoint<CONNECTION>,
         connection: CONNECTION
     ) {
@@ -294,13 +295,13 @@ internal class StreamingManager<CONNECTION : Connection>(
         streamSessionId: Int,
         publication: Publication,
         endPoint: EndPoint<CONNECTION>,
-        kryoExtra: KryoExtra<Connection>,
         sendIdleStrategy: IdleStrategy,
-        connection: Connection
+        connection: CONNECTION,
+        kryo: KryoWriter<CONNECTION>
     ) {
         val failMessage = StreamingControl(StreamingState.FAILED, streamSessionId)
 
-        val failSent = endPoint.writeUnsafe(kryoExtra, failMessage, publication, sendIdleStrategy, connection)
+        val failSent = endPoint.writeUnsafe(failMessage, publication, sendIdleStrategy, connection, kryo)
         if (!failSent) {
             // something SUPER wrong!
             // more critical error sending the message. we shouldn't retry or anything.
@@ -334,11 +335,12 @@ internal class StreamingManager<CONNECTION : Connection>(
     fun send(
         publication: Publication,
         internalBuffer: MutableDirectBuffer,
+        maxMessageSize: Int,
         objectSize: Int,
         endPoint: EndPoint<CONNECTION>,
-        kryo: KryoExtra<Connection>,
+        kryo: KryoWriter<CONNECTION>,
         sendIdleStrategy: IdleStrategy,
-        connection: Connection
+        connection: CONNECTION
     ): Boolean {
         // this buffer is the exact size as our internal buffer, so it is unnecessary to have multiple kryo instances
         val originalBuffer = ExpandableDirectByteBuffer(objectSize) // this can grow, so it's fine to lock it to this size!
@@ -357,7 +359,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         // tell the other side how much data we are sending
         val startMessage = StreamingControl(StreamingState.START, streamSessionId, objectSize.toLong())
 
-        val startSent = endPoint.writeUnsafe(kryo, startMessage, publication, sendIdleStrategy, connection)
+        val startSent = endPoint.writeUnsafe(startMessage, publication, sendIdleStrategy, connection, kryo)
         if (!startSent) {
             // more critical error sending the message. we shouldn't retry or anything.
             val errorMessage = "[${publication.sessionId()}] Error starting streaming content."
@@ -381,8 +383,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         // payload size is for a PRODUCER, and not SUBSCRIBER, so we have to include this amount every time.
         // MINOR fragmentation by aeron is OK, since that will greatly speed up data transfer rates!
 
-        // the maxPayloadLength MUST ABSOLUTELY be less that the max size + header!
-        var sizeOfPayload = publication.maxMessageLength() - 200
+        var sizeOfPayload = maxMessageSize
 
         val header: ByteArray
         val headerSize: Int
@@ -436,7 +437,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                 throw exception
             }
         } catch (e: Exception) {
-            sendFailMessageAndThrow(e, streamSessionId, publication, endPoint, kryo, sendIdleStrategy, connection)
+            sendFailMessageAndThrow(e, streamSessionId, publication, endPoint, sendIdleStrategy, connection, kryo)
             return false // doesn't actually get here because exceptions are thrown, but this makes the IDE happy.
         }
 
@@ -483,7 +484,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             } catch (e: Exception) {
                 val failMessage = StreamingControl(StreamingState.FAILED, streamSessionId)
 
-                val failSent = endPoint.writeUnsafe(kryo, failMessage, publication, sendIdleStrategy, connection)
+                val failSent = endPoint.writeUnsafe(failMessage, publication, sendIdleStrategy, connection, kryo)
                 if (!failSent) {
                     // something SUPER wrong!
                     // more critical error sending the message. we shouldn't retry or anything.
@@ -506,6 +507,6 @@ internal class StreamingManager<CONNECTION : Connection>(
         // send the last chunk of data
         val finishedMessage = StreamingControl(StreamingState.FINISHED, streamSessionId, payloadSent.toLong())
 
-        return endPoint.writeUnsafe(kryo, finishedMessage, publication, sendIdleStrategy, connection)
+        return endPoint.writeUnsafe(finishedMessage, publication, sendIdleStrategy, connection, kryo)
     }
 }

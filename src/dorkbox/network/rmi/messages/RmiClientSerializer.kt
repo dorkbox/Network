@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.rmi.RmiClient
 import dorkbox.network.rmi.RmiSupportConnection
-import dorkbox.network.serialization.KryoExtra
+import dorkbox.network.serialization.KryoReader
 import java.lang.reflect.Proxy
 
 /**
@@ -67,7 +67,7 @@ class RmiClientSerializer<CONNECTION: Connection>: Serializer<Any>() {
         val isGlobal = input.readBoolean()
         val objectId = input.readInt(true)
 
-        kryo as KryoExtra<CONNECTION>
+        kryo as KryoReader<CONNECTION>
         val endPoint: EndPoint<CONNECTION> = kryo.connection.endPoint as EndPoint<CONNECTION>
 
         return if (isGlobal) {

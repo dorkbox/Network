@@ -718,25 +718,29 @@ open class Client<CONNECTION : Connection>(
         ////   RMI
         ///////////////
 
-        // we set up our kryo information once we connect to a server (using the server's kryo registration details)
-        val kryoConfiguredFromServer = serialization.finishClientConnect(connectionInfo.kryoRegistrationDetails)
-        if (kryoConfiguredFromServer == null) {
+        try {
+            // only have ot do one
+            serialization.finishClientConnect(connectionInfo.kryoRegistrationDetails, maxMessageSize)
+        } catch (e: Exception) {
             handshakeConnection.close()
 
             // because we are getting the class registration details from the SERVER, this should never be the case.
             // It is still and edge case where the reconstruction of the registration details fails (maybe because of custom serializers)
             val exception = if (handshakeConnection.pubSub.isIpc) {
-                ClientRejectedException("[${handshake.connectKey}] Connection to IPC has incorrect class registration details!!")
+                ClientRejectedException("[${handshake.connectKey}] Connection to IPC has incorrect class registration details!!", e)
             } else {
-                ClientRejectedException("[${handshake.connectKey}] Connection to [$addressString] has incorrect class registration details!!")
+                ClientRejectedException("[${handshake.connectKey}] Connection to [$addressString] has incorrect class registration details!!", e)
             }
+
             exception.cleanStackTraceInternal()
             listenerManager.notifyError(exception)
             throw exception
         }
 
-        // every time we connect to a server, we have to reconfigure AND reassign the readKryos.
-        readKryo = kryoConfiguredFromServer
+        // we set up our kryo information once we connect to a server (using the server's kryo registration details)
+
+        // every time we connect to a server, we have to reconfigure AND reassign kryo
+        readKryo = serialization.newReadKryo(maxMessageSize)
 
 
         ///////////////

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import dorkbox.network.connection.Connection
 
-internal class ClassRegistration0<CONNECTION: Connection>(clazz: Class<*>, serializer: Serializer<*>) : ClassRegistration<CONNECTION>(clazz, serializer) {
+internal class ClassRegistration0(clazz: Class<*>, serializer: Serializer<*>) : ClassRegistration(clazz, serializer) {
     override fun register(kryo: Kryo) {
         id = kryo.register(clazz, serializer).id
         info = "Registered $id -> ${clazz.name} using ${serializer!!.javaClass.name}"

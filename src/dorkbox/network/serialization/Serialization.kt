@@ -35,6 +35,9 @@ import dorkbox.network.ping.PingSerializer
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
 import dorkbox.network.rmi.messages.*
+import dorkbox.objectPool.BoundedPoolObject
+import dorkbox.objectPool.ObjectPool
+import dorkbox.objectPool.Pool
 import dorkbox.os.OS
 import dorkbox.serializers.*
 import kotlinx.atomicfu.AtomicBoolean
@@ -58,12 +61,12 @@ import kotlin.coroutines.Continuation
 
 
 
-// Observability issues: make sure that we know WHAT connection is causing serialization errors when they occur!
-// ASYC isues: RMI can timeout when OTHER rmi connections happen! EACH RMI NEEDS TO BE SEPARATE IN THE IO DISPATCHER
+//  Observability issues: make sure that we know WHAT connection is causing serialization errors when they occur!
+//  ASYC isues: RMI can timeout when OTHER rmi connections happen! EACH RMI NEEDS TO BE SEPARATE IN THE IO DISPATCHER
 
 /**
  * Threads reading/writing at the same time a single instance of kryo. it is possible to use a single kryo with the use of
- * synchronize, however - that defeats the point of having multi-threaded serialization.
+ * synchronize, however - that defeats the point of having multithreaded serialization.
  *
  * Additionally, this serialization manager will register the entire class+interface hierarchy for an object. If you want to specify a
  * serialization scheme for a specific class in an objects hierarchy, you must register that first.
@@ -97,7 +100,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
     open class RmiSupport<CONNECTION: Connection> internal constructor(
         private val initialized: AtomicBoolean,
-        private val classesToRegister: MutableList<ClassRegistration<CONNECTION>>,
+        private val classesToRegister: MutableList<ClassRegistration>,
         private val rmiServerSerializer: RmiServerSerializer<CONNECTION>
     ) {
         /**
@@ -130,14 +133,15 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     }
 
     private lateinit var logger: KLogger
+    private var maxMessageSize: Int = 500_000
 
     private var initialized = atomic(false)
 
     // used by operations performed during kryo initialization, which are by default package access (since it's an anon-inner class)
     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
     // Object checking is performed during actual registration.
-    private val classesToRegister = mutableListOf<ClassRegistration<CONNECTION>>()
-    private lateinit var finalClassRegistrations: Array<ClassRegistration<CONNECTION>>
+    private val classesToRegister = mutableListOf<ClassRegistration>()
+    private lateinit var finalClassRegistrations: Array<ClassRegistration>
     private lateinit var savedRegistrationDetails: ByteArray
 
     // the purpose of the method cache, is to accelerate looking up methods for specific class
@@ -286,10 +290,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     /**
      * Kryo specifically for handshakes
      */
-    internal fun newHandshakeKryo(): KryoExtra<CONNECTION> {
+    internal fun newHandshakeKryo(kryo: Kryo) {
         // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
-        val kryo = KryoExtra<CONNECTION>()
-
         kryo.instantiatorStrategy = instantiatorStrategy
         kryo.references = references
 
@@ -299,14 +301,12 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
         kryo.register(ByteArray::class.java)
         kryo.register(HandshakeMessage::class.java)
-
-        return kryo
     }
 
     /**
      * called as the first thing inside when initializing the classesToRegister
      */
-    internal fun initGlobalKryo(): KryoExtra<CONNECTION> {
+    private fun newGlobalKryo(kryo: Kryo) {
         // NOTE:  classesRegistrations.forEach will be called after serialization init!
         // NOTE: All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
 
@@ -315,9 +315,6 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         // Serializes objects using Java's built in serialization mechanism.
         // Note that this is very inefficient and should be avoided if possible.
 //        val javaSerializer = JavaSerializer()
-
-
-        val kryo = KryoExtra<CONNECTION>()
 
         kryo.instantiatorStrategy = instantiatorStrategy
         kryo.references = references
@@ -397,14 +394,6 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         UnmodifiableCollectionsSerializer.registerSerializers(kryo)
         SynchronizedCollectionsSerializer.registerSerializers(kryo)
 
-        // TODO: this is for diffie hellmen handshake stuff!
-//            serialization.register(IESParameters::class.java, IesParametersSerializer())
-//            serialization.register(IESWithCipherParameters::class.java, IesWithCipherParametersSerializer())
-        // TODO: fix kryo to work the way we want, so we can register interfaces + serializers with kryo
-//            serialization.register(XECPublicKey::class.java, XECPublicKeySerializer())
-//            serialization.register(XECPrivateKey::class.java, XECPrivateKeySerializer())
-//            serialization.register(Message::class.java) // must use full package name!
-
         // RMI stuff!
         kryo.register(ConnectionObjectCreateRequest::class.java)
         kryo.register(ConnectionObjectCreateResponse::class.java)
@@ -437,8 +426,6 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         kryo.register(Reserved7::class.java)
         kryo.register(Reserved8::class.java)
         kryo.register(Reserved9::class.java)
-
-        return kryo
     }
 
     /**
@@ -446,8 +433,9 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      *
      * This is to prevent (and recognize) out-of-order class/serializer registration. If an ID is already in use by a different type, an exception is thrown.
      */
-    internal fun finishInit(type: Class<*>, kryo: KryoExtra<CONNECTION>) {
+    internal fun finishInit(type: Class<*>, maxMessageSize: Int) {
         logger = KotlinLogging.logger(type.simpleName)
+        this.maxMessageSize = maxMessageSize
 
         val firstInitialization = initialized.compareAndSet(expect = false, update = true)
 
@@ -455,6 +443,9 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
             if (!firstInitialization) {
                 throw IllegalArgumentException("Unable to initialize object serialization more than once!")
             }
+
+            val kryo = KryoWriter<CONNECTION>(maxMessageSize)
+            newGlobalKryo(kryo)
 
             initializeRegistrations(kryo, classesToRegister)
             classesToRegister.clear() // don't need to keep a reference, since this can never be reinitialized.
@@ -484,30 +475,27 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      *
      * @return true if initialization was successful, false otherwise. DOES NOT CATCH EXCEPTIONS EXTERNALLY
      */
-    internal fun finishClientConnect(kryoRegistrationDetailsFromServer: ByteArray): KryoExtra<CONNECTION>? {
+    internal fun finishClientConnect(kryoRegistrationDetailsFromServer: ByteArray, maxMessageSize: Int) {
+        val readKryo = KryoReader<CONNECTION>(maxMessageSize)
+        val writeKryo = KryoWriter<CONNECTION>(maxMessageSize)
+        newGlobalKryo(readKryo)
+        newGlobalKryo(writeKryo)
+
         // we self initialize our registrations, THEN we compare them to the server.
-        val kryo = initGlobalKryo()
+        val newRegistrations = initializeRegistrationsForClient(kryoRegistrationDetailsFromServer, classesToRegister, readKryo)
+            ?: throw Exception("Unable to initialize class registration information from the server")
 
-        val newRegistrations = initializeRegistrationsForClient(kryoRegistrationDetailsFromServer, classesToRegister) ?: return null
+        initializeRegistrations(writeKryo, newRegistrations)
 
-        try {
-            initializeRegistrations(kryo, newRegistrations)
+        // NOTE: we MUST be super careful to never modify `classesToRegister`!!
+        // NOTE: DO NOT CLEAR THIS WITH CLIENTS, THEY HAVE TO REBUILD EVERY TIME WITH A NEW CONNECTION!
+        // classesToRegister.clear() // don't need to keep a reference, since this can never be reinitialized.
 
-            // NOTE: we MUST be super careful to never modify `classesToRegister`!!
-            // NOTE: DO NOT CLEAR THIS WITH CLIENTS, THEY HAVE TO REBUILD EVERY TIME WITH A NEW CONNECTION!
-            // classesToRegister.clear() // don't need to keep a reference, since this can never be reinitialized.
-
-            if (logger.isTraceEnabled) {
-                // log the in-order output first
-                finalClassRegistrations.forEach { classRegistration ->
-                    logger.trace(classRegistration.info)
-                }
+        if (logger.isTraceEnabled) {
+            // log the in-order output first
+            finalClassRegistrations.forEach { classRegistration ->
+                logger.trace(classRegistration.info)
             }
-
-            return kryo
-        } catch (e: Exception) {
-            logger.error(e) { "Unable to correctly register classes for serialization during client connection!" }
-            return null
         }
     }
 
@@ -515,8 +503,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     /**
      * @throws IllegalArgumentException if there is are too many RMI methods OR if a problem setting up the registration details
      */
-    private fun initializeRegistrations(kryo: KryoExtra<CONNECTION>, classesToRegister: List<ClassRegistration<CONNECTION>>) {
-        val mergedRegistrations = mergeClassRegistrations(kryo, classesToRegister)
+    private fun initializeRegistrations(kryo: KryoWriter<CONNECTION>, classesToRegister: List<ClassRegistration>) {
+        val mergedRegistrations = mergeClassRegistrations(classesToRegister, kryo)
 
         // make sure our RMI cached methods have been initialized
         initializeRmiMethodCache(mergedRegistrations, kryo)
@@ -531,7 +519,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     /**
      * Merge all the registrations (since we can have registrations overwrite newer/specific registrations based on ID)
      */
-    private fun mergeClassRegistrations(kryo: KryoExtra<CONNECTION>, classesToRegister: List<ClassRegistration<CONNECTION>>): List<ClassRegistration<CONNECTION>> {
+    private fun mergeClassRegistrations(classesToRegister: List<ClassRegistration>, kryo: Kryo): List<ClassRegistration> {
 
         // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
         // note, we have to check to make sure a class is not ALREADY registered for RMI before it is registered again
@@ -540,7 +528,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         }
 
         // in order to get the ID's, these have to be registered with a kryo instance!
-        val mergedRegistrations = mutableListOf<ClassRegistration<CONNECTION>>()
+        val mergedRegistrations = mutableListOf<ClassRegistration>()
         classesToRegister.forEach { registration ->
             val id = registration.id
 
@@ -580,13 +568,13 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      *
      * @throws IllegalArgumentException if there are too many RMI methods
      */
-    private fun initializeRmiMethodCache(classesToRegister: List<ClassRegistration<CONNECTION>>, kryo: KryoExtra<CONNECTION>) {
+    private fun initializeRmiMethodCache(classesToRegister: List<ClassRegistration>, kryo: Kryo) {
         classesToRegister.forEach { classRegistration ->
             // we should cache RMI methods! We don't always know if something is RMI or not (from just how things are registered...)
             // so it is super trivial to map out all possible, relevant types
             val kryoId = classRegistration.id
 
-            if (classRegistration is ClassRegistrationForRmi) {
+            if (classRegistration is ClassRegistrationForRmi<*>) {
                 // on the "RMI server" (aka, where the object lives) side, there will be an interface + implementation!
 
                 val implClass = classRegistration.implClass
@@ -621,7 +609,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     /**
      * @throws IllegalArgumentException if there is a problem setting up the registration details
      */
-    private fun createRegistrationDetails(classesToRegister: List<ClassRegistration<CONNECTION>>, kryo: KryoExtra<CONNECTION>): ByteArray {
+    private fun createRegistrationDetails(classesToRegister: List<ClassRegistration>, kryo: KryoWriter<CONNECTION>): ByteArray {
         // now create the registration details, used to validate that the client/server have the EXACT same class registration setup
         val registrationDetails = arrayListOf<Array<Any>>()
 
@@ -651,24 +639,22 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      */
     @Suppress("UNCHECKED_CAST")
     private fun initializeRegistrationsForClient(
-        kryoRegistrationDetailsFromServer: ByteArray,
-        classesToRegister: List<ClassRegistration<CONNECTION>>
-    ): MutableList<ClassRegistration<CONNECTION>>? {
+        kryoRegistrationDetailsFromServer: ByteArray, classesToRegister: List<ClassRegistration>, kryo: KryoReader<CONNECTION>
+    ): MutableList<ClassRegistration>? {
 
         // we have to allow CUSTOM classes to register (where the order does not matter), so that if the CLIENT is the RMI-SERVER, it can
         // specify IMPL classes for RMI.
         classesToRegister.forEach { registration ->
-            require(registration is ClassRegistrationForRmi) { "Unable to register a *class* by itself. This is only permitted on the CLIENT for RMI. " +
+            require(registration is ClassRegistrationForRmi<*>) { "Unable to register a *class* by itself. This is only permitted on the CLIENT for RMI. " +
                     "To fix this, remove xx.register(${registration.clazz.name})" }
         }
 
         @Suppress("UNCHECKED_CAST")
         val classesToRegisterForRmi = listOf(*classesToRegister.toTypedArray()) as List<ClassRegistrationForRmi<CONNECTION>>
 
-        val kryo = initGlobalKryo()
         val input = AeronInput(kryoRegistrationDetailsFromServer)
         val clientClassRegistrations = kryo.read(input) as Array<Array<Any>>
-        val newRegistrations = mutableListOf<ClassRegistration<CONNECTION>>()
+        val newRegistrations = mutableListOf<ClassRegistration>()
 
         val maker = kryo.instantiatorStrategy
         val rmiSerializer = rmiServerSerializer
@@ -754,12 +740,48 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         return newRegistrations
     }
 
+    private val writeKryos: Pool<KryoWriter<CONNECTION>> = ObjectPool.nonBlockingBounded(
+        poolObject = object : BoundedPoolObject<KryoWriter<CONNECTION>>() {
+            override fun newInstance(): KryoWriter<CONNECTION> {
+                return newWriteKryo(maxMessageSize)
+            }
+        },
+        maxSize = OS.optimumNumberOfThreads * 2
+    )
+
+    fun getWriteKryo(): KryoWriter<CONNECTION> {
+        return writeKryos.take()
+    }
+
+    fun returnWriteKryo(kryo: KryoWriter<CONNECTION>) {
+        writeKryos.put(kryo)
+    }
+
     /**
      * NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
      *
      * @return takes a kryo instance from the pool, or creates one if the pool was empty
      */
-    fun initKryo(kryo: KryoExtra<CONNECTION> = initGlobalKryo()): KryoExtra<CONNECTION> {
+    fun newReadKryo(maxMessageSize: Int): KryoReader<CONNECTION> {
+        val kryo = KryoReader<CONNECTION>(maxMessageSize)
+        newGlobalKryo(kryo)
+
+        // the final list of all registrations in the EndPoint. This cannot change for the serer.
+        finalClassRegistrations.forEach { registration ->
+            registration.register(kryo, rmiHolder)
+        }
+
+        return kryo
+    }
+    /**
+     * NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
+     *
+     * @return takes a kryo instance from the pool, or creates one if the pool was empty
+     */
+    fun newWriteKryo(maxMessageSize: Int): KryoWriter<CONNECTION> {
+        val kryo = KryoWriter<CONNECTION>(maxMessageSize)
+        newGlobalKryo(kryo)
+
         // the final list of all registrations in the EndPoint. This cannot change for the serer.
         finalClassRegistrations.forEach { registration ->
             registration.register(kryo, rmiHolder)

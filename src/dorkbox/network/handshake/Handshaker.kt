@@ -20,15 +20,16 @@ import dorkbox.network.Configuration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ServerException
-import dorkbox.network.serialization.KryoExtra
+import dorkbox.network.serialization.KryoReader
+import dorkbox.network.serialization.KryoWriter
 import dorkbox.network.serialization.Serialization
 import io.aeron.Publication
+import io.aeron.logbuffer.FrameDescriptor
 import mu.KLogger
 import org.agrona.DirectBuffer
 
@@ -40,15 +41,23 @@ internal class Handshaker<CONNECTION : Connection>(
     aeronDriver: AeronDriver,
     val newException: (String, Throwable?) -> Throwable
 ) {
-    private val handshakeReadKryo: KryoExtra<CONNECTION>
-    private val handshakeWriteKryo: KryoExtra<CONNECTION>
+    private val handshakeReadKryo: KryoReader<CONNECTION>
+    private val handshakeWriteKryo: KryoWriter<CONNECTION>
     private val handshakeSendIdleStrategy: CoroutineIdleStrategy
 
     private val writeTimeoutNS = (aeronDriver.lingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
 
     init {
-        handshakeReadKryo = serialization.newHandshakeKryo()
-        handshakeWriteKryo = serialization.newHandshakeKryo()
+        val maxMessageSize = FrameDescriptor.computeMaxMessageLength(config.publicationTermBufferLength)
+
+        // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
+
+        handshakeReadKryo = KryoReader(maxMessageSize)
+        handshakeWriteKryo = KryoWriter(maxMessageSize)
+
+        serialization.newHandshakeKryo(handshakeReadKryo)
+        serialization.newHandshakeKryo(handshakeWriteKryo)
+
         handshakeSendIdleStrategy = config.sendIdleStrategy.clone()
     }
 

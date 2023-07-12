@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package dorkbox.network.serialization
 
+import com.esotericsoftware.kryo.Kryo
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.messages.RmiServerSerializer
 
@@ -47,7 +48,7 @@ import dorkbox.network.rmi.messages.RmiServerSerializer
  */
 internal class ClassRegistrationForRmi<CONNECTION: Connection>(ifaceClass: Class<*>,
                                                                var implClass: Class<*>?,
-                                                               serializer: RmiServerSerializer<CONNECTION>) : ClassRegistration<CONNECTION>(ifaceClass, serializer) {
+                                                               serializer: RmiServerSerializer<CONNECTION>) : ClassRegistration(ifaceClass, serializer) {
     /**
      * In general:
      *
@@ -104,7 +105,7 @@ internal class ClassRegistrationForRmi<CONNECTION: Connection>(ifaceClass: Class
      *        send: register IMPL object class with RmiServerSerializer
      *              lookup IMPL object -> rmiID
      */
-    override fun register(kryo: KryoExtra<CONNECTION>, rmi: RmiHolder) {
+    override fun register(kryo: Kryo, rmi: RmiHolder) {
         // we override this, because we ALWAYS will call our RMI registration!
         if (id == IGNORE_REGISTRATION) {
             // we have previously specified that this registration should be ignored!
