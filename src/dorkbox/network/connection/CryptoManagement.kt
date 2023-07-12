@@ -46,22 +46,26 @@ internal class CryptoManagement(val logger: KLogger,
                                 private val settingsStore: SettingsStore,
                                 type: Class<*>,
                                 private val enableRemoteSignatureValidation: Boolean) {
+    companion object {
+        private val X25519 = "X25519"
+        const val curve25519 = "curve25519"
 
-    private val X25519 = "X25519"
+        const val GCM_IV_LENGTH_BYTES = 12 // 12 bytes for a 96-bit IV
+        const val GCM_TAG_LENGTH_BITS = 128
+        const val AES_ALGORITHM = "AES/GCM/NoPadding"
+
+        val secureRandom = SecureRandom()
+    }
+
+
     private val X25519KeySpec = NamedParameterSpec(X25519)
 
     private val keyFactory = KeyFactory.getInstance(X25519)  // key size is 32 bytes (256 bits)
     private val keyAgreement = KeyAgreement.getInstance("XDH")
 
-    private val aesCipher = Cipher.getInstance("AES/GCM/NoPadding")
+    private val aesCipher = Cipher.getInstance(AES_ALGORITHM)
 
-    companion object {
-        const val curve25519 = "curve25519"
-        const val GCM_IV_LENGTH_BYTES = 12
-        const val GCM_TAG_LENGTH_BITS = 128
 
-        val secureRandom = SecureRandom()
-    }
 
     val privateKey: XECPrivateKey
     val publicKey: XECPublicKey
@@ -229,7 +233,7 @@ internal class CryptoManagement(val logger: KLogger,
     /**
      * Generate the AES key based on ECDH
      */
-    private fun generateAesKey(remotePublicKeyBytes: ByteArray, bytesA: ByteArray, bytesB: ByteArray): SecretKeySpec {
+    internal fun generateAesKey(remotePublicKeyBytes: ByteArray, bytesA: ByteArray, bytesB: ByteArray): SecretKeySpec {
         val clientPublicKey = keyFactory.generatePublic(XECPublicKeySpec(X25519KeySpec, BigInteger(remotePublicKeyBytes)))
         keyAgreement.init(privateKey)
         keyAgreement.doPhase(clientPublicKey, true)
@@ -246,19 +250,20 @@ internal class CryptoManagement(val logger: KLogger,
     }
 
     // NOTE: ALWAYS CALLED ON THE SAME THREAD! (from the server, mutually exclusive calls to decrypt)
-    fun encrypt(clientPublicKeyBytes: ByteArray,
-                sessionIdPub: Int,
-                sessionIdSub: Int,
-                streamIdPub: Int,
-                streamIdSub: Int,
-                kryoRegDetails: ByteArray): ByteArray {
+    fun encrypt(
+        cryptoSecretKey: SecretKeySpec,
+        sessionIdPub: Int,
+        sessionIdSub: Int,
+        streamIdPub: Int,
+        streamIdSub: Int,
+        kryoRegDetails: ByteArray
+    ): ByteArray {
 
         try {
-            val secretKeySpec = generateAesKey(clientPublicKeyBytes, clientPublicKeyBytes, publicKeyBytes)
             secureRandom.nextBytes(iv)
 
             val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv)
-            aesCipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, gcmParameterSpec)
+            aesCipher.init(Cipher.ENCRYPT_MODE, cryptoSecretKey, gcmParameterSpec)
 
             // now create the byte array that holds all our data
             cryptOutput.reset()
@@ -278,7 +283,7 @@ internal class CryptoManagement(val logger: KLogger,
 
     // NOTE: ALWAYS CALLED ON THE SAME THREAD! (from the client, mutually exclusive calls to encrypt)
     fun decrypt(registrationData: ByteArray, serverPublicKeyBytes: ByteArray): ClientConnectionInfo? {
-        try {
+        return try {
             val secretKeySpec = generateAesKey(serverPublicKeyBytes, publicKeyBytes, serverPublicKeyBytes)
 
             // now decrypt the data
@@ -287,11 +292,11 @@ internal class CryptoManagement(val logger: KLogger,
 
             cryptInput.buffer = aesCipher.doFinal(registrationData, GCM_IV_LENGTH_BYTES, registrationData.size - GCM_IV_LENGTH_BYTES)
 
-            return makeInfo(serverPublicKeyBytes)
+            makeInfo(serverPublicKeyBytes)
 
         } catch (e: Exception) {
             logger.error("Error during AES decrypt!", e)
-            return null
+            null
         }
     }
 

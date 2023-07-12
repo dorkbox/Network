@@ -93,9 +93,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         internal val responseManager = ResponseManager()
 
         internal val lanAddress = IP.lanAddress()
-
-        const val HAS_TCP = (1 shl 1).toByte()
-        const val HAS_UDP = (1 shl 2).toByte()
     }
 
     val logger: KLogger = KotlinLogging.logger(loggerName)

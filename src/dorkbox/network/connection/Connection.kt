@@ -25,14 +25,14 @@ import dorkbox.network.exceptions.TransmitException
 import dorkbox.network.ping.Ping
 import dorkbox.network.rmi.RmiSupportConnection
 import dorkbox.network.rmi.messages.MethodResponse
-import dorkbox.network.serialization.KryoExtra
 import io.aeron.FragmentAssembler
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.IdleStrategy
 import java.util.concurrent.*
@@ -131,11 +131,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private val remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
 
-    // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
-    // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
-    // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
-//    private val aes_gcm_iv = atomic(0)
-
     /**
      * Methods supporting Remote Method Invocation and Objects
      */
@@ -176,27 +171,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     fun hasRemoteKeyChanged(): Boolean {
         return remoteKeyChanged
     }
-
-//    /**
-//     * This is the per-message sequence number.
-//     *
-//     * The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 4 (external counter) + 4 (GCM counter)
-//     * The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
-//     * counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
-//     */
-//    fun nextGcmSequence(): Long {
-//        return aes_gcm_iv.getAndIncrement()
-//    }
-//
-//    /**
-//     * @return the AES key. key=32 byte, iv=12 bytes (AES-GCM implementation).
-//     */
-//    fun cryptoKey(): SecretKey {
-////        return channelWrapper.cryptoKey()
-//    }
-
-
-
 
     /**
      * Polls the AERON media driver subscription channel for incoming messages

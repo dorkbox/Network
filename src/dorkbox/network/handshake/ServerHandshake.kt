@@ -433,6 +433,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
             return false
         }
 
+        clientPublicKeyBytes!!
+
         val isSelfMachine = clientAddress.isLoopbackAddress || clientAddress == EndPoint.lanAddress
 
         if (!isSelfMachine &&
@@ -559,6 +561,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 reliable = isReliable
             )
 
+            val cryptoSecretKey = server.crypto.generateAesKey(clientPublicKeyBytes, clientPublicKeyBytes, server.crypto.publicKeyBytes)
+
+
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
                 logger.debug { "Creating new connection to $logInfo" }
@@ -599,7 +604,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
             // now create the encrypted payload, using ECDH
             successMessage.registrationData = server.crypto.encrypt(
-                clientPublicKeyBytes = clientPublicKeyBytes!!,
+                cryptoSecretKey = cryptoSecretKey,
                 sessionIdPub = connectionSessionIdPub,
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
