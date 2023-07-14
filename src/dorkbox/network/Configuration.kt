@@ -742,7 +742,7 @@ abstract class Configuration protected constructor() {
         require(maxStreamSizeInMemoryMB <= 256) { "configuration maxStreamSizeInMemoryMB must be <= 256" } // 256 is arbitrary
 
         require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
-        require(networkMtuSize < 9 * 1024)  { "configuration networkMtuSize must be < ${9 * 1024}" }
+        require(networkMtuSize < Configuration.MAX_UDP_PAYLOAD_LENGTH)  { "configuration networkMtuSize must be < ${Configuration.MAX_UDP_PAYLOAD_LENGTH}" }
 
         require(sendBufferSize > 0) { "configuration socket send buffer must be > 0"}
         require(receiveBufferSize > 0) { "configuration socket receive buffer must be > 0"}
@@ -884,7 +884,7 @@ abstract class Configuration protected constructor() {
         @Suppress("DuplicatedCode")
         fun validate() {
             require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
-            require(networkMtuSize < 9 * 1024)  { "configuration networkMtuSize must be < ${9 * 1024}" }
+            require(networkMtuSize < Configuration.MAX_UDP_PAYLOAD_LENGTH)  { "configuration networkMtuSize must be < ${Configuration.MAX_UDP_PAYLOAD_LENGTH}" }
 
             require(sendBufferSize > 0) { "configuration socket send buffer must be > 0"}
             require(receiveBufferSize > 0) { "configuration socket receive buffer must be > 0"}

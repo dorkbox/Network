@@ -60,6 +60,7 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLo
 
                 .threadingMode(config.threadingMode)
                 .mtuLength(config.networkMtuSize)
+                .ipcMtuLength(config.networkMtuSize)
 
                 .initialWindowLength(config.initialWindowLength)
                 .socketSndbufLength(config.sendBufferSize)
