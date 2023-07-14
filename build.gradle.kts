@@ -85,8 +85,8 @@ GradleUtils.jpms(JavaVersion.VERSION_11) // this is a bit of a hack to workaroun
 // ability to send with a function callback (using RMI waiter type stuff for callbacks)
 
 // java 14 is faster with aeron!
-// NOTE: now using aeron instead of netty
-// todo: remove BC! use or native java? (if possible. we are java 11 now, instead of 1.6)
+
+
 
 
 licensing {
@@ -166,7 +166,7 @@ dependencies {
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1")
 
     // https://github.com/dorkbox
-    api("com.dorkbox:ByteUtilities:1.10")
+    api("com.dorkbox:ByteUtilities:1.12")
     api("com.dorkbox:Collections:1.6")
     api("com.dorkbox:MinLog:2.5")
     api("com.dorkbox:NetworkDNS:2.9")
@@ -175,7 +175,7 @@ dependencies {
     api("com.dorkbox:Serializers:2.9")
     api("com.dorkbox:Storage:1.5")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.42")
+    api("com.dorkbox:Utilities:1.43")
 
     
     // how we bypass using reflection/jpms to access fields for java17+
@@ -200,8 +200,8 @@ dependencies {
         exclude("com.esotericsoftware", "minlog") // we use our own minlog, that logs to SLF4j instead
     }
 
-    // https://github.com/jpountz/lz4-java
-//    implementation("net.jpountz.lz4:lz4:1.3.0")
+    // https://github.com/lz4/lz4-java
+    api("org.lz4:lz4-java:1.8.0")
 
     // this is NOT the same thing as LMAX disruptor.
     // This is just a slightly faster queue than LMAX. (LMAX is a fast queue + other things w/ a difficult DSL)
