@@ -130,7 +130,8 @@ internal class StreamingManager<CONNECTION : Connection>(
                     streamingDataInMemory[streamId] = FileWriter(tempFileLocation)
                 } else {
                     endPoint.logger.info { "Saving streaming data [${streamId}] in memory" }
-                    streamingDataInMemory[streamId] = AeronWriter()
+                    // .toInt is safe because we know the total size is < than maxStreamSizeInMemoryInBytes
+                    streamingDataInMemory[streamId] = AeronWriter(message.totalSize.toInt())
                 }
 
                 // this must be last

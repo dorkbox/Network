@@ -18,4 +18,4 @@ package dorkbox.network.connection.streaming
 
 import dorkbox.network.serialization.AeronOutput
 
-class AeronWriter: StreamingWriter, AeronOutput()
+class AeronWriter(size: Int): StreamingWriter, AeronOutput(size)
