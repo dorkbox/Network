@@ -99,7 +99,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         handshaker: Handshaker<CONNECTION>,
         handshakePublication: Publication,
         message: HandshakeMessage,
-        aeronLogInfo: String,
+        logInfo: String,
         logger: KLogger
     ): Boolean {
 
@@ -117,7 +117,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
                 try {
                     handshaker.writeMessage(handshakePublication,
-                                            aeronLogInfo,
+                                            logInfo,
                                             HandshakeMessage.retry("Handshake already in progress for sessionID!"))
                 } catch (e: Error) {
                     listenerManager.notifyError(ServerHandshakeException("[$existingConnection] Handshake error", e))
@@ -137,6 +137,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // Server is the "source", client mirrors the server
             logger.debug { "[${existingConnection}] (${message.connectKey}) Connection done with handshake." }
 
+            existingConnection.setImage()
+
             // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
             listenerManager.notifyInit(existingConnection)
 
@@ -146,7 +148,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // now tell the client we are done
             try {
                 handshaker.writeMessage(handshakePublication,
-                                        aeronLogInfo,
+                                        logInfo,
                                         HandshakeMessage.doneToClient(message.connectKey))
 
                 listenerManager.notifyConnect(existingConnection)
@@ -170,19 +172,19 @@ internal class ServerHandshake<CONNECTION : Connection>(
         handshakePublication: Publication,
         config: ServerConfiguration,
         clientAddress: InetAddress,
-        aeronLogInfo: String
+        logInfo: String
     ): Boolean {
 
         try {
             // VALIDATE:: Check to see if there are already too many clients connected.
             if (server.connections.size() >= config.maxClientCount) {
-                listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Server is full. Max allowed is ${config.maxClientCount}"))
+                listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Server is full. Max allowed is ${config.maxClientCount}"))
 
                 try {
-                    handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                    handshaker.writeMessage(handshakePublication, logInfo,
                                             HandshakeMessage.error("Server is full"))
                 } catch (e: Exception) {
-                    listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                    listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
                 }
                 return false
             }
@@ -194,25 +196,25 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 // decrement it now, since we aren't going to permit this connection (take the extra decrement hit on failure, instead of always)
                 connectionsPerIpCounts.decrement(clientAddress, currentCountForIp)
 
-                listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Too many connections for IP address. Max allowed is ${config.maxConnectionsPerIpAddress}"))
+                listenerManager.notifyError(ServerHandshakeException("[$logInfo] Too many connections for IP address. Max allowed is ${config.maxConnectionsPerIpAddress}"))
 
                 try {
-                    handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                    handshaker.writeMessage(handshakePublication, logInfo,
                                             HandshakeMessage.error("Too many connections for IP address"))
                 } catch (e: Exception) {
-                    listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                    listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
                 }
                 return false
             }
             connectionsPerIpCounts.increment(clientAddress, currentCountForIp)
         } catch (e: Exception) {
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Handshake error, Could not validate client message", e))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Handshake error, Could not validate client message", e))
 
             try {
-                handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                handshaker.writeMessage(handshakePublication, logInfo,
                                         HandshakeMessage.error("Invalid connection"))
             } catch (e: Exception) {
-                listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
             }
         }
 
@@ -230,7 +232,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         handshakePublication: Publication,
         publicKey: ByteArray,
         message: HandshakeMessage,
-        aeronLogInfo: String,
+        logInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
     ): Boolean {
@@ -248,13 +250,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
         try {
             connectionSessionIdPub = sessionIdAllocator.allocate()
         } catch (e: AllocationException) {
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Unable to allocate a session pub ID for the client connection!", e))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Unable to allocate a session pub ID for the client connection!", e))
 
             try {
-                handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                handshaker.writeMessage(handshakePublication, logInfo,
                                         HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
             }
             return false
         }
@@ -266,13 +268,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // have to unwind actions!
             sessionIdAllocator.free(connectionSessionIdPub)
 
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Unable to allocate a session sub ID for the client connection!", e))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Unable to allocate a session sub ID for the client connection!", e))
 
             try {
-                handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                handshaker.writeMessage(handshakePublication, logInfo,
                                         HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
             }
             return false
         }
@@ -286,13 +288,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
             sessionIdAllocator.free(connectionSessionIdPub)
             sessionIdAllocator.free(connectionSessionIdSub)
 
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Unable to allocate a stream publication ID for the client connection!", e))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Unable to allocate a stream publication ID for the client connection!", e))
 
             try {
-                handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                handshaker.writeMessage(handshakePublication, logInfo,
                                         HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
             }
             return false
         }
@@ -306,13 +308,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
             sessionIdAllocator.free(connectionSessionIdSub)
             streamIdAllocator.free(connectionStreamIdPub)
 
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Unable to allocate a stream subscription ID for the client connection!", e))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Unable to allocate a stream subscription ID for the client connection!", e))
 
             try {
-                handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                handshaker.writeMessage(handshakePublication, logInfo,
                                         HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
             }
             return false
         }
@@ -348,9 +350,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 logger.info { "Creating new connection to $logInfo" }
             }
 
-
-
-            connection = connectionFunc(ConnectionParams(publicKey, server, newConnectionDriver.pubSub, PublicKeyValidationState.VALID))
+            connection = connectionFunc(ConnectionParams(
+                publicKey,
+                server,
+                newConnectionDriver.pubSub,
+                PublicKeyValidationState.VALID,
+                CryptoManagement.NOCRYPT // we don't use encryption for IPC connections
+            ))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             // NOTE: all IPC client connections are, by default, always allowed to connect, because they are running on the same machine
@@ -380,10 +386,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = connection
 
-            logger.debug { "[$aeronLogInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
+            logger.debug { "[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
 
             // this tells the client all the info to connect.
-            handshaker.writeMessage(handshakePublication, aeronLogInfo, successMessage) // exception is already caught!
+            handshaker.writeMessage(handshakePublication, logInfo, successMessage) // exception is already caught!
         } catch (e: Exception) {
             // have to unwind actions!
             sessionIdAllocator.free(connectionSessionIdPub)
@@ -391,7 +397,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             streamIdAllocator.free(connectionStreamIdSub)
             streamIdAllocator.free(connectionStreamIdPub)
 
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message", e))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message", e))
 
             return false
         }
@@ -416,7 +422,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         mdcPortPub: Int,
         isReliable: Boolean,
         message: HandshakeMessage,
-        aeronLogInfo: String,
+        logInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
     ): Boolean {
@@ -429,7 +435,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         // VALIDATE:: check to see if the remote connection's public key has changed!
         validateRemoteAddress = server.crypto.validateRemoteAddress(clientAddress, clientAddressString, clientPublicKeyBytes)
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Public key mismatch."))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Public key mismatch."))
             return false
         }
 
@@ -438,7 +444,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         val isSelfMachine = clientAddress.isLoopbackAddress || clientAddress == EndPoint.lanAddress
 
         if (!isSelfMachine &&
-            !validateUdpConnectionInfo(server, handshaker, handshakePublication, config, clientAddress, aeronLogInfo)) {
+            !validateUdpConnectionInfo(server, handshaker, handshakePublication, config, clientAddress, logInfo)) {
             // we do not want to limit the loopback addresses!
             return false
         }
@@ -459,13 +465,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // have to unwind actions!
             connectionsPerIpCounts.decrementSlow(clientAddress)
 
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Unable to allocate a session ID for the client connection!"))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Unable to allocate a session ID for the client connection!"))
 
             try {
-                handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                handshaker.writeMessage(handshakePublication, logInfo,
                                         HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
             }
             return false
         }
@@ -479,13 +485,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
             connectionsPerIpCounts.decrementSlow(clientAddress)
             sessionIdAllocator.free(connectionSessionIdPub)
 
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Unable to allocate a session ID for the client connection!"))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Unable to allocate a session ID for the client connection!"))
 
             try {
-                handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                handshaker.writeMessage(handshakePublication, logInfo,
                                         HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
             }
             return false
         }
@@ -500,13 +506,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
             sessionIdAllocator.free(connectionSessionIdPub)
             sessionIdAllocator.free(connectionSessionIdSub)
 
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Unable to allocate a stream ID for the client connection!"))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Unable to allocate a stream ID for the client connection!"))
 
             try {
-                handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                handshaker.writeMessage(handshakePublication, logInfo,
                                         HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
             }
             return false
         }
@@ -521,13 +527,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
             sessionIdAllocator.free(connectionSessionIdSub)
             streamIdAllocator.free(connectionStreamIdPub)
 
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Unable to allocate a stream ID for the client connection!"))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Unable to allocate a stream ID for the client connection!"))
 
             try {
-                handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                handshaker.writeMessage(handshakePublication, logInfo,
                                         HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
             }
             return false
         }
@@ -571,7 +577,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 logger.info { "Creating new connection to $logInfo" }
             }
 
-            connection = connectionFunc(ConnectionParams(publicKey, server, newConnectionDriver.pubSub, validateRemoteAddress))
+            connection = connectionFunc(ConnectionParams(publicKey, server, newConnectionDriver.pubSub, validateRemoteAddress, cryptoSecretKey))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             val permitConnection = listenerManager.notifyFilter(connection)
@@ -579,13 +585,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 // this will also unwind/free allocations
                 connection.close()
 
-                listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection was not permitted!"))
+                listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection was not permitted!"))
 
                 try {
-                    handshaker.writeMessage(handshakePublication, aeronLogInfo,
+                    handshaker.writeMessage(handshakePublication, logInfo,
                                             HandshakeMessage.error("Connection was not permitted!"))
                 } catch (e: Exception) {
-                    listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
+                    listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
                 }
                 return false
             }
@@ -617,10 +623,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = connection
 
-            logger.debug { "[$aeronLogInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
+            logger.debug { "[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
 
             // this tells the client all the info to connect.
-            handshaker.writeMessage(handshakePublication, aeronLogInfo, successMessage) // exception is already caught
+            handshaker.writeMessage(handshakePublication, logInfo, successMessage) // exception is already caught
         } catch (e: Exception) {
             // have to unwind actions!
             connectionsPerIpCounts.decrementSlow(clientAddress)
@@ -629,7 +635,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             streamIdAllocator.free(connectionStreamIdPub)
             streamIdAllocator.free(connectionStreamIdSub)
 
-            listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message"))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message", e))
             return false
         }
 

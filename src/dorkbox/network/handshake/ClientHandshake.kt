@@ -242,7 +242,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         handshakeConnection: ClientHandshakeDriver,
         clientConnection: ClientConnectionDriver,
         handshakeTimeoutNs: Long,
-        aeronLogInfo: String
+        logInfo: String
     ) {
         val pubSub = clientConnection.connectionInfo
         val handshakePubSub = handshakeConnection.pubSub
@@ -254,7 +254,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         // Send the done message to the server.
         try {
-            handshaker.writeMessage(handshakeConnection.pubSub.pub, aeronLogInfo,
+            handshaker.writeMessage(handshakeConnection.pubSub.pub, logInfo,
                                     HandshakeMessage.doneFromClient(
                                         connectKey = connectKey,
                                         sessionIdSub = handshakePubSub.sessionIdSub,

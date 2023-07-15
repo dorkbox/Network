@@ -167,7 +167,7 @@ internal object ServerHandshakePollers {
                             handshakePublication = publication,
                             publicKey = message.publicKey!!,
                             message = message,
-                            aeronLogInfo = logInfo,
+                            logInfo = logInfo,
                             connectionFunc = connectionFunc,
                             logger = logger
                         )
@@ -204,7 +204,7 @@ internal object ServerHandshakePollers {
                             handshaker = handshaker,
                             handshakePublication = publication,
                             message = message,
-                            aeronLogInfo = logInfo,
+                            logInfo = logInfo,
                             logger = logger
                         )
                     } catch (e: Exception) {
@@ -399,7 +399,7 @@ internal object ServerHandshakePollers {
                             mdcPortPub = mdcPortPub,
                             isReliable = isReliable,
                             message = message,
-                            aeronLogInfo = logInfo,
+                            logInfo = logInfo,
                             connectionFunc = connectionFunc,
                             logger = logger
                         )
@@ -441,7 +441,7 @@ internal object ServerHandshakePollers {
                             handshaker = handshaker,
                             handshakePublication = publication,
                             message = message,
-                            aeronLogInfo = logInfo,
+                            logInfo = logInfo,
                             logger = logger
                         )
                     } catch (e: Exception) {

@@ -41,7 +41,7 @@ import java.util.concurrent.*
  * This connection is established once the registration information is validated, and the various connect/filter checks have passed
  */
 open class Connection(connectionParameters: ConnectionParams<*>) {
-    private var messageHandler: FragmentAssembler
+    private var messageHandler: FragmentHandler
 
     /**
      * The specific connection details for this connection!
@@ -68,7 +68,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has its own logic on the remote endpoint,
      * and can have its own back-pressure.
      */
-    private val sendIdleStrategy: IdleStrategy
+    private val sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
 
     /**
      * This is the client UUID. This is useful determine if the same client is connecting multiple times to a server (instead of only using IP address)
@@ -129,7 +129,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
-    private val remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
+    internal val remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
 
     /**
      * Methods supporting Remote Method Invocation and Objects
@@ -142,9 +142,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
 
     init {
-        sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
-
-
         // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
         //  we exclusively read from the DirectBuffer on a single thread.
 
@@ -152,7 +149,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         //  publication of any state to other threads and not be:
         //   - long running
         //   - re-entrant with the client
-        messageHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+        messageHandler = FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // Subscriptions are NOT multi-thread safe, so only processed on the thread that calls .poll()!
             endPoint.dataReceive(buffer, offset, length, header, this@Connection)
         }
@@ -165,19 +162,27 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
-     * @return true if the remote public key changed. This can be useful if specific actions are necessary when the key has changed.
+     * When this is called, we should always have a subscription image!
      */
-    fun hasRemoteKeyChanged(): Boolean {
-        return remoteKeyChanged
+    internal suspend fun setImage() {
+        var triggered = false
+        while (subscription.hasNoImages()) {
+            triggered = true
+            delay(50)
+        }
+
+        if (triggered) {
+            logger.error { "Delay while configuring subscription!" }
+        }
+
+        image = subscription.imageAtIndex(0)
     }
 
     /**
      * Polls the AERON media driver subscription channel for incoming messages
      */
     internal fun poll(): Int {
-        // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
-        //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-        return subscription.poll(messageHandler, 1)
+        return image.poll(messageHandler, 1)
     }
 
     /**
@@ -190,37 +195,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         // this is dispatched to the IO context!! (since network calls are IO/blocking calls)
         withContext(Dispatchers.IO) {
-            // we use a mutex because we do NOT want different threads/coroutines to be able to send data over the SAME connections at the SAME time.
-            // exclusive publications are not thread safe/concurrent!
-            writeMutex.withLock {
-                // we reset the sending timeout strategy when a message was successfully sent.
-                sendIdleStrategy.reset()
-
-                try {
-                    // The handshake sessionId IS NOT globally unique
-                    logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
-                    success = endPoint.write(message, publication, sendIdleStrategy, this@Connection, abortEarly)
-                } catch (e: Throwable) {
-                    // make sure we atomically create the listener manager, if necessary
-                    listenerManager.getAndUpdate { origManager ->
-                        origManager ?: ListenerManager(logger)
-                    }
-
-                    val listenerManager = listenerManager.value!!
-
-                    if (message is MethodResponse && message.result is Exception) {
-                        val result = message.result as Exception
-                        val newException = SerializationException("Error serializing message ${message.javaClass.simpleName}: '$message'", result)
-                        listenerManager.notifyError(this@Connection, newException)
-                    } else if (message is ClientException || message is ServerException) {
-                        val newException = TransmitException("Error with message ${message.javaClass.simpleName}: '$message'", e)
-                        listenerManager.notifyError(this@Connection, newException)
-                    } else {
-                        val newException = TransmitException("Error sending message ${message.javaClass.simpleName}: '$message'", e)
-                        listenerManager.notifyError(this@Connection, newException)
-                    }
-                }
-            }
+            // The handshake sessionId IS NOT globally unique
+            logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
+            success = endPoint.write(message, publication, sendIdleStrategy, this@Connection, abortEarly)
         }
 
         return success
@@ -374,15 +351,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         if (publication.isConnected) {
             // sometimes the remote end has already disconnected, THERE WILL BE ERRORS if this happens (but they are ok)
             send(DisconnectMessage.INSTANCE, true)
-        }
-
-        val timeoutInNanos = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
-        val closeTimeoutTime = System.nanoTime()
-
-        // we do not want to close until AFTER all publications have been sent. Calling this WITHOUT waiting will instantly stop everything
-        // we want a timeout-check, otherwise this will run forever
-        while (writeMutex.isLocked && System.nanoTime() - closeTimeoutTime < timeoutInNanos) {
-            delay(50)
         }
 
         // on close, we want to make sure this file is DELETED!

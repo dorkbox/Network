@@ -766,15 +766,16 @@ open class Client<CONNECTION : Connection>(
             logger.info { "Creating new connection to $logInfo" }
         }
 
-        val newConnection: CONNECTION
-        if (handshakeConnection.pubSub.isIpc) {
-            newConnection = connectionFunc(ConnectionParams(connectionInfo.publicKey, this, clientConnection.connectionInfo, PublicKeyValidationState.VALID))
-        } else {
-            newConnection = connectionFunc(ConnectionParams(connectionInfo.publicKey, this, clientConnection.connectionInfo, validateRemoteAddress))
-            address!!
+        val newConnection = connectionFunc(ConnectionParams(
+            connectionInfo.publicKey,
+            this,
+            clientConnection.connectionInfo,
+            validateRemoteAddress,
+            connectionInfo.secretKey
+        ))
 
+        if (!handshakeConnection.pubSub.isIpc) {
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
-
             logger.info { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) adding new signature for [$addressString] : ${connectionInfo.publicKey.toHexString()}" }
 
             storage.addRegisteredServerKey(address!!, connectionInfo.publicKey)
@@ -789,7 +790,7 @@ open class Client<CONNECTION : Connection>(
         try {
             handshake.done(handshakeConnection, clientConnection,
                            handshakeTimeoutNs = handshakeTimeoutNs,
-                           aeronLogInfo = handshakeConnection.details
+                           logInfo = handshakeConnection.details
             )
         } catch (e: Exception) {
             listenerManager.notifyError(ClientHandshakeException("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] error during handshake", e))
@@ -800,6 +801,8 @@ open class Client<CONNECTION : Connection>(
         handshakeConnection.close()
 
         logger.debug { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] done with handshake." }
+
+        newConnection.setImage()
 
         // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
         listenerManager.notifyInit(newConnection)
@@ -852,7 +855,7 @@ open class Client<CONNECTION : Connection>(
      * true if the remote public key changed. This can be useful if specific actions are necessary when the key has changed.
      */
     val remoteKeyHasChanged: Boolean
-        get() = connection.hasRemoteKeyChanged()
+        get() = connection.remoteKeyChanged
 
     /**
      * true if this connection is an IPC connection

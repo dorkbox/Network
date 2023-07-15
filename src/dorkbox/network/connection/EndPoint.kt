@@ -35,13 +35,14 @@ import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.ResponseManager
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.RmiManagerGlobal
+import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.KryoReader
 import dorkbox.network.serialization.KryoWriter
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.serialization.SettingsStore
 import io.aeron.Publication
-import io.aeron.logbuffer.FrameDescriptor
+import io.aeron.logbuffer.BufferClaim
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
@@ -118,9 +119,12 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     val serialization: Serialization<CONNECTION>
 
     /**
-     * The largest size a SINGLE message via AERON can be. We chunk messages larger than this, so we can send very large files using aeron.
+     * The largest size a SINGLE message via AERON can be. Because the maximum size we can send in a "single fragment" is the
+     * publication.maxPayloadLength() function (which is the MTU length less header). We could depend on Aeron for fragment reassembly,
+     * but that has a (very low) maximum reassembly size -- so we have our own mechanism for object fragmentation/assembly, which
+     * is (in reality) only limited by available ram.
      */
-    internal val maxMessageSize = FrameDescriptor.computeMaxMessageLength(config.publicationTermBufferLength)
+    internal val maxMessageSize = config.networkMtuSize - DataHeaderFlyweight.HEADER_LENGTH
 
     /**
      * Read and Write can be concurrent (different buffers are used)
@@ -464,7 +468,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    open suspend fun write(
+    open fun write(
         message: Any,
         publication: Publication,
         sendIdleStrategy: IdleStrategy,
@@ -476,7 +480,10 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         @Suppress("UNCHECKED_CAST")
         connection as CONNECTION
 
-        val kryo = serialization.getWriteKryo();
+        // we reset the sending timeout strategy when a message was successfully sent.
+        sendIdleStrategy.reset()
+
+        val kryo = serialization.getWriteKryo()
 
         try {
             // since ANY thread can call 'send', we have to take kryo instances in a safe way
@@ -485,9 +492,10 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             val buffer = kryo.write(connection, message)
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
-
+            val bufferClaim = kryo.bufferClaim
 
             // one small problem! What if the message is too big to send all at once?
+            // The maximum size we can send in a "single fragment" is the maxPayloadLength() function, which is the MTU length less header (with defaults this is 1,376 bytes).
             return if (objectSize >= maxMessageSize) {
                 // we must split up the message! It's too large for Aeron to manage.
                 // this will split up the message, construct the necessary control message and state, then CALL the sendData
@@ -503,8 +511,23 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                     connection = connection
                 )
             } else {
-                dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection, abortEarly)
+                dataSend(publication, internalBuffer, bufferClaim, 0, objectSize, sendIdleStrategy, connection, abortEarly)
             }
+        } catch (e: Throwable) {
+            // make sure we atomically create the listener manager, if necessary
+            if (message is MethodResponse && message.result is Exception) {
+                val result = message.result as Exception
+                val newException = SerializationException("Error serializing message ${message.javaClass.simpleName}: '$message'", result)
+                listenerManager.notifyError(connection, newException)
+            } else if (message is ClientException || message is ServerException) {
+                val newException = TransmitException("Error with message ${message.javaClass.simpleName}: '$message'", e)
+                listenerManager.notifyError(connection, newException)
+            } else {
+                val newException = TransmitException("Error sending message ${message.javaClass.simpleName}: '$message'", e)
+                listenerManager.notifyError(connection, newException)
+            }
+
+            return false
         } finally {
             serialization.returnWriteKryo(kryo)
         }
@@ -514,8 +537,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * This is designed to permit modifying/overriding how data is processed on the network.
      *
      * This will NOT split a message if it's too large. Aeron will just crash. This is used by the exclusively by the streaming manager.
-     *
-     * NOTE: we use exclusive publications, and they are not thread safe/concurrent!
      *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
@@ -528,8 +549,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         val buffer = kryo.write(connection, message)
         val objectSize = buffer.position()
         val internalBuffer = buffer.internalBuffer
+        val bufferClaim = kryo.bufferClaim
 
-        return dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection, false)
+        return dataSend(publication, internalBuffer, bufferClaim, 0, objectSize, sendIdleStrategy, connection, false)
     }
 
     /**
@@ -657,7 +679,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     }
 
     /**
-     * NOTE: we use exclusive publications, and they are not thread safe/concurrent!
      * NOTE: This cannot be on a coroutine, because our kryo instances are NOT threadsafe!
      *
      * the actual bits that send data on the network.
@@ -689,13 +710,20 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
         var result: Long
         while (true) {
-            // we use exclusive publications, and they are not thread safe/concurrent!
-
-            // note: we do not use the tryClaim() technique because the final message size is unknown. If we knew the message size, and had
-            //  it fixed in size (ie: if we were sending static-sized frames of data), then we could be significantly faster/optimized
-            result = publication.offer(internalBuffer, offset, objectSize)
+            // The maximum claimable length is given by the maxPayloadLength() function, which is the MTU length less header (with defaults this is 1,376 bytes).
+            result = publication.tryClaim(objectSize, bufferClaim)
             if (result >= 0) {
                 // success!
+                try {
+                    // both .offer and .putBytes add bytes to the underlying termBuffer -- HOWEVER, putBytes is faster as there are no
+                    // extra checks performed BECAUSE we have to do our own data fragmentation management.
+                    // It doesn't make sense to use `.offer`, which ALSO has its own fragmentation handling (which is extra overhead for us)
+                    bufferClaim.putBytes(internalBuffer, offset, objectSize)
+                } finally {
+                    // must commit() or abort() before the unblock timeout (default 15 seconds) occurs.
+                    bufferClaim.commit()
+                }
+
                 return true
             }
 

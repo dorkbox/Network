@@ -70,9 +70,10 @@ internal class Handshaker<CONNECTION : Connection>(
      * @return true if the message was successfully sent by aeron
      */
     @Suppress("DuplicatedCode")
-    internal suspend fun writeMessage(publication: Publication, aeronLogInfo: String, message: HandshakeMessage) {
+    internal suspend inline fun writeMessage(publication: Publication, logInfo: String, message: HandshakeMessage) {
         // The handshake sessionId IS NOT globally unique
-        logger.trace { "[$aeronLogInfo] (${message.connectKey}) send HS: $message" }
+        logger.trace { "[$logInfo] (${message.connectKey}) send HS: $message" }
+
 
         try {
             val buffer = handshakeWriteKryo.write(message)
@@ -110,7 +111,7 @@ internal class Handshaker<CONNECTION : Connection>(
                         // more critical error sending the message. we shouldn't retry or anything.
                         // this exception will be a ClientException or a ServerException
                         val exception = newException(
-                            "[$aeronLogInfo] Error sending message. (Connection in non-connected state longer than linger timeout. ${
+                            "[$logInfo] Error sending message. (Connection in non-connected state longer than linger timeout. ${
                                 AeronDriver.errorCodeName(result)
                             })",
                             null
@@ -144,7 +145,7 @@ internal class Handshaker<CONNECTION : Connection>(
 
                 // more critical error sending the message. we shouldn't retry or anything.
                 // this exception will be a ClientException or a ServerException
-                val exception = newException("[$aeronLogInfo] Error sending handshake message. $message (${AeronDriver.errorCodeName(result)})", null)
+                val exception = newException("[$logInfo] Error sending handshake message. $message (${AeronDriver.errorCodeName(result)})", null)
                 exception.cleanStackTraceInternal()
                 listenerManager.notifyError(exception)
                 throw exception
@@ -153,7 +154,7 @@ internal class Handshaker<CONNECTION : Connection>(
             if (e is ClientException || e is ServerException) {
                 throw e
             } else {
-                val exception = newException("[$aeronLogInfo] Error serializing handshake message $message", e)
+                val exception = newException("[$logInfo] Error serializing handshake message $message", e)
                 exception.cleanStackTrace(2) // 2 because we do not want to see the stack for the abstract `newException`
                 listenerManager.notifyError(exception)
                 throw exception
