@@ -16,10 +16,12 @@
 package dorkbox.network.connection
 
 import dorkbox.network.handshake.PubSub
+import javax.crypto.spec.SecretKeySpec
 
 data class ConnectionParams<CONNECTION : Connection>(
     val publicKey: ByteArray,
     val endPoint: EndPoint<CONNECTION>,
     val connectionInfo: PubSub,
-    val publicKeyValidation: PublicKeyValidationState
+    val publicKeyValidation: PublicKeyValidationState,
+    val cryptoKey: SecretKeySpec
 )

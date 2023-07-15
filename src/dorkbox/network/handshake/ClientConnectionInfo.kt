@@ -15,10 +15,14 @@
  */
 package dorkbox.network.handshake
 
-internal class ClientConnectionInfo(val sessionIdPub: Int = 0,
-                                    val sessionIdSub: Int = 0,
-                                    val streamIdPub: Int,
-                                    val streamIdSub: Int = 0,
-                                    val publicKey: ByteArray = ByteArray(0),
-                                    val kryoRegistrationDetails: ByteArray) {
-}
+import javax.crypto.spec.SecretKeySpec
+
+internal class ClientConnectionInfo(
+    val sessionIdPub: Int = 0,
+    val sessionIdSub: Int = 0,
+    val streamIdPub: Int,
+    val streamIdSub: Int = 0,
+    val publicKey: ByteArray = ByteArray(0),
+    val kryoRegistrationDetails: ByteArray,
+    val secretKey: SecretKeySpec
+)

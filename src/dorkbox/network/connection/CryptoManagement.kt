@@ -54,6 +54,7 @@ internal class CryptoManagement(val logger: KLogger,
         const val GCM_TAG_LENGTH_BITS = 128
         const val AES_ALGORITHM = "AES/GCM/NoPadding"
 
+        val NOCRYPT = SecretKeySpec(ByteArray(1), "NOCRYPT")
         val secureRandom = SecureRandom()
     }
 
@@ -174,7 +175,7 @@ internal class CryptoManagement(val logger: KLogger,
         return PublicKeyValidationState.VALID
     }
 
-    private fun makeInfo(serverPublicKeyBytes: ByteArray): ClientConnectionInfo {
+    private fun makeInfo(serverPublicKeyBytes: ByteArray, secretKey: SecretKeySpec): ClientConnectionInfo {
         val sessionIdPub = cryptInput.readInt()
         val sessionIdSub = cryptInput.readInt()
         val streamIdPub = cryptInput.readInt()
@@ -189,7 +190,8 @@ internal class CryptoManagement(val logger: KLogger,
             streamIdPub = streamIdPub,
             streamIdSub = streamIdSub,
             publicKey = serverPublicKeyBytes,
-            kryoRegistrationDetails = regDetails)
+            kryoRegistrationDetails = regDetails,
+            secretKey = secretKey)
     }
 
     // NOTE: ALWAYS CALLED ON THE SAME THREAD! (from the server, mutually exclusive calls to decrypt)
@@ -223,7 +225,7 @@ internal class CryptoManagement(val logger: KLogger,
             // this message is NOT-ENCRYPTED!
             cryptInput.buffer = registrationData
 
-            makeInfo(serverPublicKeyBytes)
+            makeInfo(serverPublicKeyBytes, NOCRYPT)
         } catch (e: Exception) {
             logger.error("Error during IPC decrypt!", e)
             null
@@ -292,7 +294,7 @@ internal class CryptoManagement(val logger: KLogger,
 
             cryptInput.buffer = aesCipher.doFinal(registrationData, GCM_IV_LENGTH_BYTES, registrationData.size - GCM_IV_LENGTH_BYTES)
 
-            makeInfo(serverPublicKeyBytes)
+            makeInfo(serverPublicKeyBytes, secretKeySpec)
 
         } catch (e: Exception) {
             logger.error("Error during AES decrypt!", e)

@@ -18,24 +18,18 @@ package dorkbox.network.connection
 import dorkbox.network.Client
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
-import dorkbox.network.exceptions.ClientException
-import dorkbox.network.exceptions.SerializationException
-import dorkbox.network.exceptions.ServerException
-import dorkbox.network.exceptions.TransmitException
 import dorkbox.network.ping.Ping
 import dorkbox.network.rmi.RmiSupportConnection
-import dorkbox.network.rmi.messages.MethodResponse
-import io.aeron.FragmentAssembler
+import io.aeron.Image
+import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.agrona.DirectBuffer
-import org.agrona.concurrent.IdleStrategy
-import java.util.concurrent.*
+import javax.crypto.SecretKey
 
 /**
  * This connection is established once the registration information is validated, and the various connect/filter checks have passed
@@ -58,11 +52,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     internal val subscription = info.sub
     internal val publication = info.pub
-
-    /**
-     * When publishing data, we cannot have concurrent publications for a single connection (per Aeron publication)
-     */
-    private val writeMutex = Mutex()
+    private lateinit var image: Image
 
     /**
      * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has its own logic on the remote endpoint,
@@ -139,6 +129,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // we customize the toString() value for this connection, and it's just better to cache its value (since it's a modestly complex string)
     private val toString0: String
 
+    /**
+     * @return the AES key
+     */
+    internal val cryptoKey: SecretKey = connectionParameters.cryptoKey
+
+    // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 4 (external counter) + 4 (GCM counter)
+    // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
+    // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
+    internal val aes_gcm_iv = atomic(0)
 
 
     init {
@@ -221,6 +220,17 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     suspend fun ping(pingTimeoutSeconds: Int = endPoint.config.pingTimeoutSeconds, function: suspend Ping.() -> Unit = {}): Boolean {
         return endPoint.ping(this, pingTimeoutSeconds, function)
+    }
+
+    /**
+     * This is the per-message sequence number.
+     *
+     * The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 4 (external counter) + 4 (GCM counter)
+     * The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
+     * counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
+     */
+    internal fun nextGcmSequence(): Int {
+        return aes_gcm_iv.getAndIncrement()
     }
 
     /**

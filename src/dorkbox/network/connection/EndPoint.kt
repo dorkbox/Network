@@ -44,6 +44,7 @@ import dorkbox.network.serialization.SettingsStore
 import io.aeron.Publication
 import io.aeron.logbuffer.BufferClaim
 import io.aeron.logbuffer.Header
+import io.aeron.protocol.DataHeaderFlyweight
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import mu.KLogger
@@ -94,6 +95,12 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         internal val responseManager = ResponseManager()
 
         internal val lanAddress = IP.lanAddress()
+
+
+        // the first byte manage: byte/message/stream/etc, no-crypt, crypt, crypt+compress
+        const val RAWBYTES = (1 shl 1).toByte()
+        const val ENCRYPTD = (1 shl 2).toByte()
+        const val COMPRESS = (1 shl 3).toByte()
     }
 
     val logger: KLogger = KotlinLogging.logger(loggerName)
@@ -699,6 +706,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal fun dataSend(
         publication: Publication,
         internalBuffer: MutableDirectBuffer,
+        bufferClaim: BufferClaim,
         offset: Int,
         objectSize: Int,
         sendIdleStrategy: IdleStrategy,
