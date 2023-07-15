@@ -273,9 +273,9 @@ internal class StreamingManager<CONNECTION : Connection>(
         // NOTE: the stream session ID is a combination of the connection ID + random ID (on the receiving side)
         val streamId = (connection.id.toLong() shl 4) or message.streamId.toLong()
 
-        val controlMessage = streamingDataTarget[streamId]
-        if (controlMessage != null) {
-            streamingDataInMemory[streamId]!!.writeBytes(message.payload!!)
+        val dataWriter = streamingDataInMemory[streamId]
+        if (dataWriter != null) {
+            dataWriter.writeBytes(message.payload!!)
         } else {
             // something SUPER wrong!
             // more critical error sending the message. we shouldn't retry or anything.
