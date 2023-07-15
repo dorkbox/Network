@@ -44,7 +44,7 @@ class StreamingTest : BaseTest() {
             addEndPoint(server)
 
             server.onMessage<ByteArray> {
-                println("received data, shutting down!")
+                logger.error { "received data, shutting down!" }
                 Assert.assertEquals(sizeToTest, it.size)
                 Assert.assertArrayEquals(hugeData, it)
                 stopEndPoints()

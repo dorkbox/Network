@@ -45,13 +45,10 @@ import org.junit.Test
 import java.util.concurrent.atomic.*
 
 class PingPongTest : BaseTest() {
-    @Volatile
-    private var fail: String? = null
     var tries = 1000
 
     @Test
     fun pingPong() {
-        fail = "Data not received."
         val data = Data()
         populateData(data)
 
@@ -64,7 +61,9 @@ class PingPongTest : BaseTest() {
             addEndPoint(server)
 
             server.onError { throwable ->
-                fail = "Error during processing. $throwable"
+                logger.error(throwable) { "Error during processing" }
+                stopEndPoints()
+                Assert.fail("Error during processing")
             }
 
             server.onConnect {
@@ -87,19 +86,20 @@ class PingPongTest : BaseTest() {
 
             client.onConnect {
                 logger.error("client connection: $this")
-
-                fail = null
                 send(data)
             }
 
             client.onError { throwable ->
-                fail = "Error during processing. $throwable"
-                throwable.printStackTrace()
+                logger.error(throwable) { "Error during processing" }
+                stopEndPoints()
+                Assert.fail("Error during processing")
             }
 
             val counter = AtomicInteger(0)
             client.onMessage<Data> { _ ->
-                if (counter.getAndIncrement() <= tries) {
+                val count = counter.getAndIncrement()
+                if (count <= tries) {
+                    logger.error("Ran: $count")
                     send(data)
                 } else {
                     logger.error("done.")
@@ -114,12 +114,7 @@ class PingPongTest : BaseTest() {
         server.bind(2000)
         client.connect(LOCALHOST, 2000)
 
-        waitForThreads()
-
-
-        if (fail != null) {
-            Assert.fail(fail)
-        }
+        waitForThreads(3000)
     }
 
     private fun register(manager: Serialization<*>) {
