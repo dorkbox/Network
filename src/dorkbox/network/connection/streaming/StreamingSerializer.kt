@@ -40,10 +40,16 @@ class StreamingControlSerializer: Serializer<StreamingControl>() {
 class StreamingDataSerializer: Serializer<StreamingData>() {
     override fun write(kryo: Kryo, output: Output, data: StreamingData) {
         output.writeVarInt(data.streamId, true)
+        // we re-use this data when streaming data to the remote endpoint, so we don't write out the payload here, we do it in another place
     }
 
     override fun read(kryo: Kryo, input: Input, type: Class<out StreamingData>): StreamingData {
         val streamId = input.readVarInt(true)
-        return StreamingData(streamId)
+        val streamingData = StreamingData(streamId)
+
+        // we want to read out the payload. It is not written by the serializer, but by the streaming manager
+        val payloadSize = input.readVarInt(true)
+        streamingData.payload = input.readBytes(payloadSize)
+        return streamingData
     }
 }

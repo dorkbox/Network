@@ -582,17 +582,14 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             }
 
 
-            // streaming/chunked message. This is used when the published data is too large for a single Aeron message.
+            // streaming message. This is used when the published data is too large for a single Aeron message.
             // TECHNICALLY, we could arbitrarily increase the size of the permitted Aeron message, however this doesn't let us
             // send arbitrarily large pieces of data (gigs in size, potentially).
-            // This will recursively call into this method for each of the unwrapped chunks of data.
+            // This will recursively call into this method for each of the unwrapped blocks of data.
             is StreamingControl -> {
                 streamingManager.processControlMessage(message, readKryo,this@EndPoint, connection)
             }
             is StreamingData -> {
-                // NOTE: this will read extra data from the kryo input as necessary, which is why it's not on action dispatch!
-                message.payload = readKryo.readBytes()
-
                 // NOTE: This MUST NOT be on a new co-routine. It must be on the same thread!
                 try {
                     streamingManager.processDataMessage(message, this@EndPoint, connection)
