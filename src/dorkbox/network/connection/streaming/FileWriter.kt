@@ -19,7 +19,7 @@ package dorkbox.network.connection.streaming
 import java.io.File
 import java.io.FileOutputStream
 
-class FileWriter(file: File) : StreamingWriter, FileOutputStream(file) {
+class FileWriter(val file: File) : StreamingWriter, FileOutputStream(file) {
     override fun writeBytes(bytes: ByteArray) {
         write(bytes)
     }

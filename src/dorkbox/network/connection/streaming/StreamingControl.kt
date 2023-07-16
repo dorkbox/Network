@@ -17,6 +17,7 @@
 package dorkbox.network.connection.streaming
 
 data class StreamingControl(val state: StreamingState,
+                            val isFile: Boolean,
                             val streamId: Int,
                             val totalSize: Long = 0L
                             ): StreamingMessage

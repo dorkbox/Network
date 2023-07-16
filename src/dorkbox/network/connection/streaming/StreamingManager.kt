@@ -19,6 +19,7 @@
 package dorkbox.network.connection.streaming
 
 import com.esotericsoftware.kryo.io.Input
+import dorkbox.bytes.OptimizeUtilsByteArray
 import dorkbox.bytes.OptimizeUtilsByteBuf
 import dorkbox.collections.LockFreeHashMap
 import dorkbox.network.Configuration
@@ -40,10 +41,12 @@ import mu.KLogger
 import org.agrona.ExpandableDirectByteBuffer
 import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
+import org.agrona.concurrent.UnsafeBuffer
+import java.io.File
 import java.io.FileInputStream
 
 internal class StreamingManager<CONNECTION : Connection>(
-    private val logger: KLogger, private val messageDispatch: CoroutineScope, val config: Configuration
+    private val logger: KLogger, private val messageDispatch: CoroutineScope, val config: Configuration, val maxMessageSize: Int
 ) {
 
     companion object {
@@ -101,6 +104,24 @@ internal class StreamingManager<CONNECTION : Connection>(
      */
     private val maxStreamSizeInMemoryInBytes = config.maxStreamSizeInMemoryMB * MEGABYTE
 
+    fun getFile(connection: CONNECTION, endPoint: EndPoint<CONNECTION>, messageStreamId: Int): File {
+        // NOTE: the stream session ID is a combination of the connection ID + random ID (on the receiving side),
+        //      otherwise clients can abuse it and corrupt OTHER clients data!!
+        val streamId = (connection.id.toLong() shl 4) or messageStreamId.toLong()
+
+        val output = streamingDataInMemory[streamId]
+        return if (output is FileWriter) {
+            streamingDataInMemory.remove(streamId)
+            output.file
+        } else {
+            // something SUPER wrong!
+            // more critical error sending the message. we shouldn't retry or anything.
+            val errorMessage = "Error while reading file output, stream $streamId was of the wrong type!"
+
+            // either client or server. No other choices. We create an exception, because it's more useful!
+            throw endPoint.newException(errorMessage)
+        }
+    }
 
     /**
      * NOTE: MUST BE ON THE AERON THREAD!
@@ -119,10 +140,16 @@ internal class StreamingManager<CONNECTION : Connection>(
 
         when (message.state) {
             StreamingState.START -> {
-                // message.totalSize > maxInMemory, then write to a temp file INSTEAD
-                if (message.totalSize > maxStreamSizeInMemoryInBytes) {
-                    val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
-                    val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
+                // message.totalSize > maxInMemory  OR  if we are a file, then write to a temp file INSTEAD
+                if (message.isFile || message.totalSize > maxStreamSizeInMemoryInBytes) {
+                    var fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
+
+                    var tempFileLocation = OS.TEMP_DIR.resolve(fileName)
+                    while (tempFileLocation.canRead()) {
+                        fileName = "${config.appId}_${streamId}_${connection.id}_${CryptoManagement.secureRandom.nextInt()}.tmp"
+                        tempFileLocation = OS.TEMP_DIR.resolve(fileName)
+                    }
+                    tempFileLocation.deleteOnExit()
 
                     val prettySize = Sys.getSizePretty(message.totalSize)
 
@@ -137,11 +164,32 @@ internal class StreamingManager<CONNECTION : Connection>(
                 // this must be last
                 streamingDataTarget[streamId] = message
             }
+
             StreamingState.FINISHED -> {
                 // NOTE: cannot be on a coroutine before kryo usage!
 
+                if (message.isFile) {
+                    // we do not do anything with this file yet! The serializer has to return this instance!
+                    val output = streamingDataInMemory[streamId]
+
+                    if (output is FileWriter) {
+                        output.flush()
+                        output.close()
+
+                        return
+                    } else {
+                        // something SUPER wrong!
+                        // more critical error sending the message. we shouldn't retry or anything.
+                        val errorMessage = "Error while processing streaming content, stream $streamId was supposed to be a FileWriter."
+
+                        // either client or server. No other choices. We create an exception, because it's more useful!
+                        throw endPoint.newException(errorMessage)
+                    }
+                }
+
                 // get the data out and send messages!
                 val output = streamingDataInMemory.remove(streamId)
+
                 val input = when (output) {
                     is AeronWriter -> {
                         AeronInput(output.internalBuffer)
@@ -150,10 +198,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                         output.flush()
                         output.close()
 
-                        val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
-                        val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
-
-                        val fileInputStream = FileInputStream(tempFileLocation)
+                        val fileInputStream = FileInputStream(output.file)
                         Input(fileInputStream)
                     }
                     else -> {
@@ -162,25 +207,25 @@ internal class StreamingManager<CONNECTION : Connection>(
                 }
 
                 val streamedMessage = if (input != null) {
-                    try {
-                        kryo.read(input)
-                    } catch (e: Exception) {
-                        // something SUPER wrong!
-                        // more critical error sending the message. we shouldn't retry or anything.
-                        val errorMessage = "Error deserializing message from received streaming content, stream $streamId"
+                        try {
+                            kryo.read(input)
+                        } catch (e: Exception) {
+                            // something SUPER wrong!
+                            // more critical error sending the message. we shouldn't retry or anything.
+                            val errorMessage = "Error deserializing message from received streaming content, stream $streamId"
 
-                        // either client or server. No other choices. We create an exception, because it's more useful!
-                        throw endPoint.newException(errorMessage, e)
-                    } finally {
-                        if (output is FileWriter) {
-                            val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
-                            val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
-                            tempFileLocation.delete()
+                            // either client or server. No other choices. We create an exception, because it's more useful!
+                            throw endPoint.newException(errorMessage, e)
+                        } finally {
+                            if (output is FileWriter) {
+                                val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
+                                val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
+                                tempFileLocation.delete()
+                            }
                         }
+                    } else {
+                        null
                     }
-                } else {
-                   null
-                }
 
                 if (streamedMessage == null) {
                     if (output is FileWriter) {
@@ -300,7 +345,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         connection: CONNECTION,
         kryo: KryoWriter<CONNECTION>
     ) {
-        val failMessage = StreamingControl(StreamingState.FAILED, streamSessionId)
+        val failMessage = StreamingControl(StreamingState.FAILED, false, streamSessionId)
 
         val failSent = endPoint.writeUnsafe(failMessage, publication, sendIdleStrategy, connection, kryo)
         if (!failSent) {
@@ -331,6 +376,7 @@ internal class StreamingManager<CONNECTION : Connection>(
      * The max possible length is WAY, WAY more than the max payload length.
      *
      * @param internalBuffer this is the ORIGINAL object data that is to be blocks sent across the wire
+     *
      * @return true if ALL the message blocks were successfully sent by aeron, false otherwise. Exceptions are caught and rethrown!
      */
     fun send(
@@ -354,11 +400,12 @@ internal class StreamingManager<CONNECTION : Connection>(
         var remainingPayload = objectSize
         var payloadSent = 0
 
+
         // NOTE: the stream session ID is a combination of the connection ID + random ID (on the receiving side)
         val streamSessionId = CryptoManagement.secureRandom.nextInt()
 
         // tell the other side how much data we are sending
-        val startMessage = StreamingControl(StreamingState.START, streamSessionId, objectSize.toLong())
+        val startMessage = StreamingControl(StreamingState.START, false, streamSessionId, remainingPayload.toLong())
 
         val startSent = endPoint.writeUnsafe(startMessage, publication, sendIdleStrategy, connection, kryo)
         if (!startSent) {
@@ -379,9 +426,8 @@ internal class StreamingManager<CONNECTION : Connection>(
         // so the first message is SUPER tiny and is a COPY, the rest are no-copy.
 
         // payload size is for a PRODUCER, and not SUBSCRIBER, so we have to include this amount every time.
-        // MINOR fragmentation by aeron is OK, since that will greatly speed up data transfer rates!
 
-        var sizeOfPayload = maxMessageSize
+        var sizeOfBlockData = maxMessageSize
 
         val header: ByteArray
         val headerSize: Int
@@ -394,10 +440,10 @@ internal class StreamingManager<CONNECTION : Connection>(
             header = ByteArray(headerSize)
 
             // we have to account for the header + the MAX optimized int size
-            sizeOfPayload -= (headerSize + 5)
+            sizeOfBlockData -= (headerSize + 5)
 
             // this size might be a LITTLE too big, but that's ok, since we only make this specific buffer once.
-            val blockBuffer = AeronOutput(headerSize + sizeOfPayload)
+            val blockBuffer = AeronOutput(headerSize + sizeOfBlockData)
 
             // copy out our header info
             objectBuffer.internalBuffer.getBytes(0, header, 0, headerSize)
@@ -406,16 +452,16 @@ internal class StreamingManager<CONNECTION : Connection>(
             blockBuffer.writeBytes(header)
 
             // write out the payload size using optimized data structures.
-            val varIntSize = blockBuffer.writeVarInt(sizeOfPayload, true)
+            val varIntSize = blockBuffer.writeVarInt(sizeOfBlockData, true)
 
             // write out the payload. Our resulting data written out is the ACTUAL MTU of aeron.
-            originalObjectBuffer.getBytes(0, blockBuffer.internalBuffer, headerSize + varIntSize, sizeOfPayload)
+            originalObjectBuffer.getBytes(0, blockBuffer.internalBuffer, headerSize + varIntSize, sizeOfBlockData)
 
-            remainingPayload -= sizeOfPayload
-            payloadSent += sizeOfPayload
+            remainingPayload -= sizeOfBlockData
+            payloadSent += sizeOfBlockData
 
             // we reuse/recycle objects, so the payload size is not EXACTLY what is specified
-            val reusedPayloadSize = headerSize + varIntSize + sizeOfPayload
+            val reusedPayloadSize = headerSize + varIntSize + sizeOfBlockData
 
             val success = endPoint.dataSend(
                 publication = publication,
@@ -448,10 +494,10 @@ internal class StreamingManager<CONNECTION : Connection>(
 
         // now send the block as fast as possible. Aeron will have us back-off if we send too quickly
         while (remainingPayload > 0) {
-            val amountToSend = if (remainingPayload < sizeOfPayload) {
-                remainingPayload
+            val amountToSend = if (remainingPayload < sizeOfBlockData) {
+                remainingPayload.toInt()
             } else {
-                sizeOfPayload
+                sizeOfBlockData
             }
 
             remainingPayload -= amountToSend
@@ -463,6 +509,8 @@ internal class StreamingManager<CONNECTION : Connection>(
 
             // fortunately, the way that serialization works, we can safely ADD data to the tail and then appropriately read it off
             // on the receiving end without worry.
+
+/// TODO: Compression/encryption??
 
             try {
                 val varIntSize = OptimizeUtilsByteBuf.intLength(amountToSend, true)
@@ -479,19 +527,19 @@ internal class StreamingManager<CONNECTION : Connection>(
 
                 // write out the payload
                 endPoint.dataSend(
-                    publication,
-                    originalObjectBuffer,
-                    kryo.bufferClaim,
-                    writeIndex,
-                    reusedPayloadSize,
-                    sendIdleStrategy,
-                    connection,
-                    false
+                    publication = publication,
+                    internalBuffer = originalObjectBuffer,
+                    bufferClaim = kryo.bufferClaim,
+                    offset = writeIndex,
+                    objectSize = reusedPayloadSize,
+                    sendIdleStrategy = sendIdleStrategy,
+                    connection = connection,
+                    abortEarly = false
                 )
 
                 payloadSent += amountToSend
             } catch (e: Exception) {
-                val failMessage = StreamingControl(StreamingState.FAILED, streamSessionId)
+                val failMessage = StreamingControl(StreamingState.FAILED, false, streamSessionId)
 
                 val failSent = endPoint.writeUnsafe(failMessage, publication, sendIdleStrategy, connection, kryo)
                 if (!failSent) {
@@ -514,7 +562,234 @@ internal class StreamingManager<CONNECTION : Connection>(
         }
 
         // send the last block of data
-        val finishedMessage = StreamingControl(StreamingState.FINISHED, streamSessionId, payloadSent.toLong())
+        val finishedMessage = StreamingControl(StreamingState.FINISHED, false, streamSessionId, payloadSent.toLong())
+
+        return endPoint.writeUnsafe(finishedMessage, publication, sendIdleStrategy, connection, kryo)
+    }
+
+    /**
+     * This is called ONLY when a message is too large to send across the network in a single message (large data messages should
+     * be split into smaller ones anyways!)
+     *
+     * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
+     *
+     * We don't write max possible length per message, we write out MTU (payload) length (so aeron doesn't fragment the message).
+     * The max possible length is WAY, WAY more than the max payload length.
+     *
+     * @param streamSessionId the stream session ID is a combination of the connection ID + random ID (on the receiving side)
+     *
+     * @return true if ALL the message blocks were successfully sent by aeron, false otherwise. Exceptions are caught and rethrown!
+     */
+    fun sendFile(
+        file: File,
+        publication: Publication,
+        endPoint: EndPoint<CONNECTION>,
+        kryo: KryoWriter<CONNECTION>,
+        sendIdleStrategy: IdleStrategy,
+        connection: CONNECTION,
+        streamSessionId: Int
+    ): Boolean {
+        val maxMessageSize = maxMessageSize.toLong()
+
+        val fileInputStream = file.inputStream()
+
+        // if the message is a file, we xfer the file AS a file, and leave it as a temp file (with a file reference to it) on the remote endpoint
+        // the temp file will be unique.
+
+        // NOTE: our max object size for IN-MEMORY messages is an INT. For file transfer it's a LONG (so everything here is cast to a long)
+        var remainingPayload = file.length()
+        var payloadSent = 0
+
+        // tell the other side how much data we are sending
+        val startMessage = StreamingControl(StreamingState.START, true, streamSessionId, remainingPayload)
+
+        val startSent = endPoint.writeUnsafe(startMessage, publication, sendIdleStrategy, connection, kryo)
+        if (!startSent) {
+            fileInputStream.close()
+
+            // more critical error sending the message. we shouldn't retry or anything.
+            val errorMessage = "[${publication.sessionId()}] Error starting streaming file."
+
+            // either client or server. No other choices. We create an exception, because it's more useful!
+            val exception = endPoint.newException(errorMessage)
+
+            // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+            // where we see who is calling "send()"
+            exception.cleanStackTrace(3)
+            throw exception
+        }
+
+
+
+        // we do the FIRST block super-weird, because of the way we copy data around (we inject headers,
+        // so the first message is SUPER tiny and is a COPY, the rest are no-copy.
+
+        // payload size is for a PRODUCER, and not SUBSCRIBER, so we have to include this amount every time.
+
+        // we don't know which is larger, the max message size or the file size!
+        var sizeOfBlockData = maxMessageSize.coerceAtMost(remainingPayload).toInt()
+
+        val headerSize: Int
+
+        val buffer = ByteArray(sizeOfBlockData)
+        val blockBuffer = UnsafeBuffer(buffer)
+
+        try {
+            // This is REUSED to prevent garbage collection issues.
+            val blockData = StreamingData(streamSessionId)
+            val objectBuffer = kryo.write(connection, blockData)
+            headerSize = objectBuffer.position()
+
+            // we have to account for the header + the MAX optimized int size
+            sizeOfBlockData -= (headerSize + 5)
+
+            // copy out our header info
+            objectBuffer.internalBuffer.getBytes(0, buffer, 0, headerSize)
+
+            // write out the payload size using optimized data structures.
+            val varIntSize = OptimizeUtilsByteArray.writeInt(buffer, sizeOfBlockData, true, headerSize)
+
+            // write out the payload. Our resulting data written out is the ACTUAL MTU of aeron.
+            val readBytes = fileInputStream.read(buffer, headerSize + varIntSize, sizeOfBlockData)
+            if (readBytes != sizeOfBlockData) {
+                // something SUPER wrong!
+                // more critical error sending the message. we shouldn't retry or anything.
+                val errorMessage = "[${publication.sessionId()}] Abnormal failure while streaming file (read bytes was wrong! ${readBytes} - ${sizeOfBlockData}."
+
+                // either client or server. No other choices. We create an exception, because it's more useful!
+                val exception = endPoint.newException(errorMessage)
+
+                // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+                // where we see who is calling "send()"
+                exception.cleanStackTrace(3)
+                throw exception
+            }
+
+            remainingPayload -= sizeOfBlockData
+            payloadSent += sizeOfBlockData
+
+            // we reuse/recycle objects, so the payload size is not EXACTLY what is specified
+            val reusedPayloadSize = headerSize + varIntSize + sizeOfBlockData
+
+            val success = endPoint.dataSend(
+                publication = publication,
+                internalBuffer = blockBuffer,
+                bufferClaim = kryo.bufferClaim,
+                offset = 0,
+                objectSize = reusedPayloadSize,
+                sendIdleStrategy = sendIdleStrategy,
+                connection = connection,
+                abortEarly = false
+            )
+
+            if (!success) {
+                // something SUPER wrong!
+                // more critical error sending the message. we shouldn't retry or anything.
+                val errorMessage = "[${publication.sessionId()}] Abnormal failure while streaming file."
+
+                // either client or server. No other choices. We create an exception, because it's more useful!
+                val exception = endPoint.newException(errorMessage)
+
+                // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+                // where we see who is calling "send()"
+                exception.cleanStackTrace(3)
+                throw exception
+            }
+        } catch (e: Exception) {
+            fileInputStream.close()
+
+            sendFailMessageAndThrow(e, streamSessionId, publication, endPoint, sendIdleStrategy, connection, kryo)
+            return false // doesn't actually get here because exceptions are thrown, but this makes the IDE happy.
+        }
+
+
+
+
+        // now send the block as fast as possible. Aeron will have us back-off if we send too quickly
+        while (remainingPayload > 0) {
+            val amountToSend = if (remainingPayload < sizeOfBlockData) {
+                remainingPayload.toInt()
+            } else {
+                sizeOfBlockData
+            }
+
+            remainingPayload -= amountToSend
+
+
+            // to properly do this, we have to be careful with the underlying protocol, in order to avoid copying the buffer multiple times.
+            // the data that will be sent is object data + buffer data. We are sending the SAME parent buffer, just at different spots and
+            // with different headers -- so we don't copy out the data repeatedly
+
+            // fortunately, the way that serialization works, we can safely ADD data to the tail and then appropriately read it off
+            // on the receiving end without worry.
+
+/// TODO: Compression/encryption??
+
+            try {
+                // write out the payload size using optimized data structures.
+                val varIntSize = OptimizeUtilsByteArray.writeInt(buffer, amountToSend, true, headerSize)
+
+                // write out the payload. Our resulting data written out is the ACTUAL MTU of aeron.
+                val readBytes = fileInputStream.read(buffer, headerSize + varIntSize, amountToSend)
+                if (readBytes != amountToSend) {
+                    // something SUPER wrong!
+                    // more critical error sending the message. we shouldn't retry or anything.
+                    val errorMessage = "[${publication.sessionId()}] Abnormal failure while streaming file (read bytes was wrong! ${readBytes} - ${amountToSend}."
+
+                    // either client or server. No other choices. We create an exception, because it's more useful!
+                    val exception = endPoint.newException(errorMessage)
+
+                    // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+                    // where we see who is calling "send()"
+                    exception.cleanStackTrace(3)
+                    throw exception
+                }
+
+                // we reuse/recycle objects, so the payload size is not EXACTLY what is specified
+                val reusedPayloadSize = headerSize + varIntSize + amountToSend
+
+                // write out the payload
+                endPoint.dataSend(
+                    publication,
+                    blockBuffer,
+                    kryo.bufferClaim,
+                    0,
+                    reusedPayloadSize,
+                    sendIdleStrategy,
+                    connection,
+                    false
+                )
+
+                payloadSent += amountToSend
+            } catch (e: Exception) {
+                fileInputStream.close()
+
+                val failMessage = StreamingControl(StreamingState.FAILED, false, streamSessionId)
+
+                val failSent = endPoint.writeUnsafe(failMessage, publication, sendIdleStrategy, connection, kryo)
+                if (!failSent) {
+                    // something SUPER wrong!
+                    // more critical error sending the message. we shouldn't retry or anything.
+                    val errorMessage = "[${publication.sessionId()}] Abnormal failure while streaming content."
+
+                    // either client or server. No other choices. We create an exception, because it's more useful!
+                    val exception = endPoint.newException(errorMessage)
+
+                    // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+                    // where we see who is calling "send()"
+                    exception.cleanStackTrace(3)
+                    throw exception
+                } else {
+                    // send it up!
+                    throw e
+                }
+            }
+        }
+
+        fileInputStream.close()
+
+        // send the last block of data
+        val finishedMessage = StreamingControl(StreamingState.FINISHED, true, streamSessionId, payloadSent.toLong())
 
         return endPoint.writeUnsafe(finishedMessage, publication, sendIdleStrategy, connection, kryo)
     }

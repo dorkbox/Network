@@ -163,6 +163,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     private val streamingDataSerializer = StreamingDataSerializer()
     private val pingSerializer = PingSerializer()
 
+    internal val fileContentsSerializer = FileContentsSerializer<CONNECTION>()
+
     /**
      * There is additional overhead to using RMI.
      *
@@ -388,7 +390,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
         kryo.register(Inet4Address::class.java, inet4AddressSerializer)
         kryo.register(Inet6Address::class.java, inet6AddressSerializer)
-        kryo.register(File::class.java, FileSerializer())
+        kryo.register(File::class.java, fileContentsSerializer)
 
         ImmutableCollectionsSerializers.registerSerializers(kryo)
         UnmodifiableCollectionsSerializer.registerSerializers(kryo)

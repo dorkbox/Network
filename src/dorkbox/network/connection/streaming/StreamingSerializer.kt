@@ -23,17 +23,19 @@ import com.esotericsoftware.kryo.io.Output
 class StreamingControlSerializer: Serializer<StreamingControl>() {
     override fun write(kryo: Kryo, output: Output, data: StreamingControl) {
         output.writeByte(data.state.ordinal)
+        output.writeBoolean(data.isFile)
         output.writeVarInt(data.streamId, true)
         output.writeVarLong(data.totalSize, true)
     }
 
     override fun read(kryo: Kryo, input: Input, type: Class<out StreamingControl>): StreamingControl {
         val stateOrdinal = input.readByte().toInt()
+        val isFile = input.readBoolean()
         val state = StreamingState.values().first { it.ordinal == stateOrdinal }
         val streamId = input.readVarInt(true)
         val totalSize = input.readVarLong(true)
 
-        return StreamingControl(state, streamId, totalSize)
+        return StreamingControl(state, isFile, streamId, totalSize)
     }
 }
 

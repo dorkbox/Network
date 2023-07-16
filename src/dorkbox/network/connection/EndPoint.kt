@@ -184,7 +184,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger)
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
-    private val streamingManager = StreamingManager<CONNECTION>(logger, messageDispatch, config)
+    private val streamingManager = StreamingManager<CONNECTION>(logger, messageDispatch, config, maxMessageSize)
 
     private val pingManager = PingManager<CONNECTION>()
 
@@ -215,6 +215,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         serialization = config.serialization as Serialization<CONNECTION>
         serialization.finishInit(type, maxMessageSize)
 
+
+        serialization.fileContentsSerializer.streamingManager = streamingManager
 
         // we are done with initial configuration, now finish serialization
         // the CLIENT will reassign these in the `connect0` method (because it registers what the server says to register)
@@ -505,8 +507,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // The maximum size we can send in a "single fragment" is the maxPayloadLength() function, which is the MTU length less header (with defaults this is 1,376 bytes).
             return if (objectSize >= maxMessageSize) {
                 // we must split up the message! It's too large for Aeron to manage.
-                // this will split up the message, construct the necessary control message and state, then CALL the sendData
-                // method directly for each subsequent message.
                 streamingManager.send(
                     publication = publication,
                     internalBuffer = internalBuffer,

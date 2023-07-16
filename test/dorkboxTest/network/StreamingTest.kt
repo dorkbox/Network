@@ -16,6 +16,7 @@
 
 package dorkboxTest.network
 
+import dorkbox.bytes.sha256
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
@@ -23,14 +24,14 @@ import dorkbox.util.Sys
 import org.agrona.ExpandableDirectByteBuffer
 import org.junit.Assert
 import org.junit.Test
+import java.io.File
 import java.security.SecureRandom
 
 class StreamingTest : BaseTest() {
 
     @Test
     fun sendStreamingObject() {
-        // TODO: streaming data is NOT saved to temp files, it is in memory. every 16 megs should be flushed to disk (this is arbitrary and should be a config setting). if this number is too
-        //      high, we will run out of memory
+        //  if this number is too high, we will run out of memory
         // ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
         val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 32
         val hugeData = ByteArray(sizeToTest)
@@ -64,6 +65,51 @@ class StreamingTest : BaseTest() {
                 logger.error { "Sending huge data: ${Sys.getSizePretty(hugeData.size)} bytes" }
                 send(hugeData)
                 logger.error { "Done sending huge data: ${hugeData.size} bytes" }
+            }
+
+            client
+        }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
+
+        waitForThreads()
+    }
+
+    @Test
+    fun sendFile() {
+        val file = File("LICENSE")
+
+        val server = run {
+            val configuration = serverConfig()
+
+            val server: Server<Connection> = Server(configuration)
+            addEndPoint(server)
+
+            server.onMessage<File> {
+                logger.error { "received data, shutting down!" }
+                logger.error { "FILE: $it" }
+                Assert.assertArrayEquals(file.sha256(), it.sha256())
+                it.delete()
+
+                stopEndPoints()
+            }
+            server
+        }
+
+        val client = run {
+            val config = clientConfig()
+
+            val client: Client<Connection> = Client(config) {
+                Connection(it)
+            }
+            addEndPoint(client)
+
+            client.onConnect {
+                logger.error { "Sending file: $file" }
+                send(file)
+                logger.error { "Done sending file: $file" }
             }
 
             client

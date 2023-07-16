@@ -58,7 +58,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has its own logic on the remote endpoint,
      * and can have its own back-pressure.
      */
-    private val sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
+    internal val sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
 
     /**
      * This is the client UUID. This is useful determine if the same client is connecting multiple times to a server (instead of only using IP address)
