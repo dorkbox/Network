@@ -117,7 +117,7 @@ open class Client<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "6.4"
+        const val version = "6.5"
 
         /**
          * Ensures that the client (using the specified configuration) is NO LONGER running.
