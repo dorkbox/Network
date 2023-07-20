@@ -36,7 +36,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import mu.KLogger
 import mu.KotlinLogging
-import org.agrona.SystemUtil
 import org.agrona.concurrent.AgentTerminationException
 import org.slf4j.helpers.NOPLogger
 import java.io.File
@@ -602,7 +601,7 @@ abstract class Configuration protected constructor() {
      * Buffer (10 Gps) = (10 * 1000 * 1000 * 1000 / 8) * 0.0001 = 125000  (Round to 128KB)
      * Buffer (1 Gps) = (1 * 1000 * 1000 * 1000 / 8) * 0.0001 = 12500     (Round to 16KB)
      */
-    var initialWindowLength = SystemUtil.getSizeAsInt(Configuration.INITIAL_WINDOW_LENGTH_PROP_NAME, 16 * 1024)
+    var initialWindowLength = 16 * 1024
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
