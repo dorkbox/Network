@@ -613,7 +613,7 @@ open class Client<CONNECTION : Connection>(
                 val message = if (isIPC) {
                     "Unable to connect to IPC, retrying..."
                 } else {
-                    "Unable to connect to UDP $remoteAddressPrettyString, retrying..."
+                    "Unable to connect to $remoteAddressPrettyString ($port1|$port2), retrying..."
                 }
 
                 if (logger.isTraceEnabled) {
