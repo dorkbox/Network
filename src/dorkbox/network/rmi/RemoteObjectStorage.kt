@@ -204,9 +204,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
         if (nextObjectId != INVALID_RMI) {
             objectMap.put(nextObjectId, `object`)
 
-            logger.trace {
-                "Remote object <proxy:$nextObjectId> registered with .toString() = '${`object`}'"
-            }
+            logger.trace { "Remote object <proxy:$nextObjectId> registered with .toString() = '${`object`}'" }
         }
 
         return nextObjectId
@@ -224,9 +222,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
 
         objectMap.put(objectId, `object`)
 
-        logger.trace {
-            "Remote object <proxy:$objectId> registered with .toString() = '${`object`}'"
-        }
+        logger.trace { "Remote object <proxy:$objectId> registered with .toString() = '${`object`}'" }
 
         return true
     }
@@ -241,10 +237,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
         val rmiObject = objectMap.remove(objectId) as T?
         returnId(objectId)
 
-        logger.trace {
-            "Object <proxy #${objectId}> removed"
-        }
-        @Suppress("UNCHECKED_CAST")
+        logger.trace { "Object <proxy #${objectId}> removed" }
         return rmiObject
     }
 
@@ -259,9 +252,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
         } else {
             returnId(objectId)
 
-            logger.trace {
-                "Object '${remoteObject}' (ID: ${objectId}) removed from RMI system."
-            }
+            logger.trace { "Object '${remoteObject}' (ID: ${objectId}) removed from RMI system." }
         }
     }
 
