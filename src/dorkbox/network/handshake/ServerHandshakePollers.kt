@@ -448,11 +448,11 @@ internal object ServerHandshakePollers {
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error processing IPC handshake", e))
                     }
 
+                    driver.close(publication, logInfo)
+
                     // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                     // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
                     driver.deleteLogFile(image)
-
-                    driver.close(publication, logInfo)
                 }
             }
         }
