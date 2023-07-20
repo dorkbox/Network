@@ -291,7 +291,7 @@ open class Server<CONNECTION : Connection>(
                         // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
                         removeConnection(connection)
 
-                        // we already removed the connection, we can call it again without side affects
+                        // we already removed the connection, we can call it again without side effects
                         connection.close()
                     }
                 }
