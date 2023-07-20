@@ -258,25 +258,31 @@ abstract class BaseTest {
         logger.error("Unit test shutting down ${servers.size} server...")
 
         val timeoutMS = TimeUnit.SECONDS.toMillis(AUTO_FAIL_TIMEOUT)
-        var success = true
+        var successClients = true
+        var successServers = true
 
         // shutdown clients first
+        logger.error("Closing clients...")
         clients.forEach { endPoint ->
             // we are ASYNC, so we must use callbacks to execute code
             endPoint.close()
         }
         clients.forEach { endPoint ->
-            success = success && endPoint.waitForClose(timeoutMS)
+            successClients = successClients && endPoint.waitForClose(timeoutMS)
         }
+        logger.error("Close clients ($successClients)")
 
 
         // shutdown everything else (should only be servers) last
+        logger.error("Closing servers...")
         servers.forEach {
             it.close()
         }
         servers.forEach { endPoint ->
-            success = success && endPoint.waitForClose(timeoutMS)
+            successServers = successServers && endPoint.waitForClose(timeoutMS)
         }
+        logger.error("Close servers ($successServers)")
+
 
         clients.forEach { endPoint ->
             endPoint.stopDriver()
@@ -287,13 +293,7 @@ abstract class BaseTest {
 
         endPointConnections.clear()
 
-        logger.error("UNIT TEST, checking driver and memory leaks")
-
-        // have to make sure that the aeron driver is CLOSED.
-        Assert.assertTrue("The aeron drivers are not fully closed!", AeronDriver.areAllInstancesClosed())
-        AeronDriver.checkForMemoryLeaks()
-
-        logger.error("Shut down all endpoints... Success($success)")
+        logger.error("Shut down all endpoints... Success($successClients, $successServers)")
     }
     /**
      * Wait for network client/server threads to shut down for the specified time. 0 will wait forever
@@ -307,13 +307,14 @@ abstract class BaseTest {
         val servers = endPointConnections.filterIsInstance<Server<Connection>>()
 
         val timeoutMS = TimeUnit.SECONDS.toMillis(stopAfterSeconds)
-        var success = true
+        var successClients = true
+        var successServers = true
 
         clients.forEach { endPoint ->
-            success = success && endPoint.waitForClose(timeoutMS)
+            successClients = successClients && endPoint.waitForClose(timeoutMS)
         }
         servers.forEach { endPoint ->
-            success = success && endPoint.waitForClose(timeoutMS)
+            successServers = successServers && endPoint.waitForClose(timeoutMS)
         }
 
         clients.forEach { endPoint ->
@@ -325,7 +326,7 @@ abstract class BaseTest {
 
 
         // run actions before we actually shutdown, but after we wait
-        if (!success) {
+        if (!successClients || !successServers) {
             Assert.fail("Shutdown latch not triggered!")
         }
 
@@ -350,9 +351,13 @@ abstract class BaseTest {
             throw RuntimeException("Unable to shutdown! There are still Aeron drivers loaded!")
         }
 
+        logger.error("UNIT TEST, checking driver and memory leaks")
+
+        // have to make sure that the aeron driver is CLOSED.
+        Assert.assertTrue("The aeron drivers are not fully closed!", AeronDriver.areAllInstancesClosed())
         AeronDriver.checkForMemoryLeaks()
 
-        logger.error("Finished shutting down all endpoints... ($success)")
+        logger.error("Finished shutting down all endpoints... ($successClients, $successServers)")
     }
 
     @Before
