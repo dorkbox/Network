@@ -130,7 +130,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
 
             // can throw an exception! We catch it in the calling class
-            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo, true)
+            val publication = aeronDriver.addPublication(publicationUri, streamIdPub, logInfo, true)
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
@@ -179,7 +179,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             //  publication of any state to other threads and not be long running or re-entrant with the client.
 
             // can throw an exception! We catch it in the calling class
-            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo, false)
+            val publication = aeronDriver.addPublication(publicationUri, streamIdPub, logInfo, false)
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue

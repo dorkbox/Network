@@ -23,6 +23,7 @@ import dorkbox.bytes.OptimizeUtilsByteArray
 import dorkbox.bytes.OptimizeUtilsByteBuf
 import dorkbox.collections.LockFreeHashMap
 import dorkbox.network.Configuration
+import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
@@ -38,9 +39,7 @@ import io.aeron.Publication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
-import org.agrona.ExpandableDirectByteBuffer
 import org.agrona.MutableDirectBuffer
-import org.agrona.concurrent.IdleStrategy
 import org.agrona.concurrent.UnsafeBuffer
 import java.io.File
 import java.io.FileInputStream
@@ -336,12 +335,12 @@ internal class StreamingManager<CONNECTION : Connection>(
         }
     }
 
-    private fun sendFailMessageAndThrow(
+    private suspend fun sendFailMessageAndThrow(
         e: Exception,
         streamSessionId: Int,
         publication: Publication,
         endPoint: EndPoint<CONNECTION>,
-        sendIdleStrategy: IdleStrategy,
+        sendIdleStrategy: CoroutineIdleStrategy,
         connection: CONNECTION,
         kryo: KryoWriter<CONNECTION>
     ) {
@@ -375,27 +374,20 @@ internal class StreamingManager<CONNECTION : Connection>(
      * We don't write max possible length per message, we write out MTU (payload) length (so aeron doesn't fragment the message).
      * The max possible length is WAY, WAY more than the max payload length.
      *
-     * @param internalBuffer this is the ORIGINAL object data that is to be blocks sent across the wire
+     * @param originalBuffer this is the ORIGINAL object data that is to be blocks sent across the wire
      *
      * @return true if ALL the message blocks were successfully sent by aeron, false otherwise. Exceptions are caught and rethrown!
      */
-    fun send(
+    suspend fun send(
         publication: Publication,
-        internalBuffer: MutableDirectBuffer,
+        originalBuffer: MutableDirectBuffer,
         maxMessageSize: Int,
         objectSize: Int,
         endPoint: EndPoint<CONNECTION>,
         kryo: KryoWriter<CONNECTION>,
-        sendIdleStrategy: IdleStrategy,
+        sendIdleStrategy: CoroutineIdleStrategy,
         connection: CONNECTION
     ): Boolean {
-        // this buffer is the exact size as our internal buffer, so it is unnecessary to have multiple kryo instances
-        val originalObjectBuffer = ExpandableDirectByteBuffer(objectSize) // this can grow, so it's fine to lock it to this size!
-
-        // we have to save out our internal buffer, so we can reuse the kryo instance later!
-        originalObjectBuffer.putBytes(0, internalBuffer, 0, objectSize)
-
-
         // NOTE: our max object size for IN-MEMORY messages is an INT. For file transfer it's a LONG (so everything here is cast to a long)
         var remainingPayload = objectSize
         var payloadSent = 0
@@ -455,7 +447,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             val varIntSize = blockBuffer.writeVarInt(sizeOfBlockData, true)
 
             // write out the payload. Our resulting data written out is the ACTUAL MTU of aeron.
-            originalObjectBuffer.getBytes(0, blockBuffer.internalBuffer, headerSize + varIntSize, sizeOfBlockData)
+            originalBuffer.getBytes(0, blockBuffer.internalBuffer, headerSize + varIntSize, sizeOfBlockData)
 
             remainingPayload -= sizeOfBlockData
             payloadSent += sizeOfBlockData
@@ -495,7 +487,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         // now send the block as fast as possible. Aeron will have us back-off if we send too quickly
         while (remainingPayload > 0) {
             val amountToSend = if (remainingPayload < sizeOfBlockData) {
-                remainingPayload.toInt()
+                remainingPayload
             } else {
                 sizeOfBlockData
             }
@@ -517,10 +509,10 @@ internal class StreamingManager<CONNECTION : Connection>(
                 val writeIndex = payloadSent - headerSize - varIntSize
 
                 // write out our header data (this will OVERWRITE previous data!)
-                originalObjectBuffer.putBytes(writeIndex, header)
+                originalBuffer.putBytes(writeIndex, header)
 
                 // write out the payload size using optimized data structures.
-                writeVarInt(originalObjectBuffer, writeIndex + headerSize, amountToSend, true)
+                writeVarInt(originalBuffer, writeIndex + headerSize, amountToSend, true)
 
                 // we reuse/recycle objects, so the payload size is not EXACTLY what is specified
                 val reusedPayloadSize = headerSize + varIntSize + amountToSend
@@ -528,7 +520,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                 // write out the payload
                 endPoint.dataSend(
                     publication = publication,
-                    internalBuffer = originalObjectBuffer,
+                    internalBuffer = originalBuffer,
                     bufferClaim = kryo.bufferClaim,
                     offset = writeIndex,
                     objectSize = reusedPayloadSize,
@@ -580,12 +572,12 @@ internal class StreamingManager<CONNECTION : Connection>(
      *
      * @return true if ALL the message blocks were successfully sent by aeron, false otherwise. Exceptions are caught and rethrown!
      */
-    fun sendFile(
+    suspend fun sendFile(
         file: File,
         publication: Publication,
         endPoint: EndPoint<CONNECTION>,
         kryo: KryoWriter<CONNECTION>,
-        sendIdleStrategy: IdleStrategy,
+        sendIdleStrategy: CoroutineIdleStrategy,
         connection: CONNECTION,
         streamSessionId: Int
     ): Boolean {

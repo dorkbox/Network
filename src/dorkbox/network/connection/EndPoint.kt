@@ -23,6 +23,7 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
+import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.EventPoller
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.streaming.StreamingControl
@@ -51,7 +52,6 @@ import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.MutableDirectBuffer
-import org.agrona.concurrent.IdleStrategy
 import java.util.concurrent.*
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
@@ -98,9 +98,13 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
 
         // the first byte manage: byte/message/stream/etc, no-crypt, crypt, crypt+compress
-        const val RAWBYTES = (1 shl 1).toByte()
-        const val ENCRYPTD = (1 shl 2).toByte()
-        const val COMPRESS = (1 shl 3).toByte()
+        const val kryo      = 0.toByte()
+        const val byteArray = 1.toByte()
+        const val file      = 2.toByte()
+        const val stream    = 3.toByte()
+
+        const val ENCRYPTD = (1 shl 6).toByte()
+        const val COMPRESS = (1 shl 7).toByte()
     }
 
     val logger: KLogger = KotlinLogging.logger(loggerName)
@@ -132,6 +136,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * is (in reality) only limited by available ram.
      */
     internal val maxMessageSize = config.networkMtuSize - DataHeaderFlyweight.HEADER_LENGTH
+//    internal val maxMessageSize = FrameDescriptor.computeMaxMessageLength(config.publicationTermBufferLength);
 
     /**
      * Read and Write can be concurrent (different buffers are used)
@@ -477,48 +482,49 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    open fun write(
+    open suspend fun write(
         message: Any,
         publication: Publication,
-        sendIdleStrategy: IdleStrategy,
+        sendIdleStrategy: CoroutineIdleStrategy,
         connection: Connection,
         abortEarly: Boolean
     ): Boolean {
-        // NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
 
         @Suppress("UNCHECKED_CAST")
         connection as CONNECTION
 
-        // we reset the sending timeout strategy when a message was successfully sent.
+        // prep for idle states
         sendIdleStrategy.reset()
 
-        val kryo = serialization.getWriteKryo()
+        // A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
+        return try {
+            serialization.withKryo {
+                // since ANY thread can call 'send', we have to take kryo instances in a safe way
+                // the maximum size that this buffer can be is:
+                //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
+                val buffer = this.write(connection, message)
+                val objectSize = buffer.position()
+                val internalBuffer = buffer.internalBuffer
 
-        try {
-            // since ANY thread can call 'send', we have to take kryo instances in a safe way
-            // the maximum size that this buffer can be is:
-            //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
-            val buffer = kryo.write(connection, message)
-            val objectSize = buffer.position()
-            val internalBuffer = buffer.internalBuffer
-            val bufferClaim = kryo.bufferClaim
-
-            // one small problem! What if the message is too big to send all at once?
-            // The maximum size we can send in a "single fragment" is the maxPayloadLength() function, which is the MTU length less header (with defaults this is 1,376 bytes).
-            return if (objectSize >= maxMessageSize) {
-                // we must split up the message! It's too large for Aeron to manage.
-                streamingManager.send(
-                    publication = publication,
-                    internalBuffer = internalBuffer,
-                    objectSize = objectSize,
-                    maxMessageSize = maxMessageSize,
-                    endPoint = this,
-                    kryo = kryo,
-                    sendIdleStrategy = sendIdleStrategy,
-                    connection = connection
-                )
-            } else {
-                dataSend(publication, internalBuffer, bufferClaim, 0, objectSize, sendIdleStrategy, connection, abortEarly)
+                // one small problem! What if the message is too big to send all at once?
+                // The maximum size we can send in a "single fragment" is the maxPayloadLength() function, which is the MTU length less header (with defaults this is 1,376 bytes).
+                if (objectSize >= maxMessageSize) {
+                    serialization.withKryo {
+                        // we must split up the message! It's too large for Aeron to manage.
+                        streamingManager.send(
+                            publication = publication,
+                            originalBuffer = internalBuffer,
+                            objectSize = objectSize,
+                            maxMessageSize = maxMessageSize,
+                            endPoint = this@EndPoint,
+                            kryo = this, // this is safe, because we save out the bytes from the original object!
+                            sendIdleStrategy = sendIdleStrategy,
+                            connection = connection
+                        )
+                    }
+                } else {
+                    dataSend(publication, internalBuffer, bufferClaim, 0, objectSize, sendIdleStrategy, connection, abortEarly)
+                }
             }
         } catch (e: Throwable) {
             // make sure we atomically create the listener manager, if necessary
@@ -534,9 +540,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 listenerManager.notifyError(connection, newException)
             }
 
-            return false
-        } finally {
-            serialization.returnWriteKryo(kryo)
+            false
         }
     }
 
@@ -547,7 +551,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    open fun writeUnsafe(message: Any, publication: Publication, sendIdleStrategy: IdleStrategy, connection: CONNECTION, kryo: KryoWriter<CONNECTION>): Boolean {
+    open suspend fun writeUnsafe(message: Any, publication: Publication, sendIdleStrategy: CoroutineIdleStrategy, connection: CONNECTION, kryo: KryoWriter<CONNECTION>): Boolean {
         // NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
 
         // since ANY thread can call 'send', we have to take kryo instances in a safe way
@@ -703,13 +707,13 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * @param connection the connection object
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    internal fun dataSend(
+    internal suspend fun dataSend(
         publication: Publication,
         internalBuffer: MutableDirectBuffer,
         bufferClaim: BufferClaim,
         offset: Int,
         objectSize: Int,
-        sendIdleStrategy: IdleStrategy,
+        sendIdleStrategy: CoroutineIdleStrategy,
         connection: Connection,
         abortEarly: Boolean
     ): Boolean {

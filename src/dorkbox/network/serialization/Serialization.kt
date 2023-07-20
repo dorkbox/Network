@@ -133,7 +133,20 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     }
 
     private lateinit var logger: KLogger
+
+    @Volatile
     private var maxMessageSize: Int = 500_000
+
+    private val writeKryos: Pool<KryoWriter<CONNECTION>> = ObjectPool.nonBlockingBounded(
+        poolObject = object : BoundedPoolObject<KryoWriter<CONNECTION>>() {
+            override fun newInstance(): KryoWriter<CONNECTION> {
+                logger.debug { "Creating new Kryo($maxMessageSize)" }
+                return newWriteKryo(maxMessageSize)
+            }
+        },
+        maxSize = OS.optimumNumberOfThreads * 2
+    )
+
 
     private var initialized = atomic(false)
 
@@ -164,6 +177,9 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     private val pingSerializer = PingSerializer()
 
     internal val fileContentsSerializer = FileContentsSerializer<CONNECTION>()
+
+
+
 
     /**
      * There is additional overhead to using RMI.
@@ -742,21 +758,13 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         return newRegistrations
     }
 
-    private val writeKryos: Pool<KryoWriter<CONNECTION>> = ObjectPool.nonBlockingBounded(
-        poolObject = object : BoundedPoolObject<KryoWriter<CONNECTION>>() {
-            override fun newInstance(): KryoWriter<CONNECTION> {
-                return newWriteKryo(maxMessageSize)
-            }
-        },
-        maxSize = OS.optimumNumberOfThreads * 2
-    )
-
-    fun getWriteKryo(): KryoWriter<CONNECTION> {
-        return writeKryos.take()
-    }
-
-    fun returnWriteKryo(kryo: KryoWriter<CONNECTION>) {
-        writeKryos.put(kryo)
+    internal inline fun <T> withKryo(kryoAccess: KryoWriter<CONNECTION>.() -> T): T {
+        val kryo = writeKryos.take()
+        try {
+            return kryoAccess(kryo)
+        } finally {
+            writeKryos.put(kryo)
+        }
     }
 
     /**

@@ -24,6 +24,7 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.streaming.StreamingManager
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 internal class FileContentsSerializer<CONNECTION : Connection> : Serializer<File>() {
@@ -46,20 +47,20 @@ internal class FileContentsSerializer<CONNECTION : Connection> : Serializer<File
         val streamSessionId = CryptoManagement.secureRandom.nextInt()
 
         // use the streaming manager to send the file in blocks to the remove endpoint
-        val streamingKryo = endPoint.serialization.getWriteKryo()
-        try {
-            streamingManager.sendFile(
-                file = file,
-                publication = publication,
-                endPoint = endPoint,
-                kryo = streamingKryo,
-                sendIdleStrategy = sendIdleStrategy,
-                connection = connection,
-                streamSessionId = streamSessionId
-            )
-        } finally {
-            endPoint.serialization.returnWriteKryo(streamingKryo)
+        runBlocking {
+            endPoint.serialization.withKryo {
+                streamingManager.sendFile(
+                    file = file,
+                    publication = publication,
+                    endPoint = endPoint,
+                    kryo = this,
+                    sendIdleStrategy = sendIdleStrategy,
+                    connection = connection,
+                    streamSessionId = streamSessionId
+                )
+            }
         }
+
 
         output.writeString(file.path)
         output.writeInt(streamSessionId, true)

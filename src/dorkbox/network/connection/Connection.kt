@@ -25,9 +25,7 @@ import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import org.agrona.DirectBuffer
 import javax.crypto.SecretKey
 
@@ -58,7 +56,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has its own logic on the remote endpoint,
      * and can have its own back-pressure.
      */
-    internal val sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
+    internal val sendIdleStrategy = endPoint.config.sendIdleStrategy.clone()
 
     /**
      * This is the client UUID. This is useful determine if the same client is connecting multiple times to a server (instead of only using IP address)
@@ -184,22 +182,17 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         return image.poll(messageHandler, 1)
     }
 
+
+
     /**
      * Safely sends objects to a destination, if `abortEarly` is true, there are no retries if sending the message fails.
      *
      *  @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
     internal suspend fun send(message: Any, abortEarly: Boolean): Boolean {
-        var success = false
-
-        // this is dispatched to the IO context!! (since network calls are IO/blocking calls)
-        withContext(Dispatchers.IO) {
-            // The handshake sessionId IS NOT globally unique
-            logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
-            success = endPoint.write(message, publication, sendIdleStrategy, this@Connection, abortEarly)
-        }
-
-        return success
+        // The handshake sessionId IS NOT globally unique
+        logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
+        return endPoint.write(message, publication, sendIdleStrategy, this@Connection, abortEarly)
     }
 
     /**
