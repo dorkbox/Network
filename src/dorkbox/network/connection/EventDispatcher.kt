@@ -19,11 +19,7 @@ package dorkbox.network.connection
 import dorkbox.network.Configuration
 import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import mu.KotlinLogging
 import java.util.concurrent.*
 
@@ -165,7 +161,7 @@ enum class EventDispatcher {
                     launchSequentially(endEvent, function)
                 }
             } else {
-                function()
+                endEvent.launch(function)
             }
         }
     }

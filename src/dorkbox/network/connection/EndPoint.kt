@@ -578,7 +578,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             is DisconnectMessage -> {
                 // NOTE: This MUST be on a new co-routine (this is...)
                 runBlocking {
-                    connection.close()
+                    connection.close(false)
                 }
             }
 
@@ -939,10 +939,13 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         initiatedByClientClose: Boolean,
         initiatedByShutdown: Boolean)
     {
+        logger.debug { "Requesting close: closeEverything=$closeEverything, initiatedByClientClose=$initiatedByClientClose, initiatedByShutdown=$initiatedByShutdown" }
+
         // 1) endpoints can call close()
         // 2) client can close the endpoint if the connection is D/C from aeron (and the endpoint was not closed manually)
         val shutdownPreviouslyStarted = shutdownInProgress.getAndSet(true)
         if (closeEverything && shutdownPreviouslyStarted) {
+            logger.debug { "Shutdown previously started, cleaning up..." }
             // this is only called when the client network event poller shuts down
             // if we have clientConnectionClosed, then run that logic (because it doesn't run on the client when the connection is closed remotely)
 
@@ -973,7 +976,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
             logger.trace { "Closing ${connections.size()} via the close event" }
             connections.forEach {
-                it.closeImmediately()
+                it.closeImmediately(true)
             }
 
             // don't do these things if we are "closed" from a client connection disconnect
@@ -994,9 +997,11 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             responseManager.close()
 
             // don't do these things if we are "closed" from a client connection disconnect
-            if (closeEverything) {
-                // if there are any events going on, we want to schedule them to run AFTER all other events for this endpoint are done
-                EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
+            // if there are any events going on, we want to schedule them to run AFTER all other events for this endpoint are done
+            EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
+                if (closeEverything) {
+                    // when the client connection is closed, we don't close the driver/etc.
+
                     // Clears out all registered events
                     listenerManager.close()
 
@@ -1004,15 +1009,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                     storage.close()
 
                     aeronDriver.close()
-
-                    // the shutdown here must be in the launchSequentially lambda, this way we can guarantee the driver is closed before we move on
-                    shutdown = true
-                    shutdownLatch.countDown()
-                    shutdownInProgress.lazySet(false)
-                    logger.info { "Done shutting down endpoint." }
                 }
-            } else {
-                // when the client connection is closed, we don't close the driver/etc.
+
+                // the shutdown here must be in the launchSequentially lambda, this way we can guarantee the driver is closed before we move on
                 shutdown = true
                 shutdownLatch.countDown()
                 shutdownInProgress.lazySet(false)

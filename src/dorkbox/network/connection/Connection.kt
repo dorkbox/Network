@@ -330,6 +330,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * Closes the connection, and removes all connection specific listeners
      */
     suspend fun close() {
+        close(true)
+    }
+
+    /**
+     * Closes the connection, and removes all connection specific listeners
+     */
+    internal suspend fun close(sendDisconnectMessage: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
@@ -338,14 +345,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         // make sure that EVERYTHING before "close()" runs before we do
         EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
-            closeImmediately()
+            closeImmediately(sendDisconnectMessage)
         }
     }
 
 
     // connection.close() -> this
     // endpoint.close() -> connection.close() -> this
-    internal suspend fun closeImmediately() {
+    internal suspend fun closeImmediately(sendDisconnectMessage: Boolean) {
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (!isClosed.compareAndSet(expect = false, update = true)) {
             return
@@ -358,7 +365,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         // notify the remote endPoint that we are closing
         // we send this AFTER we close our subscription (so that no more messages will be received, when the remote end ping-pong's this message back)
-        if (publication.isConnected) {
+        if (sendDisconnectMessage && publication.isConnected) {
+            logger.trace { "Sending disconnect message to remote endpoint" }
+
             // sometimes the remote end has already disconnected, THERE WILL BE ERRORS if this happens (but they are ok)
             send(DisconnectMessage.INSTANCE, true)
         }
