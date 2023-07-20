@@ -24,11 +24,19 @@ gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show th
 
 plugins {
     id("com.dorkbox.GradleUtils") version "3.17"
-    id("com.dorkbox.Licensing") version "2.24"
+    id("com.dorkbox.Licensing") version "2.25"
     id("com.dorkbox.VersionUpdate") version "2.8"
     id("com.dorkbox.GradlePublish") version "1.18"
 
     id("com.github.johnrengelman.shadow") version "7.1.2"
+
+    // this allows us to drop generated moshi JSON code directly into bytecode using kotlin-ir (faster and better than KSP or KAPT).
+    // https://github.com/ZacSweers/MoshiX
+    // There are several issues with KSP.
+    // 1) It runs on every compile (it's not cached)
+    // 2) It is not possible to (at last I don't know) how to run this via IntelliJ compiles (it's only via Gradle)
+    id("dev.zacsweers.moshix") version "0.21.0"
+
 
     kotlin("jvm") version "1.8.0"
 }
@@ -147,7 +155,7 @@ shadowJar.apply {
     manifest.inheritFrom(tasks.jar.get().manifest)
 
     manifest.attributes.apply {
-        put("Main-Class", "dorkboxTest.network.AeronRmiClientServer")
+        put("Main-Class", "dorkboxTest.network.app.AeronRmiClientServer")
     }
 
     mergeServiceFiles()
@@ -221,9 +229,17 @@ dependencies {
     api("org.slf4j:slf4j-api:2.0.7")
 
 
+
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("ch.qos.logback:logback-classic:1.4.5")
     testImplementation("io.aeron:aeron-all:$aeronVer")
+
+    // For JSON serialization
+    val moshiVer = "1.13.0"
+    testImplementation("com.squareup.moshi:moshi:$moshiVer")
+    testImplementation("com.squareup.moshi:moshi-kotlin:$moshiVer")
+    testImplementation("com.dorkbox:Config:1.9")
 }
 
 publishToSonatype {

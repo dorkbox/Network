@@ -93,6 +93,13 @@
            https://github.com/EsotericSoftware/minlog
              Nathan Sweet
 
+     - LZ4 and xxHash - LZ4 compression for Java, based on Yann Collet's work
+       [The Apache Software License, Version 2.0]
+       https://github.com/lz4/lz4
+       Copyright 2023
+         Yann Collet
+         Adrien Grand
+
      - TypeTools - A simple, zero-dependency library for working with types. Supports Java 1.6+ and Android.
        [The Apache Software License, Version 2.0]
        https://github.com/jhalterman/typetools
@@ -116,6 +123,12 @@
        https://www.slf4j.org
        Copyright 2023
          QOS.ch
+
+     - Moshi - A modern JSON library for Kotlin and Java
+       [The Apache Software License, Version 2.0]
+       https://github.com/square/moshi
+       Copyright 2023
+         Square, Inc
 
      - Kotlin - 
        [The Apache Software License, Version 2.0]

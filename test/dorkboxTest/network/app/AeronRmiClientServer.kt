@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkboxTest.network
+package dorkboxTest.network.app
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -21,25 +21,27 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
-import dorkbox.network.Client
-import dorkbox.network.ClientConfiguration
-import dorkbox.network.Server
-import dorkbox.network.ServerConfiguration
+import dorkbox.network.*
+import dorkbox.network.aeron.CoroutineBusySpinIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.storage.Storage
+import dorkbox.util.Sys
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
+import io.aeron.driver.ThreadingMode
 import kotlinx.coroutines.*
+import org.agrona.ExpandableDirectByteBuffer
 import org.agrona.concurrent.SigInt
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
+import java.security.SecureRandom
+import java.util.concurrent.*
 import java.util.concurrent.atomic.*
 
 /**
  *
  */
-@Suppress("UNUSED_ANONYMOUS_PARAMETER")
 class AeronRmiClientServer {
     companion object {
         private val counter = AtomicInteger(0)
@@ -71,7 +73,7 @@ class AeronRmiClientServer {
 
             // rootLogger.setLevel(Level.INFO);
 //        rootLogger.level = Level.DEBUG
-            rootLogger.level = Level.TRACE
+//            rootLogger.level = Level.TRACE
 //        rootLogger.setLevel(Level.ALL);
 
 
@@ -106,80 +108,80 @@ class AeronRmiClientServer {
          */
         @Throws(Exception::class)
         @JvmStatic
-        fun main(args: Array<String>) {
+        fun main(cliArgs: Array<String>) {
+
+            val configProcessor = dorkbox.config.Config {
+                this.build()
+                    .adapter(Config::class.java)
+                    .indent("    ")
+            }
+
+            // Load all the JSON arguments, and save what we have
+            val config = configProcessor.init {
+                Config()
+            }
+
+            // cleans up the arguments AND loads stuff from ENV/CLI/etc
+            val arguments = configProcessor.process(cliArgs)
+
             val acs = AeronRmiClientServer()
-
             try {
-                if (args.contains("client")) {
-                    val configuration = ClientConfiguration()
-                    configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-                    configuration.appId = "aeron_test"
-                    configuration.uniqueAeronDirectory = true
-
-                    configuration.enableIpc = false
-                    configuration.enableIPv6 = false
-
-
-                    val client = acs.client(0, configuration)
-
-                    SigInt.register {
-                        client.logger.info { "Shutting down via sig-int command" }
-                        runBlocking {
-                            client.close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
-                        }
-                    }
-
-                    client.connect("172.31.73.222", 2000) // UDP connection via loopback
-
-                    runBlocking {
-                        delay(Long.MAX_VALUE)
-                    }
-                    client.close()
-                } else if (args.contains("server")) {
+                if (config.server) {
                     val server = acs.server()
-                    SigInt.register {
-                        server.logger.info { "Shutting down via sig-int command" }
-                        runBlocking {
-                            server.close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
-                        }
+
+                    server.onMessage<ByteArray> {
+                        logger.error { "Received Byte array!" }
                     }
+
                     runBlocking {
                         server.waitForClose()
                     }
-                } else {
-    //                acs.server()
-    //                acs.client("localhost")
+                }
 
-                    val clients = mutableListOf<Client<Connection>>()
-                    val configuration = ClientConfiguration()
-                    configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-                    configuration.appId = "aeron_test"
-                    configuration.uniqueAeronDirectory = true
+                else if (config.client) {
+                    val client = acs.client(0)
 
-                    configuration.enableIpc = false
-                    configuration.enableIPv6 = false
-                    configuration.port = 2001
 
-                    repeat(10) {
-                        acs.client(it, configuration.copy()).also { clients.add(it) }
-                    }
+                    client.connect(config.ip, 2000, 2001, 0) // UDP connection via loopback
 
-                    println("Starting")
 
-                    clients.forEachIndexed { index, client ->
-                        client.connect("172.31.73.222", 2000)
-                        SigInt.register {
-                            client.logger.info { "Shutting down via sig-int command" }
-                            runBlocking {
-                                client.close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
+                    runBlocking {
+                        val secureRandom = SecureRandom()
+                        val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 32
+
+                        val count = 15
+                        val stopwatch = Stopwatch.createStarted()
+                        val jobs = mutableListOf<Job>()
+
+                        client.logger.error { "Starting test." }
+
+                            repeat(count) {
+//                        launch(Dispatchers.IO) {
+                                val hugeData = ByteArray(sizeToTest)
+                                secureRandom.nextBytes(hugeData)
+
+                                client.logger.error { "Starting round: $it" }
+
+                                val roundStopwatch = Stopwatch.createStarted()
+                                client.send(hugeData)
+                                client.logger.error { "Finished round $it in: $roundStopwatch" }
+//                        }.also { jobs.add(it) }
                             }
-                        }
+
+                        jobs.joinAll()
+
+                        val timed = stopwatch.elapsedNanos()
+                        val amountInMB = (count.toLong()*sizeToTest)/Sys.MEGABYTE
+                        val amountInmb = (count.toLong()*sizeToTest*8)/Sys.MEGABYTE
+
+                        client.logger.error { "Finished all rounds in: ${Sys.getTimePrettyFull(timed)} for $amountInMB MB" }
+                        client.logger.error { "Rate is: ${amountInMB/TimeUnit.NANOSECONDS.toSeconds(timed)} MB/s" }
+                        client.logger.error { "Rate is: ${amountInmb/TimeUnit.NANOSECONDS.toSeconds(timed)} mb/s" }
                     }
 
-                    System.err.println("DONE")
-                    Thread.sleep(Long.MAX_VALUE)
-                    clients.forEach {
-                        it.close()
+
+                    runBlocking {
+                        client.waitForClose()
                     }
                 }
             } catch (e: Exception) {
@@ -191,7 +193,10 @@ class AeronRmiClientServer {
 
 
     @OptIn(DelicateCoroutinesApi::class)
-    fun client(index: Int, configuration: ClientConfiguration): Client<Connection> {
+    fun client(index: Int): Client<Connection> {
+        val configuration = ClientConfiguration()
+        config(configuration)
+
         val client = Client<Connection>(configuration)
 
         client.onInit {
@@ -202,9 +207,9 @@ class AeronRmiClientServer {
             logger.error("$index: connected")
             val remoteObject = rmi.get<TestCow>(1)
 //            val remoteObjec2 = rmi.getGlobal<TestCow>(44)
-            if (index == 9) {
-                println("PROBLEMS!!")
-            }
+//            if (index == 9) {
+//                println("PROBLEMS!!")
+//            }
 //            logger.error("$index: starting dispatch")
 //            try {
 //                GlobalScope.async(Dispatchers.Default) {
@@ -258,25 +263,54 @@ class AeronRmiClientServer {
             logger.error("HAS MESSAGE! $message")
         }
 
+        SigInt.register {
+            client.logger.info { "Shutting down via sig-int command" }
+            runBlocking {
+                client.close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
+            }
+        }
+
+
         return client
+    }
+
+    fun config(config: Configuration) {
+        config.settingsStore = Storage.Memory() // don't want to persist anything on disk!
+
+        config.appId = "aeron_test"
+        config.uniqueAeronDirectory = true
+//        config.networkMtuSize = 9 * 1024
+
+        config.enableIpc = false
+        config.enableIPv6 = false
+
+        // dedicate more **OOMPF** to the network
+        config.threadingMode = ThreadingMode.SHARED_NETWORK
+//        config.threadingMode = ThreadingMode.DEDICATED
+        config.pollIdleStrategy = CoroutineBusySpinIdleStrategy.INSTANCE
+        config.sendIdleStrategy = CoroutineBusySpinIdleStrategy.INSTANCE
+
+        // https://blah.cloud/networks/test-jumbo-frames-working/
+        // This must be a multiple of 32, and we leave some space for headers/etc
+        config.networkMtuSize = 8960
+
+        // 4 MB for receive
+        config.receiveBufferSize = 4194304
+
+        // recommended for 10gbps networks
+        config.initialWindowLength = io.aeron.driver.Configuration.INITIAL_WINDOW_LENGTH_DEFAULT
+
+        config.maxStreamSizeInMemoryMB = 128
     }
 
 
     fun server(): Server<Connection> {
         val configuration = ServerConfiguration()
-        configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
+        config(configuration)
+
         configuration.listenIpAddress = "*"
         configuration.maxClientCount = 50
-
-        configuration.appId = "aeron_test"
-
-        configuration.enableIpc = true
-        configuration.enableIPv6 = false
-
         configuration.maxConnectionsPerIpAddress = 50
-
-        configuration.publicationTermBufferLength = io.aeron.logbuffer.LogBufferDescriptor.TERM_MIN_LENGTH
-
 
         configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
 
@@ -315,6 +349,18 @@ class AeronRmiClientServer {
         }
 
         server.bind(2000)
+
+
+        SigInt.register {
+            server.logger.info { "Shutting down via sig-int command" }
+            runBlocking {
+                server.close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
+            }
+        }
+
+
         return server
     }
 }
+
+
