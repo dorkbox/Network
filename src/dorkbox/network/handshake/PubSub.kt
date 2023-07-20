@@ -39,7 +39,7 @@ data class PubSub(
     fun getLogInfo(debugEnabled: Boolean): String {
         return if (isIpc) {
             if (debugEnabled) {
-                "IPC sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}"
+                "IPC sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
             } else {
                 "IPC [${sessionIdPub}|${sessionIdSub}|${streamIdPub}|${streamIdSub}]"
             }
@@ -51,7 +51,7 @@ data class PubSub(
             }
 
             if (debugEnabled) {
-                "$prefix sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, port: p=${portPub} s=${portSub}"
+                "$prefix sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, port: p=${portPub} s=${portSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
             } else {
                 "$prefix [${sessionIdPub}|${sessionIdSub}|${streamIdPub}|${streamIdSub}|${portPub}|${portSub}]"
             }
