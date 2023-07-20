@@ -119,7 +119,6 @@ class MemoryTest : BaseTest() {
 
     @Test
     fun runForeverIpc() {
-        val counter = AtomicLong(0)
         runBlocking {
             val server = run {
                 val configuration = serverConfig()
