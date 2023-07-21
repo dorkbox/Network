@@ -21,7 +21,6 @@ import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
 import dorkbox.network.aeron.CoroutineIdleStrategy
-import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.serialization.Serialization
@@ -480,7 +479,7 @@ abstract class Configuration protected constructor() {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var pollIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy(maxSpins = 100, maxYields = 10, minParkPeriodMs = 1, maxParkPeriodMs = 100)
+    var pollIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy(maxSpins = 100, maxYields = 20, minParkPeriodMs = 1, maxParkPeriodMs = 10)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -497,7 +496,7 @@ abstract class Configuration protected constructor() {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var sendIdleStrategy: CoroutineIdleStrategy = CoroutineSleepingMillisIdleStrategy(sleepPeriodMs = 100)
+    var sendIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy(maxSpins = 100, maxYields = 20, minParkPeriodMs = 1, maxParkPeriodMs = 10)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value

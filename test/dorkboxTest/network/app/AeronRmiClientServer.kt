@@ -279,14 +279,13 @@ class AeronRmiClientServer {
 
         config.appId = "aeron_test"
         config.uniqueAeronDirectory = true
-//        config.networkMtuSize = 9 * 1024
 
         config.enableIpc = false
         config.enableIPv6 = false
 
         // dedicate more **OOMPF** to the network
-        config.threadingMode = ThreadingMode.SHARED_NETWORK
-//        config.threadingMode = ThreadingMode.DEDICATED
+//        config.threadingMode = ThreadingMode.SHARED_NETWORK
+        config.threadingMode = ThreadingMode.DEDICATED
         config.pollIdleStrategy = CoroutineBusySpinIdleStrategy.INSTANCE
         config.sendIdleStrategy = CoroutineBusySpinIdleStrategy.INSTANCE
 
