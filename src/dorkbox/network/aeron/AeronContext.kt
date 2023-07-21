@@ -55,6 +55,8 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLo
             val mediaDriverContext = MediaDriver.Context()
                 .termBufferSparseFile(false) // files occupy the same space virtually AND physically!
                 .useWindowsHighResTimer(true)
+
+                // we assign our OWN ID! so we reserve everything.
                 .publicationReservedSessionIdLow(AeronDriver.RESERVED_SESSION_ID_LOW)
                 .publicationReservedSessionIdHigh(AeronDriver.RESERVED_SESSION_ID_HIGH)
 
