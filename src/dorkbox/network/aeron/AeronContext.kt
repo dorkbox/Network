@@ -74,6 +74,12 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLo
                 .sharedNetworkThreadFactory(threadFactory)
                 .sharedThreadFactory(threadFactory)
 
+            // default backoff idle strategy
+//                .conductorIdleStrategy(BusySpinIdleStrategy.INSTANCE)
+//                .sharedIdleStrategy(NoOpIdleStrategy.INSTANCE)
+//                .receiverIdleStrategy(BusySpinIdleStrategy.INSTANCE)
+//                .senderIdleStrategy(BusySpinIdleStrategy.INSTANCE)
+
             mediaDriverContext.aeronDirectoryName(config.aeronDirectory!!.path)
 
             if (config.ipcTermBufferLength > 0) {
