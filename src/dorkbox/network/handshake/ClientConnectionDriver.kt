@@ -143,6 +143,13 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             val subscriptionUri = uri(CommonContext.IPC_MEDIA, sessionIdSub, reliable)
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, true)
 
+
+            // wait for the REMOTE end to also connect to us!
+            aeronDriver.waitForConnection(subscription, handshakeTimeoutNs, logInfo) { cause ->
+                ClientTimedOutException("$logInfo subscription cannot connect with server!", cause)
+            }
+
+
             return PubSub(publication, subscription,
                           sessionIdPub, sessionIdSub,
                           streamIdPub, streamIdSub,
@@ -201,6 +208,10 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, false)
 
 
+            // wait for the REMOTE end to also connect to us!
+            aeronDriver.waitForConnection(subscription, handshakeTimeoutNs, logInfo) { cause ->
+                ClientTimedOutException("$logInfo subscription cannot connect with server!", cause)
+            }
 
             return PubSub(publication, subscription,
                           sessionIdPub, sessionIdSub,
