@@ -800,6 +800,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
                 // send the message.
                 // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
+
+                listenerManager.notifyError(newException("[${publication.sessionId()}] Unable to send message. (Connection in closed, aborted attempt! ${AeronDriver.errorCodeName(result)})"))
                 return false
             }
 
