@@ -46,7 +46,7 @@ class CoroutineBusySpinIdleStrategy : CoroutineIdleStrategy {
     }
 
     override fun cloneToNormal(): IdleStrategy {
-        return BusySpinIdleStrategy()
+        return BusySpinIdleStrategy.INSTANCE
     }
 
     override fun toString(): String {

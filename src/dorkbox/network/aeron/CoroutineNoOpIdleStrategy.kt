@@ -84,7 +84,7 @@ class CoroutineNoOpIdleStrategy : CoroutineIdleStrategy {
     }
 
     override fun cloneToNormal(): IdleStrategy {
-        return NoOpIdleStrategy()
+        return NoOpIdleStrategy.INSTANCE
     }
 
     /**
