@@ -511,8 +511,6 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      * ESPECIALLY if it is with the same streamID
      *
      * The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-     *
-     * this check is in the "reconnect" logic
      */
     suspend fun waitForConnection(
         publication: Publication,
@@ -537,6 +535,36 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         close(publication, logInfo)
 
         val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Publication timed out in ${Sys.getTimePrettyFull(handshakeTimeoutNs)} while waiting for connection state: ${publication.channel()} streamId=${publication.streamId()}"))
+        exception.cleanAllStackTrace()
+        throw exception
+    }
+
+    /**
+     * For subscriptions, in the client we want to guarantee that the remote server has connected BACK to us!
+     */
+    suspend fun waitForConnection(
+        subscription: Subscription,
+        handshakeTimeoutNs: Long,
+        logInfo: String,
+        onErrorHandler: suspend (Throwable) -> Exception
+    ) {
+        if (subscription.isConnected) {
+            return
+        }
+
+        val startTime = System.nanoTime()
+
+        while (System.nanoTime() - startTime < handshakeTimeoutNs) {
+            if (subscription.isConnected && subscription.imageCount() > 0) {
+                return
+            }
+
+            delay(200L)
+        }
+
+        close(subscription, logInfo)
+
+        val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Subscription timed out in ${Sys.getTimePrettyFull(handshakeTimeoutNs)} while waiting for connection state: ${subscription.channel()} streamId=${subscription.streamId()}"))
         exception.cleanAllStackTrace()
         throw exception
     }
