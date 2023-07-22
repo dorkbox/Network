@@ -185,7 +185,7 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLo
 
             // if we are not CURRENTLY running, then we should ALSO delete it when we are done!
             context.dirDeleteOnShutdown()
-        } else {
+        } else if (!config.forceAllowSharedAeronDriver) {
             // maybe it's a mistake because we restarted too quickly! A brief pause to fix this!
 
             val timeoutInNs = TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong()) + context.publicationLingerTimeoutNs()
@@ -198,7 +198,7 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLo
                 Thread.sleep(timeoutInMs)
             }
 
-            require(!isRunning(context) || config.forceAllowSharedAeronDriver) { "Aeron is currently running, and this is the first instance created by this JVM. " +
+            require(!isRunning(context)) { "Aeron is currently running, and this is the first instance created by this JVM. " +
                     "You must use `config.forceAllowSharedAeronDriver` to be able to re-use a shared aeron process at: $aeronDir" }
         }
 
