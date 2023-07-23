@@ -47,7 +47,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         /**
          * Gets the version number.
          */
-        const val version = "6.5"
+        const val version = "6.6"
     }
 
     /**
@@ -218,9 +218,6 @@ abstract class Configuration protected constructor() {
         private val appIdRegexString = Regex("a-zA-Z0-9_.-")
         private val appIdRegex = Regex("^[$appIdRegexString]+$")
 
-        @Volatile
-        private var alreadyShownTempFsTips = false
-
         internal val networkThreadGroup = ThreadGroup("Network")
         internal val aeronThreadFactory = NamedThreadFactory( "Aeron", networkThreadGroup,  true)
 
@@ -261,16 +258,59 @@ abstract class Configuration protected constructor() {
                     if (suggestedLocation.exists()) {
                         suggestedLocation
                     }
-                    else {
-                        if (logger !== NOP_LOGGER) {
-                            if (!alreadyShownTempFsTips) {
-                                alreadyShownTempFsTips = true
-                                logger.info(
-                                    "It is recommended to create a RAM drive for best performance. For example\n" + "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`"
-                                )
-                            }
-                        }
+                    else if (logger !== NOP_LOGGER) {
+                        // don't ALWAYS create it!
+                        val sizeInGB = 2
 
+                        // on macos, we cannot rely on users to actually create this -- so we automatically do it for them.
+                        logger.info("Creating a $sizeInGB GB RAM drive for best performance.")
+
+                        // hdiutil attach -nobrowse -nomount ram://4194304
+                        val newDevice = dorkbox.executor.Executor()
+                            .command("hdiutil", "attach", "-nomount", "ram://${sizeInGB * 1024 * 2048}")
+                            .destroyOnExit()
+                            .enableRead()
+                            .startBlocking(60, TimeUnit.SECONDS)
+                            .output
+                            .string().trim().also { logger.trace { "Created new disk: $it" } }
+
+                        // diskutil apfs createContainer /dev/disk4
+                        val lines = dorkbox.executor.Executor()
+                            .command("diskutil", "apfs", "createContainer", newDevice)
+                            .destroyOnExit()
+                            .enableRead()
+                            .startBlocking(60, TimeUnit.SECONDS)
+                            .output
+                            .lines().onEach { line -> logger.trace { line } }
+
+                        val newDiskLine = lines[lines.lastIndex-1]
+                        val disk = newDiskLine.substring(newDiskLine.lastIndexOf(':')+1).trim()
+
+                        // diskutil apfs addVolume disk5 APFS DevShm -nomount
+                        dorkbox.executor.Executor()
+                            .command("diskutil", "apfs", "addVolume", disk, "APFS", "DevShm", "-nomount")
+                            .destroyOnExit()
+                            .enableRead()
+                            .startBlocking(60, TimeUnit.SECONDS)
+                            .output
+                            .string().also { logger.trace { it } }
+
+                        // diskutil mount nobrowse "DevShm"
+                        dorkbox.executor.Executor()
+                            .command("diskutil", "mount", "nobrowse", "DevShm")
+                            .destroyOnExit()
+                            .enableRead()
+                            .startBlocking(60, TimeUnit.SECONDS)
+                            .output
+                            .string().also { logger.trace { it } }
+
+                        // touch /Volumes/RAMDisk/.metadata_never_index
+                        File("${suggestedLocation}/.metadata_never_index").createNewFile()
+
+                        suggestedLocation
+                    }
+                    else {
+                        // we don't always want to create a ram drive!
                         OS.TEMP_DIR
                     }
                 }
@@ -619,7 +659,7 @@ abstract class Configuration protected constructor() {
      *
      * A value of 0 will 'auto-configure' this setting
      */
-    var sendBufferSize = 1048576
+    var sendBufferSize = 0
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -636,7 +676,7 @@ abstract class Configuration protected constructor() {
      *
      * A value of 0 will 'auto-configure' this setting.
      */
-    var receiveBufferSize = 2097152
+    var receiveBufferSize = 0
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -742,8 +782,8 @@ abstract class Configuration protected constructor() {
         require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
         require(networkMtuSize < Configuration.MAX_UDP_PAYLOAD_LENGTH)  { "configuration networkMtuSize must be < ${Configuration.MAX_UDP_PAYLOAD_LENGTH}" }
 
-        require(sendBufferSize > 0) { "configuration socket send buffer must be > 0"}
-        require(receiveBufferSize > 0) { "configuration socket receive buffer must be > 0"}
+        require(sendBufferSize >= 0) { "configuration socket send buffer must be >= 0"}
+        require(receiveBufferSize >= 0) { "configuration socket receive buffer must be >= 0"}
         require(ipcTermBufferLength > 65535) { "configuration IPC term buffer must be > 65535"}
         require(ipcTermBufferLength < 1_073_741_824) { "configuration IPC term buffer must be < 1,073,741,824"}
         require(publicationTermBufferLength > 65535) { "configuration publication term buffer must be > 65535"}
@@ -766,59 +806,56 @@ abstract class Configuration protected constructor() {
             }
         }
 
-        /*
-         * Linux
-         * Linux normally requires some settings of sysctl values. One is net.core.rmem_max to allow larger SO_RCVBUF and
-         * net.core.wmem_max to allow larger SO_SNDBUF values to be set.
-         *
-         * Windows
-         * Windows tends to use SO_SNDBUF values that are too small. It is recommended to use values more like 1MB or so.
-         *
-         * Mac/Darwin
-         *
-         * Mac tends to use SO_SNDBUF values that are too small. It is recommended to use larger values, like 16KB.
-         */
-        if (receiveBufferSize == 0) {
-            receiveBufferSize = io.aeron.driver.Configuration.SOCKET_RCVBUF_LENGTH_DEFAULT
-            //            when {
-            //                OS.isLinux() ->
-            //                OS.isWindows() ->
-            //                OS.isMacOsX() ->
-            //            }
-
-            //            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
-            //            val wmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.wmem_max")
-        }
-
-
-        if (sendBufferSize == 0) {
-            sendBufferSize = io.aeron.driver.Configuration.SOCKET_SNDBUF_LENGTH_DEFAULT
-            //            when {
-            //                OS.isLinux() ->
-            //                OS.isWindows() ->
-            //                OS.isMacOsX() ->
-            //            }
-
-            //            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
-            //            val wmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.wmem_max")
-        }
+//        /*
+//         * Linux
+//         * Linux normally requires some settings of sysctl values. One is net.core.rmem_max to allow larger SO_RCVBUF and
+//         * net.core.wmem_max to allow larger SO_SNDBUF values to be set.
+//         *
+//         * Windows
+//         * Windows tends to use SO_SNDBUF values that are too small. It is recommended to use values more like 1MB or so.
+//         *
+//         * Mac/Darwin
+//         * Mac tends to use SO_SNDBUF values that are too small. It is recommended to use larger values, like 16KB.
+//         */
+//        if (receiveBufferSize == 0) {
+//            receiveBufferSize = io.aeron.driver.Configuration.SOCKET_RCVBUF_LENGTH_DEFAULT * 4
+//            //            when {
+//            //                OS.isLinux() ->
+//            //                OS.isWindows() ->
+//            //                OS.isMacOsX() ->
+//            //            }
+//
+//            //            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
+//        }
+//
+//
+//        if (sendBufferSize == 0) {
+//            sendBufferSize = io.aeron.driver.Configuration.SOCKET_SNDBUF_LENGTH_DEFAULT * 4
+//            //            when {
+//            //                OS.isLinux() ->
+//            //                OS.isWindows() ->
+//            //                OS.isMacOsX() ->
+//            //            }
+//
+//                        val wmem_max = dorkbox.netUtil.SocketUtils.sysctlGetInt("net.core.wmem_max")
+//        }
 
 
         /*
-         * Note: Since Mac OS does not have a built-in support for /dev/shm it is advised to create a RAM disk for the Aeron directory (aeron.dir).
+         * Note: Since Mac OS does not have a built-in support for /dev/shm, we automatically create a RAM disk for the Aeron directory (aeron.dir).
          *
          * You can create a RAM disk with the following command:
          *
-         * $ diskutil erasevolume HFS+ "DISK_NAME" `hdiutil attach -nomount ram://$((2048 * SIZE_IN_MB))`
+         * $ diskutil erasevolume APFS "DISK_NAME" `hdiutil attach -nomount ram://$((SIZE_IN_MB * 2048))`
          *
          * where:
          *
          * DISK_NAME should be replaced with a name of your choice.
          * SIZE_IN_MB is the size in megabytes for the disk (e.g. 4096 for a 4GB disk).
          *
-         * For example, the following command creates a RAM disk named DevShm which is 2GB in size:
+         * For example, the following command creates a RAM disk named DevShm which is 8GB in size:
          *
-         * $ diskutil erasevolume HFS+ "DevShm" `hdiutil attach -nomount ram://$((2048 * 2048))`
+         * $ diskutil erasevolume APFS "DevShm" `hdiutil attach -nomount ram://$((8 * 1024 * 2048))`
          *
          * After this command is executed the new disk will be mounted under /Volumes/DevShm.
          */
@@ -884,8 +921,8 @@ abstract class Configuration protected constructor() {
             require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
             require(networkMtuSize < Configuration.MAX_UDP_PAYLOAD_LENGTH)  { "configuration networkMtuSize must be < ${Configuration.MAX_UDP_PAYLOAD_LENGTH}" }
 
-            require(sendBufferSize > 0) { "configuration socket send buffer must be > 0"}
-            require(receiveBufferSize > 0) { "configuration socket receive buffer must be > 0"}
+            require(sendBufferSize >= 0) { "configuration socket send buffer must be a >= 0"}
+            require(receiveBufferSize >= 0) { "configuration socket receive buffer must be >= 0"}
             require(ipcTermBufferLength > 65535) { "configuration IPC term buffer must be > 65535"}
             require(ipcTermBufferLength < 1_073_741_824) { "configuration IPC term buffer must be < 1,073,741,824"}
             require(publicationTermBufferLength > 65535) { "configuration publication term buffer must be > 65535"}
