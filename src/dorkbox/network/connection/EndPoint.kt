@@ -95,16 +95,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         internal val responseManager = ResponseManager()
 
         internal val lanAddress = IP.lanAddress()
-
-
-        // the first byte manage: byte/message/stream/etc, no-crypt, crypt, crypt+compress
-        const val kryo      = 0.toByte()
-        const val byteArray = 1.toByte()
-        const val file      = 2.toByte()
-        const val stream    = 3.toByte()
-
-        const val ENCRYPTD = (1 shl 6).toByte()
-        const val COMPRESS = (1 shl 7).toByte()
     }
 
     val logger: KLogger = KotlinLogging.logger(loggerName)

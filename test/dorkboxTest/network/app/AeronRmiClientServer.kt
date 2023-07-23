@@ -279,6 +279,7 @@ class AeronRmiClientServer {
 
         config.appId = "aeron_test"
         config.uniqueAeronDirectory = true
+        config.forceAllowSharedAeronDriver = true
 
         config.enableIpc = false
         config.enableIPv6 = false
@@ -291,7 +292,7 @@ class AeronRmiClientServer {
 
         // https://blah.cloud/networks/test-jumbo-frames-working/
         // This must be a multiple of 32, and we leave some space for headers/etc
-        config.networkMtuSize = 8960
+        config.networkMtuSize = 8192
 
         // 4 MB for receive
         config.receiveBufferSize = 4194304
