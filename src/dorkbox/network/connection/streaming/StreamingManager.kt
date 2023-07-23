@@ -36,6 +36,7 @@ import dorkbox.network.serialization.KryoWriter
 import dorkbox.os.OS
 import dorkbox.util.Sys
 import io.aeron.Publication
+import io.aeron.protocol.DataHeaderFlyweight
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
@@ -44,9 +45,7 @@ import org.agrona.concurrent.UnsafeBuffer
 import java.io.File
 import java.io.FileInputStream
 
-internal class StreamingManager<CONNECTION : Connection>(
-    private val logger: KLogger, private val messageDispatch: CoroutineScope, val config: Configuration, val maxMessageSize: Int
-) {
+internal class StreamingManager<CONNECTION : Connection>(private val logger: KLogger, private val messageDispatch: CoroutineScope, val config: Configuration) {
 
     companion object {
         private const val KILOBYTE = 1024
@@ -581,7 +580,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         connection: CONNECTION,
         streamSessionId: Int
     ): Boolean {
-        val maxMessageSize = maxMessageSize.toLong()
+        val maxMessageSize = (config.networkMtuSize - DataHeaderFlyweight.HEADER_LENGTH).toLong()
 
         val fileInputStream = file.inputStream()
 

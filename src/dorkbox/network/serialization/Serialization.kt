@@ -140,8 +140,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     private val writeKryos: Pool<KryoWriter<CONNECTION>> = ObjectPool.nonBlockingBounded(
         poolObject = object : BoundedPoolObject<KryoWriter<CONNECTION>>() {
             override fun newInstance(): KryoWriter<CONNECTION> {
-                logger.debug { "Creating new Kryo($maxMessageSize)" }
-                return newWriteKryo(maxMessageSize)
+                return newWriteKryo()
             }
         },
         maxSize = OS.optimumNumberOfThreads * 2
@@ -462,6 +461,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
                 throw IllegalArgumentException("Unable to initialize object serialization more than once!")
             }
 
+            // DO NOT USE THE POOL! This kryo instance must be thrown away!
             val kryo = KryoWriter<CONNECTION>(maxMessageSize)
             newGlobalKryo(kryo)
 
@@ -493,8 +493,9 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      *
      * @return true if initialization was successful, false otherwise. DOES NOT CATCH EXCEPTIONS EXTERNALLY
      */
-    internal fun finishClientConnect(kryoRegistrationDetailsFromServer: ByteArray, maxMessageSize: Int) {
+    internal fun finishClientConnect(kryoRegistrationDetailsFromServer: ByteArray) {
         val readKryo = KryoReader<CONNECTION>(maxMessageSize)
+        // DO NOT USE THE POOL! This kryo instance must be thrown away!
         val writeKryo = KryoWriter<CONNECTION>(maxMessageSize)
         newGlobalKryo(readKryo)
         newGlobalKryo(writeKryo)
@@ -772,7 +773,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      *
      * @return takes a kryo instance from the pool, or creates one if the pool was empty
      */
-    fun newReadKryo(maxMessageSize: Int): KryoReader<CONNECTION> {
+    fun newReadKryo(): KryoReader<CONNECTION> {
         val kryo = KryoReader<CONNECTION>(maxMessageSize)
         newGlobalKryo(kryo)
 
@@ -788,7 +789,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      *
      * @return takes a kryo instance from the pool, or creates one if the pool was empty
      */
-    fun newWriteKryo(maxMessageSize: Int): KryoWriter<CONNECTION> {
+    private fun newWriteKryo(): KryoWriter<CONNECTION> {
+        logger.debug { "Creating new Kryo($maxMessageSize)" }
         val kryo = KryoWriter<CONNECTION>(maxMessageSize)
         newGlobalKryo(kryo)
 

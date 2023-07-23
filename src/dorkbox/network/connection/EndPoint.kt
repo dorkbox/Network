@@ -125,7 +125,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * but that has a (very low) maximum reassembly size -- so we have our own mechanism for object fragmentation/assembly, which
      * is (in reality) only limited by available ram.
      */
-    internal val maxMessageSize = config.networkMtuSize - DataHeaderFlyweight.HEADER_LENGTH
+    private val maxMessageSize = config.networkMtuSize - DataHeaderFlyweight.HEADER_LENGTH
 
     /**
      * Read and Write can be concurrent (different buffers are used)
@@ -178,7 +178,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger)
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
-    private val streamingManager = StreamingManager<CONNECTION>(logger, messageDispatch, config, maxMessageSize)
+    private val streamingManager = StreamingManager<CONNECTION>(logger, messageDispatch, config)
 
     private val pingManager = PingManager<CONNECTION>()
 
@@ -207,14 +207,14 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
         serialization = config.serialization as Serialization<CONNECTION>
-        serialization.finishInit(type, maxMessageSize)
+        serialization.finishInit(type, config.networkMtuSize)
 
         serialization.fileContentsSerializer.streamingManager = streamingManager
 
         // we are done with initial configuration, now finish serialization
         // the CLIENT will reassign these in the `connect0` method (because it registers what the server says to register)
         if (type == Server::class.java) {
-            readKryo = serialization.newReadKryo(maxMessageSize)
+            readKryo = serialization.newReadKryo()
         }
 
 

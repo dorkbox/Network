@@ -21,14 +21,12 @@ import dorkbox.collections.ConcurrentIterator
 import dorkbox.network.Configuration
 import dorkbox.network.connection.EndPoint
 import dorkbox.util.NamedThreadFactory
-import dorkbox.util.sync.CountDownLatch
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
-import org.agrona.concurrent.IdleStrategy
 import java.util.concurrent.*
 
 /**
@@ -53,9 +51,9 @@ internal class EventPoller {
     private lateinit var dispatchScope: CoroutineScope
 
     private lateinit var pollStrategy: CoroutineIdleStrategy
-    private lateinit var clonedStrategy: IdleStrategy
 
-    private var running = true
+    @Volatile
+    private var running = false
     private var mutex = Mutex()
 
     // this is thread safe
@@ -91,16 +89,17 @@ internal class EventPoller {
                 running = true
                 configured = true
                 shutdownLatch = CountDownLatch(1)
-                pollStrategy = config.pollIdleStrategy
-                clonedStrategy = config.pollIdleStrategy.cloneToNormal()
+                pollStrategy = config.pollIdleStrategy.clone()
 
                 dispatchScope = CoroutineScope(pollDispatcher + SupervisorJob())
                 require(pollDispatcher.isActive) { "Unable to start the event dispatch in the terminated state!" }
 
                 dispatchScope.launch {
-                    val pollIdleStrategy = clonedStrategy
+                    val pollIdleStrategy = pollStrategy
                     var pollCount = 0
                     threadId = Thread.currentThread().id
+
+                    pollIdleStrategy.reset()
 
                     while (running) {
                         pollEvents.forEachRemovable {
@@ -151,7 +150,9 @@ internal class EventPoller {
                     shutdownLatch.countDown()
                 }
             } else {
-                require(pollStrategy == config.pollIdleStrategy) {
+                // we don't want to use .equals, because that also compares STATE, which for us is going to be different because we are cloned!
+                // toString has the right info to compare types/config accurately
+                require(pollStrategy.toString() == config.pollIdleStrategy.toString()) {
                     "The network event poll strategy is different between the multiple instances of network clients/servers. There **WILL BE** thread starvation, so this behavior is forbidden!"
                 }
             }
@@ -223,7 +224,7 @@ internal class EventPoller {
         }
     }
 
-    private suspend fun doClose() {
+    private fun doClose() {
         val wasRunning = running
 
         running = false

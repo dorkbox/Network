@@ -718,7 +718,7 @@ open class Client<CONNECTION : Connection>(
 
         try {
             // only have ot do one
-            serialization.finishClientConnect(connectionInfo.kryoRegistrationDetails, maxMessageSize)
+            serialization.finishClientConnect(connectionInfo.kryoRegistrationDetails)
         } catch (e: Exception) {
             handshakeConnection.close()
 
@@ -738,7 +738,7 @@ open class Client<CONNECTION : Connection>(
         // we set up our kryo information once we connect to a server (using the server's kryo registration details)
 
         // every time we connect to a server, we have to reconfigure AND reassign kryo
-        readKryo = serialization.newReadKryo(maxMessageSize)
+        readKryo = serialization.newReadKryo()
 
 
         ///////////////
