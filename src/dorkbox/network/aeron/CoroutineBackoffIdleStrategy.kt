@@ -112,7 +112,7 @@ abstract class BackoffIdleStrategyData(
     protected var parkPeriodMs: Long = 0
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        if (other !is BackoffIdleStrategyData) return false
+        if (other !is CoroutineBackoffIdleStrategy) return false
 
         if (maxSpins != other.maxSpins) return false
         if (maxYields != other.maxYields) return false
@@ -392,4 +392,7 @@ class CoroutineBackoffIdleStrategy : BackoffIdleStrategyData, CoroutineIdleStrat
                 ", maxParkPeriodMs=" + maxParkPeriodMs +
                 '}'
     }
+
+
+
 }
