@@ -22,7 +22,7 @@ import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import dorkbox.network.*
-import dorkbox.network.aeron.CoroutineBusySpinIdleStrategy
+import dorkbox.network.aeron.CoroutineNoOpIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.storage.Storage
 import dorkbox.util.Sys
@@ -149,39 +149,45 @@ class AeronRmiClientServer {
                         val secureRandom = SecureRandom()
                         val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 32
 
-                        val count = 15
-                        val stopwatch = Stopwatch.createStarted()
-                        val jobs = mutableListOf<Job>()
+                        // don't want to time allocating the mem, just time "serializing and sending"
+                        val hugeData = ByteArray(sizeToTest)
+                        secureRandom.nextBytes(hugeData) // REALLY slow!!!
+
+                        var count = 0
+                        var timed = 0L
+
+                        client.logger.error { "Initializing test." }
+
+                        // just to start it up.
+                        repeat(5) {
+                            client.send(hugeData)
+                        }
 
                         client.logger.error { "Starting test." }
 
-                            repeat(count) {
-//                        launch(Dispatchers.IO) {
-                                val hugeData = ByteArray(sizeToTest)
-                                secureRandom.nextBytes(hugeData)
 
-                                client.logger.error { "Starting round: $it" }
+                        val allStopwatch = Stopwatch.createStarted()
+                        while(TimeUnit.NANOSECONDS.toSeconds(timed) < 5) {
+                            client.logger.error { "Starting round: $count" }
 
-                                val roundStopwatch = Stopwatch.createStarted()
-                                client.send(hugeData)
-                                client.logger.error { "Finished round $it in: $roundStopwatch" }
-//                        }.also { jobs.add(it) }
-                            }
+                            val roundStopwatch = Stopwatch.createStarted()
+                            client.send(hugeData)
+                            timed += roundStopwatch.elapsedNanos()
+                            client.logger.error { "Finished round $count in: $roundStopwatch" }
+                            count++
+                        }
 
-                        jobs.joinAll()
 
-                        val timed = stopwatch.elapsedNanos()
                         val amountInMB = (count.toLong()*sizeToTest)/Sys.MEGABYTE
                         val amountInmb = (count.toLong()*sizeToTest*8)/Sys.MEGABYTE
+                        val fullElapsed = allStopwatch.elapsedNanos()
 
-                        client.logger.error { "Finished all rounds in: ${Sys.getTimePrettyFull(timed)} for $amountInMB MB" }
-                        client.logger.error { "Rate is: ${amountInMB/TimeUnit.NANOSECONDS.toSeconds(timed)} MB/s" }
-                        client.logger.error { "Rate is: ${amountInmb/TimeUnit.NANOSECONDS.toSeconds(timed)} mb/s" }
-                    }
+                        client.logger.error { "Finished $count rounds in: ${Sys.getTimePrettyFull(fullElapsed)}" }
+                        client.logger.error { "Sending data portion took: ${Sys.getTimePrettyFull(timed)} for $amountInMB MB" }
 
-
-                    runBlocking {
-                        client.waitForClose()
+                        val timedInSeconds = TimeUnit.NANOSECONDS.toSeconds(timed)
+                        client.logger.error { "Rate is: ${amountInMB/timedInSeconds} MB/s" }
+                        client.logger.error { "Rate is: ${amountInmb/timedInSeconds} mb/s" }
                     }
                 }
             } catch (e: Exception) {
@@ -278,21 +284,32 @@ class AeronRmiClientServer {
         config.settingsStore = Storage.Memory() // don't want to persist anything on disk!
 
         config.appId = "aeron_test"
-        config.uniqueAeronDirectory = true
-        config.forceAllowSharedAeronDriver = true
-
-        config.enableIpc = false
         config.enableIPv6 = false
 
+//        config.enableIpc = true
+        config.enableIpc = false
+        config.uniqueAeronDirectory = true
+
+        config.forceAllowSharedAeronDriver = true
+
         // dedicate more **OOMPF** to the network
-//        config.threadingMode = ThreadingMode.SHARED_NETWORK
-        config.threadingMode = ThreadingMode.DEDICATED
-        config.pollIdleStrategy = CoroutineBusySpinIdleStrategy.INSTANCE
-        config.sendIdleStrategy = CoroutineBusySpinIdleStrategy.INSTANCE
+        config.threadingMode = ThreadingMode.SHARED_NETWORK
+//        config.threadingMode = ThreadingMode.DEDICATED
+        config.pollIdleStrategy = CoroutineNoOpIdleStrategy.INSTANCE
+        config.sendIdleStrategy = CoroutineNoOpIdleStrategy.INSTANCE
+
+
+        // only if there are enough threads on the box!
+//        config.conductorIdleStrategy = BusySpinIdleStrategy.INSTANCE
+//        config.sharedIdleStrategy = NoOpIdleStrategy.INSTANCE
+//        config.receiverIdleStrategy = BusySpinIdleStrategy.INSTANCE
+//        config.senderIdleStrategy = NoOpIdleStrategy.INSTANCE
+
 
         // https://blah.cloud/networks/test-jumbo-frames-working/
         // This must be a multiple of 32, and we leave some space for headers/etc
         config.networkMtuSize = 8192
+        config.ipcMtuSize = io.aeron.driver.Configuration.MAX_UDP_PAYLOAD_LENGTH
 
         // 4 MB for receive
         config.receiveBufferSize = 4194304
