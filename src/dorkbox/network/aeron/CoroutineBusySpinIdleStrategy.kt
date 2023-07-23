@@ -38,7 +38,7 @@ class CoroutineBusySpinIdleStrategy : CoroutineIdleStrategy {
 
     override fun reset() {}
     override fun alias(): String {
-        return "spin"
+        return "coroutine-spin"
     }
 
     override fun clone(): CoroutineIdleStrategy {

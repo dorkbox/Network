@@ -42,7 +42,7 @@ class CoroutineYieldingIdleStrategy : CoroutineIdleStrategy {
         /**
          * Name to be returned from [.alias].
          */
-        const val ALIAS = "yield"
+        const val ALIAS = "coroutine-yield"
 
         /**
          * As there is no instance state then this object can be used to save on allocation.

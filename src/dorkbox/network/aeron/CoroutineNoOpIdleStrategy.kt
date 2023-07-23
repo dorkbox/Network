@@ -43,7 +43,7 @@ class CoroutineNoOpIdleStrategy : CoroutineIdleStrategy {
         /**
          * Name to be returned from [.alias].
          */
-        const val ALIAS = "noop"
+        const val ALIAS = "coroutine-noop"
 
         /**
          * As there is no instance state then this object can be used to save on allocation.
