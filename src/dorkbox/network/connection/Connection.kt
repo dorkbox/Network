@@ -23,6 +23,7 @@ import dorkbox.network.rmi.RmiSupportConnection
 import io.aeron.Image
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
+import io.aeron.protocol.DataHeaderFlyweight
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
 import kotlinx.coroutines.delay
@@ -99,7 +100,17 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     val isNetwork = !isIpc
 
-
+    /**
+     * The largest size a SINGLE message via AERON can be. Because the maximum size we can send in a "single fragment" is the
+     * publication.maxPayloadLength() function (which is the MTU length less header). We could depend on Aeron for fragment reassembly,
+     * but that has a (very low) maximum reassembly size -- so we have our own mechanism for object fragmentation/assembly, which
+     * is (in reality) only limited by available ram.
+     */
+    internal val maxMessageSize = if (isNetwork) {
+        endPoint.config.networkMtuSize - DataHeaderFlyweight.HEADER_LENGTH
+    } else {
+        endPoint.config.ipcMtuSize - DataHeaderFlyweight.HEADER_LENGTH
+    }
 
 
     private val listenerManager = atomic<ListenerManager<Connection>?>(null)
@@ -184,7 +195,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     internal suspend fun send(message: Any, abortEarly: Boolean): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
-        return endPoint.write(message, publication, sendIdleStrategy, this@Connection, abortEarly)
+        return endPoint.write(message, publication, sendIdleStrategy, this@Connection, maxMessageSize, abortEarly)
     }
 
     /**

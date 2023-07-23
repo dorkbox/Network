@@ -36,7 +36,6 @@ import dorkbox.network.serialization.KryoWriter
 import dorkbox.os.OS
 import dorkbox.util.Sys
 import io.aeron.Publication
-import io.aeron.protocol.DataHeaderFlyweight
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
@@ -53,7 +52,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
         private const val GIGABYTE = 1024 * MEGABYTE
         private const val TERABYTE = 1024L * GIGABYTE
 
-        @Suppress("UNUSED_CHANGED_VALUE")
+        @Suppress("UNUSED_CHANGED_VALUE", "SameParameterValue")
         private fun writeVarInt(internalBuffer: MutableDirectBuffer, position: Int, value: Int, optimizePositive: Boolean): Int {
             var p = position
             var newValue = value
@@ -571,6 +570,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
      *
      * @return true if ALL the message blocks were successfully sent by aeron, false otherwise. Exceptions are caught and rethrown!
      */
+    @Suppress("SameParameterValue")
     suspend fun sendFile(
         file: File,
         publication: Publication,
@@ -580,8 +580,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
         connection: CONNECTION,
         streamSessionId: Int
     ): Boolean {
-        val maxMessageSize = (config.networkMtuSize - DataHeaderFlyweight.HEADER_LENGTH).toLong()
-
+        val maxMessageSize = connection.maxMessageSize.toLong()
         val fileInputStream = file.inputStream()
 
         // if the message is a file, we xfer the file AS a file, and leave it as a temp file (with a file reference to it) on the remote endpoint

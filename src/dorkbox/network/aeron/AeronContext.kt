@@ -62,7 +62,7 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLo
 
                 .threadingMode(config.threadingMode)
                 .mtuLength(config.networkMtuSize)
-                .ipcMtuLength(config.networkMtuSize)
+                .ipcMtuLength(config.ipcMtuSize)
 
                 .initialWindowLength(config.initialWindowLength)
                 .socketSndbufLength(config.sendBufferSize)
@@ -74,11 +74,18 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLo
                 .sharedNetworkThreadFactory(threadFactory)
                 .sharedThreadFactory(threadFactory)
 
-            // default backoff idle strategy
-//                .conductorIdleStrategy(BusySpinIdleStrategy.INSTANCE)
-//                .sharedIdleStrategy(NoOpIdleStrategy.INSTANCE)
-//                .receiverIdleStrategy(BusySpinIdleStrategy.INSTANCE)
-//                .senderIdleStrategy(BusySpinIdleStrategy.INSTANCE)
+            if (config.conductorIdleStrategy != null) {
+                mediaDriverContext.conductorIdleStrategy(config.conductorIdleStrategy)
+            }
+            if (config.sharedIdleStrategy != null) {
+                mediaDriverContext.sharedIdleStrategy(config.sharedIdleStrategy)
+            }
+            if (config.receiverIdleStrategy != null) {
+                mediaDriverContext.receiverIdleStrategy(config.receiverIdleStrategy)
+            }
+            if (config.senderIdleStrategy != null) {
+                mediaDriverContext.senderIdleStrategy(config.senderIdleStrategy)
+            }
 
             mediaDriverContext.aeronDirectoryName(config.aeronDirectory!!.path)
 

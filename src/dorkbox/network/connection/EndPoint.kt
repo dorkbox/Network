@@ -120,14 +120,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     val serialization: Serialization<CONNECTION>
 
     /**
-     * The largest size a SINGLE message via AERON can be. Because the maximum size we can send in a "single fragment" is the
-     * publication.maxPayloadLength() function (which is the MTU length less header). We could depend on Aeron for fragment reassembly,
-     * but that has a (very low) maximum reassembly size -- so we have our own mechanism for object fragmentation/assembly, which
-     * is (in reality) only limited by available ram.
-     */
-    private val maxMessageSize = config.networkMtuSize - DataHeaderFlyweight.HEADER_LENGTH
-
-    /**
      * Read and Write can be concurrent (different buffers are used)
      * GLOBAL, single threaded only kryo instances.
      *
@@ -475,6 +467,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         publication: Publication,
         sendIdleStrategy: CoroutineIdleStrategy,
         connection: Connection,
+        maxMessageSize: Int,
         abortEarly: Boolean
     ): Boolean {
         @Suppress("UNCHECKED_CAST")

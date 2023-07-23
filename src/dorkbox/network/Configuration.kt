@@ -36,6 +36,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.concurrent.AgentTerminationException
+import org.agrona.concurrent.IdleStrategy
 import org.slf4j.helpers.NOPLogger
 import java.io.File
 import java.net.BindException
@@ -325,6 +326,7 @@ abstract class Configuration protected constructor() {
         }
     }
 
+
     /**
      * Specify the application ID. This is necessary, as it prevents multiple instances of aeron from responding to applications that
      * is not theirs. Because of the shared nature of aeron drivers, this is necessary.
@@ -543,6 +545,43 @@ abstract class Configuration protected constructor() {
         }
 
     /**
+     * The idle strategy used by the Aeron Media Driver to write to the network when in DEDICATED mode. Null will use the aeron defaults
+     */
+    var senderIdleStrategy: IdleStrategy? = null
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+    /**
+     * The idle strategy used by the Aeron Media Driver read from the network when in DEDICATED mode. Null will use the aeron defaults
+     */
+    var receiverIdleStrategy: IdleStrategy? = null
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+    /**
+     * The idle strategy used by the Aeron Media Driver to read/write to the network when in NETWORK_SHARED mode. Null will use the aeron defaults
+     */
+    var sharedIdleStrategy: IdleStrategy? = null
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+    /**
+     * The idle strategy used by the Aeron Media Driver conductor when in DEDICATED mode. Null will use the aeron defaults
+     */
+    var conductorIdleStrategy: IdleStrategy? = null
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+
+    /**
      * ## A Media Driver, whether being run embedded or not, needs 1-3 threads to perform its operation.
      *
      *
@@ -601,9 +640,7 @@ abstract class Configuration protected constructor() {
      * (> 4KB) messages and for maximizing throughput above everything else. Various checks during publication and subscription/connection
      * setup are done to verify a decent relationship with MTU.
      *
-     *
      * However, it is good to understand these relationships.
-     *
      *
      * The MTU on the Media Driver controls the length of the MTU of data frames. This value is communicated to the Aeron clients during
      * registration. So, applications do not have to concern themselves with the MTU value used by the Media Driver and use the same value.
@@ -612,16 +649,18 @@ abstract class Configuration protected constructor() {
      * An MTU value over the interface MTU will cause IP to fragment the datagram. This may increase the likelihood of loss under several
      * circumstances. If increasing the MTU over the interface MTU, consider various ways to increase the interface MTU first in preparation.
      *
-     *
      * The MTU value indicates the largest message that Aeron will send as a single data frame.
-     *
-     *
      * MTU length also has implications for socket buffer sizing.
-     *
      *
      * Default value is 1408 for internet; for a LAN, 9k is possible with jumbo frames (if the routers/interfaces support it)
      */
     var networkMtuSize = Configuration.MTU_LENGTH_DEFAULT
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+    var ipcMtuSize = Configuration.MAX_UDP_PAYLOAD_LENGTH
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -781,6 +820,8 @@ abstract class Configuration protected constructor() {
 
         require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
         require(networkMtuSize < Configuration.MAX_UDP_PAYLOAD_LENGTH)  { "configuration networkMtuSize must be < ${Configuration.MAX_UDP_PAYLOAD_LENGTH}" }
+        require(ipcMtuSize > 0) { "configuration ipcMtuSize must be > 0" }
+        require(ipcMtuSize <= Configuration.MAX_UDP_PAYLOAD_LENGTH)  { "configuration ipcMtuSize must be <= ${Configuration.MAX_UDP_PAYLOAD_LENGTH}" }
 
         require(sendBufferSize >= 0) { "configuration socket send buffer must be >= 0"}
         require(receiveBufferSize >= 0) { "configuration socket receive buffer must be >= 0"}
@@ -892,6 +933,7 @@ abstract class Configuration protected constructor() {
         val threadingMode get() = config.threadingMode
 
         val networkMtuSize get() = config.networkMtuSize
+        val ipcMtuSize get() = config.ipcMtuSize
         val initialWindowLength get() = config.initialWindowLength
         val sendBufferSize get() = config.sendBufferSize
         val receiveBufferSize get() = config.receiveBufferSize
@@ -905,6 +947,10 @@ abstract class Configuration protected constructor() {
         val ipcTermBufferLength get() = config.ipcTermBufferLength
         val publicationTermBufferLength get() = config.publicationTermBufferLength
 
+        val conductorIdleStrategy get() = config.conductorIdleStrategy
+        val sharedIdleStrategy get() = config.sharedIdleStrategy
+        val receiverIdleStrategy get() = config.receiverIdleStrategy
+        val senderIdleStrategy get() = config.senderIdleStrategy
 
         val aeronErrorFilter get() = config.aeronErrorFilter
         var contextDefined
@@ -918,15 +964,7 @@ abstract class Configuration protected constructor() {
          */
         @Suppress("DuplicatedCode")
         fun validate() {
-            require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
-            require(networkMtuSize < Configuration.MAX_UDP_PAYLOAD_LENGTH)  { "configuration networkMtuSize must be < ${Configuration.MAX_UDP_PAYLOAD_LENGTH}" }
-
-            require(sendBufferSize >= 0) { "configuration socket send buffer must be a >= 0"}
-            require(receiveBufferSize >= 0) { "configuration socket receive buffer must be >= 0"}
-            require(ipcTermBufferLength > 65535) { "configuration IPC term buffer must be > 65535"}
-            require(ipcTermBufferLength < 1_073_741_824) { "configuration IPC term buffer must be < 1,073,741,824"}
-            require(publicationTermBufferLength > 65535) { "configuration publication term buffer must be > 65535"}
-            require(publicationTermBufferLength < 1_073_741_824) { "configuration publication term buffer must be < 1,073,741,824"}
+            // already validated! do nothing.
         }
 
         /**
@@ -956,6 +994,7 @@ abstract class Configuration protected constructor() {
             if (connectionCloseTimeoutInSeconds != other.connectionCloseTimeoutInSeconds) return false
             if (threadingMode != other.threadingMode) return false
             if (networkMtuSize != other.networkMtuSize) return false
+            if (ipcMtuSize != other.ipcMtuSize) return false
             if (initialWindowLength != other.initialWindowLength) return false
             if (sendBufferSize != other.sendBufferSize) return false
             if (receiveBufferSize != other.receiveBufferSize) return false
@@ -968,6 +1007,11 @@ abstract class Configuration protected constructor() {
             if (publicationTermBufferLength != other.publicationTermBufferLength) return false
             if (aeronErrorFilter != other.aeronErrorFilter) return false
 
+            if (conductorIdleStrategy != other.conductorIdleStrategy) return false
+            if (sharedIdleStrategy != other.sharedIdleStrategy) return false
+            if (receiverIdleStrategy != other.receiverIdleStrategy) return false
+            if (senderIdleStrategy != other.senderIdleStrategy) return false
+
             return true
         }
     }
@@ -977,9 +1021,15 @@ abstract class Configuration protected constructor() {
         if (forceAllowSharedAeronDriver != other.forceAllowSharedAeronDriver) return false
         if (threadingMode != other.threadingMode) return false
         if (networkMtuSize != other.networkMtuSize) return false
+        if (ipcMtuSize != other.ipcMtuSize) return false
         if (initialWindowLength != other.initialWindowLength) return false
         if (sendBufferSize != other.sendBufferSize) return false
         if (receiveBufferSize != other.receiveBufferSize) return false
+
+        if (conductorIdleStrategy != other.conductorIdleStrategy) return false
+        if (sharedIdleStrategy != other.sharedIdleStrategy) return false
+        if (receiverIdleStrategy != other.receiverIdleStrategy) return false
+        if (senderIdleStrategy != other.senderIdleStrategy) return false
 
         if (aeronDirectory != other.aeronDirectory) return false
         if (uniqueAeronDirectory != other.uniqueAeronDirectory) return false
@@ -1037,6 +1087,7 @@ abstract class Configuration protected constructor() {
     private fun mediaDriverIdNoDir(): Int {
         var result = threadingMode.hashCode()
         result = 31 * result + networkMtuSize
+        result = 31 * result + ipcMtuSize
         result = 31 * result + initialWindowLength
         result = 31 * result + sendBufferSize
         result = 31 * result + receiveBufferSize
@@ -1063,15 +1114,18 @@ abstract class Configuration protected constructor() {
         if (enableIpc != other.enableIpc) return false
         if (ipcId != other.ipcId) return false
         if (udpId != other.udpId) return false
+
         if (enableRemoteSignatureValidation != other.enableRemoteSignatureValidation) return false
         if (connectionCloseTimeoutInSeconds != other.connectionCloseTimeoutInSeconds) return false
         if (connectionCheckIntervalNanos != other.connectionCheckIntervalNanos) return false
         if (connectionExpirationTimoutNanos != other.connectionExpirationTimoutNanos) return false
+
         if (isReliable != other.isReliable) return false
         if (pingTimeoutSeconds != other.pingTimeoutSeconds) return false
         if (settingsStore != other.settingsStore) return false
         if (serialization != other.serialization) return false
         if (maxStreamSizeInMemoryMB != other.maxStreamSizeInMemoryMB) return false
+
         if (pollIdleStrategy != other.pollIdleStrategy) return false
         if (sendIdleStrategy != other.sendIdleStrategy) return false
 
