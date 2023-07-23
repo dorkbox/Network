@@ -61,8 +61,7 @@ internal class FileContentsSerializer<CONNECTION : Connection> : Serializer<File
             }
         }
 
-
-        output.writeString(file.path)
+//        output.writeString(file.path)
         output.writeInt(streamSessionId, true)
     }
 
@@ -73,7 +72,7 @@ internal class FileContentsSerializer<CONNECTION : Connection> : Serializer<File
         val endPoint = connection.endPoint as EndPoint<CONNECTION>
 
 
-        val path = input.readString()
+//        val path = input.readString()
         val streamSessionId = input.readInt(true)
 
         // get the file object out of the streaming manager!!!
