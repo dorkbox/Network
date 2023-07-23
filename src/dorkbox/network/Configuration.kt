@@ -479,7 +479,7 @@ abstract class Configuration protected constructor() {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var pollIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy(maxSpins = 100, maxYields = 20, minParkPeriodMs = 1, maxParkPeriodMs = 10)
+    var pollIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy()
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -496,7 +496,7 @@ abstract class Configuration protected constructor() {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var sendIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy(maxSpins = 100, maxYields = 20, minParkPeriodMs = 1, maxParkPeriodMs = 10)
+    var sendIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy()
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
