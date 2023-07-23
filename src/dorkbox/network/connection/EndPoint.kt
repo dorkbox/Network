@@ -136,7 +136,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * is (in reality) only limited by available ram.
      */
     internal val maxMessageSize = config.networkMtuSize - DataHeaderFlyweight.HEADER_LENGTH
-//    internal val maxMessageSize = FrameDescriptor.computeMaxMessageLength(config.publicationTermBufferLength);
 
     /**
      * Read and Write can be concurrent (different buffers are used)
@@ -219,7 +218,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         @Suppress("UNCHECKED_CAST")
         serialization = config.serialization as Serialization<CONNECTION>
         serialization.finishInit(type, maxMessageSize)
-
 
         serialization.fileContentsSerializer.streamingManager = streamingManager
 
@@ -489,7 +487,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         connection: Connection,
         abortEarly: Boolean
     ): Boolean {
-
         @Suppress("UNCHECKED_CAST")
         connection as CONNECTION
 
@@ -498,11 +495,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
         // A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
         return try {
+            // since ANY thread can call 'send', we have to take kryo instances in a safe way
             serialization.withKryo {
-                // since ANY thread can call 'send', we have to take kryo instances in a safe way
-                // the maximum size that this buffer can be is:
-                //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
-                val buffer = this.write(connection, message)
+                val buffer =  this.write(connection, message)
                 val objectSize = buffer.position()
                 val internalBuffer = buffer.internalBuffer
 
@@ -730,7 +725,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                     // both .offer and .putBytes add bytes to the underlying termBuffer -- HOWEVER, putBytes is faster as there are no
                     // extra checks performed BECAUSE we have to do our own data fragmentation management.
                     // It doesn't make sense to use `.offer`, which ALSO has its own fragmentation handling (which is extra overhead for us)
-                    bufferClaim.putBytes(internalBuffer, offset, objectSize)
+                    bufferClaim.buffer().putBytes(DataHeaderFlyweight.HEADER_LENGTH, internalBuffer, offset, objectSize)
                 } finally {
                     // must commit() or abort() before the unblock timeout (default 15 seconds) occurs.
                     bufferClaim.commit()
