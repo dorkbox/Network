@@ -795,7 +795,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             }
 
 
-            if (result == Publication.CLOSED && connection.isClosedViaAeron()) {
+            if (result == Publication.CLOSED && connection.isClosed()) {
                 // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
                 // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
                 // send the message.

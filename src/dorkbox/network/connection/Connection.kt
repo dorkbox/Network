@@ -107,14 +107,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     private val isClosed = atomic(false)
 
-    // only accessed on a single thread!
-    private var connectionLastCheckTimeNanos = 0L
-    private var connectionTimeoutTimeNanos = 0L
-
-    // always offset by the linger amount, since we cannot act faster than the linger timeout for adding/removing publications
-    private val connectionCheckIntervalNanos = endPoint.config.connectionCheckIntervalNanos + endPoint.aeronDriver.lingerNs()
-    private val connectionExpirationTimoutNanos = endPoint.config.connectionExpirationTimoutNanos + endPoint.aeronDriver.lingerNs()
-
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     internal val remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
@@ -264,52 +256,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     internal suspend fun notifyOnMessage(message: Any): Boolean {
         return listenerManager.value?.notifyOnMessage(this, message) ?: false
-    }
-
-    /**
-     * We must account for network blips. The blips will be recovered by aeron, but we want to make sure that we are actually
-     * disconnected for a set period of time before we start the close process for a connection
-     *
-     * @return `true` if this connection has been closed via aeron
-     */
-    fun isClosedViaAeron(): Boolean {
-        if (isClosed.value) {
-            // if we are manually closed, then don't check aeron timeouts!
-            return true
-        }
-
-        // we ONLY want to actually, legit check, 1 time every XXX ms.
-        val now = System.nanoTime()
-
-        if (now - connectionLastCheckTimeNanos < connectionCheckIntervalNanos) {
-            // we haven't waited long enough for another check. always return false (true means we are closed)
-            return false
-        }
-        connectionLastCheckTimeNanos = now
-
-        // as long as we are connected, we reset the state, so that if there is a network blip, we want to make sure that it is
-        // a network blip for a while, instead of just once or twice. (which can happen)
-        if (subscription.isConnected && publication.isConnected) {
-            // reset connection timeout
-            connectionTimeoutTimeNanos = 0L
-
-            // we are still connected (true means we are closed)
-            return false
-        }
-
-        //
-        // aeron is not connected
-        //
-
-        if (connectionTimeoutTimeNanos == 0L) {
-            connectionTimeoutTimeNanos = now
-        }
-
-        // make sure that our "isConnected" state lasts LONGER than the expiry timeout!
-
-        // 1) connections take a little bit of time from polling -> connecting (because of how we poll connections before 'connecting' them).
-        // 2) network blips happen. Aeron will recover, and we want to make sure that WE don't instantly DC
-        return now - connectionTimeoutTimeNanos >= connectionExpirationTimoutNanos
     }
 
     /**

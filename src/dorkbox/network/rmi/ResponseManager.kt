@@ -259,7 +259,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         if (resultOrWaiter is ResponseWaiter) {
             logger.trace { "[RM] timeout cancel ($timeoutMillis): $id" }
 
-            return if (connection.isClosed() || connection.isClosedViaAeron()) {
+            return if (connection.isClosed() || connection.isClosed()) {
                 null
             } else {
                 TIMEOUT_EXCEPTION
