@@ -31,6 +31,7 @@ import dorkboxTest.network.rmi.cows.TestCowImpl
 import io.aeron.driver.ThreadingMode
 import kotlinx.coroutines.*
 import org.agrona.ExpandableDirectByteBuffer
+import org.agrona.concurrent.NoOpIdleStrategy
 import org.agrona.concurrent.SigInt
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
@@ -286,9 +287,9 @@ class AeronRmiClientServer {
         config.appId = "aeron_test"
         config.enableIPv6 = false
 
-//        config.enableIpc = true
-        config.enableIpc = false
-        config.uniqueAeronDirectory = true
+        config.enableIpc = true
+//        config.enableIpc = false
+//        config.uniqueAeronDirectory = true
 
         config.forceAllowSharedAeronDriver = true
 
@@ -300,10 +301,12 @@ class AeronRmiClientServer {
 
 
         // only if there are enough threads on the box!
-//        config.conductorIdleStrategy = BusySpinIdleStrategy.INSTANCE
-//        config.sharedIdleStrategy = NoOpIdleStrategy.INSTANCE
-//        config.receiverIdleStrategy = BusySpinIdleStrategy.INSTANCE
-//        config.senderIdleStrategy = NoOpIdleStrategy.INSTANCE
+        if (Runtime.getRuntime().availableProcessors() > 4) {
+    //        config.conductorIdleStrategy = BusySpinIdleStrategy.INSTANCE
+    //        config.sharedIdleStrategy = NoOpIdleStrategy.INSTANCE
+            config.receiverIdleStrategy = NoOpIdleStrategy.INSTANCE
+            config.senderIdleStrategy = NoOpIdleStrategy.INSTANCE
+        }
 
 
         // https://blah.cloud/networks/test-jumbo-frames-working/
