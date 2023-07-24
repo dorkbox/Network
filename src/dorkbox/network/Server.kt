@@ -120,7 +120,7 @@ open class Server<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "6.5"
+        const val version = "6.6"
 
         /**
          * Ensures that an endpoint (using the specified configuration) is NO LONGER running.
