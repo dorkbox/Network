@@ -301,7 +301,7 @@ class AeronRmiClientServer {
 
 
         // only if there are enough threads on the box!
-        if (Runtime.getRuntime().availableProcessors() > 4) {
+        if (Runtime.getRuntime().availableProcessors() >= 4) {
     //        config.conductorIdleStrategy = BusySpinIdleStrategy.INSTANCE
     //        config.sharedIdleStrategy = NoOpIdleStrategy.INSTANCE
             config.receiverIdleStrategy = NoOpIdleStrategy.INSTANCE
