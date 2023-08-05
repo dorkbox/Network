@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ open class RmiObjectCache(logger: KLogger) {
     /**
      * @return the ID registered for the specified object, or INVALID_RMI if not found.
      */
-    internal fun <T> getId(implObject: T): Int {
+    internal fun <T: Any> getId(implObject: T): Int {
         return implObjects.getId(implObject)
     }
 }

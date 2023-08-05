@@ -268,7 +268,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
     /**
      * @return the ID registered for the specified object, or INVALID_RMI if not found.
      */
-    fun <T> getId(remoteObject: T): Int {
+    fun <T: Any> getId(remoteObject: T): Int {
         // Find an ID with the object.
         return objectMap.inverse()[remoteObject]
     }
