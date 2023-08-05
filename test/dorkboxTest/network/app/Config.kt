@@ -15,9 +15,6 @@
  */
 package dorkboxTest.network.app
 
-import com.squareup.moshi.JsonClass
-
-@JsonClass(generateAdapter = true)
 internal class Config {
     var ip = "127.0.0.1"
 

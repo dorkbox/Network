@@ -111,19 +111,12 @@ class AeronRmiClientServer {
         @JvmStatic
         fun main(cliArgs: Array<String>) {
 
-            val configProcessor = dorkbox.config.Config {
-                this.build()
-                    .adapter(Config::class.java)
-                    .indent("    ")
-            }
+            val config = Config()
 
-            // Load all the JSON arguments, and save what we have
-            val config = configProcessor.init {
-                Config()
-            }
-
-            // cleans up the arguments AND loads stuff from ENV/CLI/etc
-            val arguments = configProcessor.process(cliArgs)
+            val configProcessor = dorkbox.config.ConfigProcessor(config)
+                .envPrefix("")
+                .cliArguments(cliArgs)
+                .process()
 
             val acs = AeronRmiClientServer()
             try {
