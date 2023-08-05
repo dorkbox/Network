@@ -16,13 +16,13 @@
 
 package dorkbox.network.rmi
 
+import dorkbox.classUtil.ClassHelper
 import dorkbox.collections.LockFreeIntMap
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
 import dorkbox.network.serialization.Serialization
-import dorkbox.util.classes.ClassHelper
 import mu.KLogger
 
 /**
@@ -147,7 +147,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      * @see RemoteObject
      */
     suspend fun <Iface> create(vararg objectParameters: Any?, callback: suspend Iface.() -> Unit) {
-        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0)
+        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0) ?: callback.javaClass
         val kryoId = serialization.getKryoIdForRmiClient(iFaceClass)
 
         @Suppress("UNCHECKED_CAST")
@@ -172,7 +172,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      * @see RemoteObject
      */
     suspend fun <Iface> create(callback: suspend Iface.() -> Unit) {
-        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0)
+        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0) ?: callback.javaClass
         val kryoId = serialization.getKryoIdForRmiClient(iFaceClass)
 
         createRemoteObject(connection, kryoId, null, callback)

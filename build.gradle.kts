@@ -167,7 +167,9 @@ dependencies {
 
     // https://github.com/dorkbox
     api("com.dorkbox:ByteUtilities:1.12")
+    api("com.dorkbox:ClassUtils:1.1")
     api("com.dorkbox:Collections:2.2")
+    api("com.dorkbox:JNA:1.0")
     api("com.dorkbox:MinLog:2.5")
     api("com.dorkbox:NetworkDNS:2.10")
     api("com.dorkbox:NetworkUtils:2.22")
@@ -175,13 +177,12 @@ dependencies {
     api("com.dorkbox:Serializers:2.9")
     api("com.dorkbox:Storage:1.5")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.43")
+    api("com.dorkbox:Utilities:1.44")
 
-    
+
     // how we bypass using reflection/jpms to access fields for java17+
     api("org.javassist:javassist:3.29.2-GA")
 
-    api("com.dorkbox:JNA:1.0")
 
     val jnaVersion = "5.12.1"
     api("net.java.dev.jna:jna-jpms:${jnaVersion}")

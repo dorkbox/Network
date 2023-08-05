@@ -13,6 +13,7 @@ module dorkbox.network {
     exports dorkbox.network.serialization;
 
     requires transitive dorkbox.bytes;
+    requires transitive dorkbox.classUtils;
     requires transitive dorkbox.collections;
     requires transitive dorkbox.dns;
     requires transitive dorkbox.updates;

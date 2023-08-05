@@ -15,11 +15,11 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.classUtil.ClassHelper
+import dorkbox.classUtil.ClassHierarchy
 import dorkbox.collections.IdentityMap
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.os.OS
-import dorkbox.util.classes.ClassHelper
-import dorkbox.util.classes.ClassHierarchy
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mu.KLogger
@@ -329,7 +329,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                     newMessageArray[0] = func
                 }
 
-                tempMap.put(messageClass, newMessageArray)
+                tempMap.put(messageClass!!, newMessageArray)
                 onMessageMap = tempMap
             } else {
                 throw IllegalArgumentException("Unable to add incompatible types! Detected connection/message classes: $connectionClass, $messageClass")

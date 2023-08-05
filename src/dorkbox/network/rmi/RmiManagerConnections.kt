@@ -15,6 +15,7 @@
  */
 package dorkbox.network.rmi
 
+import dorkbox.classUtil.ClassHelper
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
@@ -24,7 +25,6 @@ import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteResponse
 import dorkbox.network.serialization.Serialization
-import dorkbox.util.classes.ClassHelper
 import mu.KLogger
 
 class RmiManagerConnections<CONNECTION: Connection> internal constructor(
@@ -85,7 +85,7 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
         val rmi = connection.rmi as RmiSupportConnection<CONNECTION>
 
         val callback = rmi.removeCallback(callbackId)
-        val interfaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback::class.java, callback.javaClass, 0)
+        val interfaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback::class.java, callback.javaClass, 0) ?: callback.javaClass
 
         // create the client-side proxy object, if possible.  This MUST be an object that is saved for the connection
         val proxyObject = rmi.getProxyObject(false, connection, rmiId, interfaceClass)
