@@ -26,7 +26,6 @@ module dorkbox.network {
     requires transitive dorkbox.os;
 
     // requires transitive expiringmap;
-    requires transitive net.jodah.typetools;
     requires transitive com.esotericsoftware.kryo;
     requires transitive com.esotericsoftware.reflectasm;
     requires transitive org.objenesis;
