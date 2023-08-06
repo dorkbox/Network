@@ -167,11 +167,11 @@ dependencies {
 
     // https://github.com/dorkbox
     api("com.dorkbox:ByteUtilities:1.13")
-    api("com.dorkbox:ClassUtils:1.1")
+    api("com.dorkbox:ClassUtils:1.2")
     api("com.dorkbox:Collections:2.3")
     api("com.dorkbox:JNA:1.0")
     api("com.dorkbox:MinLog:2.5")
-    api("com.dorkbox:NetworkDNS:2.10")
+    api("com.dorkbox:NetworkDNS:2.11")
     api("com.dorkbox:NetworkUtils:2.22")
     api("com.dorkbox:OS:1.6")
     api("com.dorkbox:Serializers:2.9")
