@@ -902,18 +902,28 @@ abstract class Configuration protected constructor() {
          */
         var dir = aeronDirectory
 
-        if (forceAllowSharedAeronDriver && dir != null) {
-            logger.warn { "Forcing the Aeron driver to be shared between processes. THIS IS DANGEROUS!" }
-        } else if (dir != null) {
-            // we have defined an aeron directory
-            dir = File(dir.absolutePath + "_$appId")
-        } else {
+        if (dir != null) {
+            if (forceAllowSharedAeronDriver) {
+                logger.warn { "Forcing the Aeron driver to be shared between processes. THIS IS DANGEROUS!" }
+            } else if (!dir.absolutePath.endsWith(appId)) {
+                // we have defined an aeron directory
+                dir = File(dir.absolutePath + "_$appId")
+            }
+        }
+        else {
             val baseFileLocation = defaultAeronLogLocation(logger)
+            val prefix = if (appId.startsWith("aeron_")) {
+                ""
+            } else {
+                "aeron_"
+            }
+
+
             val aeronLogDirectory = if (uniqueAeronDirectory) {
                 // this is incompatible with IPC, and will not be set if IPC is enabled (error will be thrown on validate)
-                File(baseFileLocation, "aeron_${appId}_${mediaDriverIdNoDir()}")
+                File(baseFileLocation, "$prefix${appId}_${mediaDriverIdNoDir()}")
             } else {
-                File(baseFileLocation, "aeron_$appId")
+                File(baseFileLocation, "$prefix$appId")
             }
             dir = aeronLogDirectory.absoluteFile
         }
