@@ -438,6 +438,30 @@ open class Client<CONNECTION : Connection>(
         reliable: Boolean = true)
     {
         // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
+        if ((config.enableIPv4 || config.enableIPv6) && remoteAddress != null) {
+            require(port1 != port2) { "port1 cannot be the same as port2" }
+            require(port1 > 0) { "port1 must be > 0" }
+            require(port2 > 0) { "port2 must be > 0" }
+            require(port1 < 65535) { "port1 must be < 65535" }
+            require(port2 < 65535) { "port2 must be < 65535" }
+        }
+
+        require(connectionTimeoutSec >= 0) { "connectionTimeoutSec '$connectionTimeoutSec' is invalid. It must be >=0" }
+
+        // only try to connect via IPv4 if we have a network interface that supports it!
+        if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
+            require(false) { "Unable to connect to the IPv4 address $remoteAddressPrettyString, there are no IPv4 interfaces available!" }
+        }
+
+        // only try to connect via IPv6 if we have a network interface that supports it!
+        if (remoteAddress is Inet6Address && !IPv6.isAvailable) {
+            require(false) { "Unable to connect to the IPv6 address $remoteAddressPrettyString, there are no IPv6 interfaces available!" }
+        }
+
+        if (remoteAddress != null && remoteAddress.isAnyLocalAddress) {
+            require(false) { "Cannot connect to $remoteAddressPrettyString It is an invalid address!" }
+        }
+
 
         // on the client, we must GUARANTEE that the disconnect/close completes before NEW connect begins.
         // we will know this if we are running inside an INTERNAL dispatch that is NOT the connect dispatcher!
@@ -456,15 +480,6 @@ open class Client<CONNECTION : Connection>(
             return
         }
 
-
-        if ((config.enableIPv4 || config.enableIPv6) && remoteAddress != null) {
-            require(port1 != port2) { "port1 cannot be the same as port2" }
-            require(port1 > 0) { "port1 must be > 0" }
-            require(port2 > 0) { "port2 must be > 0" }
-            require(port1 < 65535) { "port1 must be < 65535" }
-            require(port2 < 65535) { "port2 must be < 65535" }
-        }
-
         // the lifecycle of a client is the ENDPOINT (measured via the network event poller) and CONNECTION (measure from connection closed)
         if (!waitForClose()) {
             if (endpointIsRunning.value) {
@@ -477,23 +492,10 @@ open class Client<CONNECTION : Connection>(
 
         config as ClientConfiguration
 
-        require(connectionTimeoutSec >= 0) { "connectionTimeoutSec '$connectionTimeoutSec' is invalid. It must be >=0" }
 
         connection0 = null
 
-        // only try to connect via IPv4 if we have a network interface that supports it!
-        if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
-            require(false) { "Unable to connect to the IPv4 address $remoteAddressPrettyString, there are no IPv4 interfaces available!" }
-        }
 
-        // only try to connect via IPv6 if we have a network interface that supports it!
-        if (remoteAddress is Inet6Address && !IPv6.isAvailable) {
-            require(false) { "Unable to connect to the IPv6 address $remoteAddressPrettyString, there are no IPv6 interfaces available!" }
-        }
-
-        if (remoteAddress != null && remoteAddress.isAnyLocalAddress) {
-            require(false) { "Cannot connect to $remoteAddressPrettyString It is an invalid address!" }
-        }
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         // this also makes sure that the dispatchers are still active.
