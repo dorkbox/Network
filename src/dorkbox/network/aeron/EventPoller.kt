@@ -20,6 +20,7 @@ import dorkbox.bytes.ByteArrayWrapper
 import dorkbox.collections.ConcurrentIterator
 import dorkbox.network.Configuration
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.EventDispatcher
 import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
@@ -190,6 +191,14 @@ internal class EventPoller {
      * Waits for all events to finish running
      */
     suspend fun close(logger: KLogger, endPoint: EndPoint<*>) {
+        // make sure that we close on the CLOSE dispatcher if we run on the poll dispatcher!
+        if (inDispatch()) {
+            EventDispatcher.CLOSE.launch {
+                close(logger, endPoint)
+            }
+            return
+        }
+
         mutex.withLock {
             logger.debug { "Requesting close for the Network Event Poller..." }
 
