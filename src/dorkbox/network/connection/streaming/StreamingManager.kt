@@ -27,6 +27,7 @@ import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.exceptions.StreamingException
 import dorkbox.network.serialization.AeronInput
@@ -516,7 +517,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 val reusedPayloadSize = headerSize + varIntSize + amountToSend
 
                 // write out the payload
-                endPoint.dataSend(
+                val success = endPoint.dataSend(
                     publication = publication,
                     internalBuffer = originalBuffer,
                     bufferClaim = kryo.bufferClaim,
@@ -527,6 +528,11 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                     abortEarly = false
                 )
 
+                if (!success) {
+                    // critical errors have an exception. Normal "the connection is closed" do not.
+                    return false
+                }
+
                 payloadSent += amountToSend
             } catch (e: Exception) {
                 val failMessage = StreamingControl(StreamingState.FAILED, false, streamSessionId)
@@ -535,14 +541,11 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 if (!failSent) {
                     // something SUPER wrong!
                     // more critical error sending the message. we shouldn't retry or anything.
-                    val errorMessage = "[${publication.sessionId()}] Abnormal failure while streaming content."
+                    val errorMessage = "[${publication.sessionId()}] Abnormal failure with exception while streaming content."
 
                     // either client or server. No other choices. We create an exception, because it's more useful!
-                    val exception = endPoint.newException(errorMessage)
-
-                    // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
-                    // where we see who is calling "send()"
-                    exception.cleanStackTrace(3)
+                    val exception = endPoint.newException(errorMessage, e)
+                    exception.cleanAllStackTrace()
                     throw exception
                 } else {
                     // send it up!
