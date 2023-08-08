@@ -611,10 +611,11 @@ open class Client<CONNECTION : Connection>(
                 // once we're done with the connection process, stop trying
                 break
             } catch (e: ClientRetryException) {
+                val inSeconds = TimeUnit.NANOSECONDS.toSeconds(handshakeTimeoutNs)
                 val message = if (isIPC) {
-                    "Unable to connect to IPC, retrying..."
+                    "Unable to connect to IPC in $inSeconds seconds, retrying..."
                 } else {
-                    "Unable to connect to $remoteAddressPrettyString ($port1|$port2), retrying..."
+                    "Unable to connect to $remoteAddressPrettyString ($port1|$port2) in $inSeconds seconds, retrying..."
                 }
 
                 if (logger.isTraceEnabled) {
