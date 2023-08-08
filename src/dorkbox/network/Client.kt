@@ -465,8 +465,7 @@ open class Client<CONNECTION : Connection>(
 
         // on the client, we must GUARANTEE that the disconnect/close completes before NEW connect begins.
         // we will know this if we are running inside an INTERNAL dispatch that is NOT the connect dispatcher!
-        val currentDispatcher = EventDispatcher.getCurrentEvent()
-        if (currentDispatcher != null && currentDispatcher != EventDispatcher.CONNECT) {
+        if (EventDispatcher.getCurrentEvent() != EventDispatcher.CONNECT) {
             EventDispatcher.CONNECT.launch {
                 connect(
                     remoteAddress = remoteAddress,
