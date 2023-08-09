@@ -860,7 +860,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         logger.debug { "Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'" }
 
         // reset our contextDefine value, so that this configuration can safely be reused
-        config.contextDefined = false
+        endPoint?.config?.contextDefined = false
 
         // actually remove it, since we've passed all the checks to guarantee it's closed...
         AeronDriver.driverConfigurations.remove(driverId)
