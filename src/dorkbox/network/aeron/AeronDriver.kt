@@ -523,7 +523,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      *  @return true if we are successfully connected to the aeron client
      */
-    suspend fun start()= lock.withLock {
+    suspend fun start()= lock.withReentrantLock {
         internal.start(logger)
     }
 
@@ -812,7 +812,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      * @return true if the driver was successfully stopped.
      */
-    suspend fun close(): Boolean = lock.withLock {
+    suspend fun close(): Boolean = lock.withReentrantLock {
         if (logEverything) {
             internal.close(endPoint, logger)
         } else {
