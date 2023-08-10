@@ -757,7 +757,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      * @return true if the driver was successfully stopped.
      */
     suspend fun closeIfSingle(): Boolean = lock.withLock {
-        if (!isInUse()) {
+        if (!isInUse(endPoint)) {
             if (logEverything) {
                 internal.close(endPoint, logger)
             } else {
