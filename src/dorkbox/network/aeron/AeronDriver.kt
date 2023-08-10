@@ -135,7 +135,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
             // we have INSTANCE of the "wrapper" AeronDriver, because we want to be able to have references to the logger when doing things,
             // however - the code that actually does stuff is a "singleton" in regard to an aeron configuration
             return lock.withLock {
-                driverConfigurations.get(mediaDriverConfig.id) != null
+                driverConfigurations.get(mediaDriverConfig.mediaDriverId()) != null
             }
         }
 
