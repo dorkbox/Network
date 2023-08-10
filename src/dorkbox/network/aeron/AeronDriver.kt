@@ -68,7 +68,7 @@ fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, por
 /**
  * Class for managing the Aeron+Media drivers
  */
-class AeronDriver private constructor(config: Configuration, val logger: KLogger, val endPoint: EndPoint<*>?) {
+class AeronDriver constructor(config: Configuration, val logger: KLogger, val endPoint: EndPoint<*>?) {
 
     companion object {
         /**

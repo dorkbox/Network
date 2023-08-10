@@ -234,7 +234,7 @@ class DisconnectReconnectTest : BaseTest() {
         val log = KotlinLogging.logger("DCUnitTest")
         // NOTE: once a config is assigned to a driver, the config cannot be changed
         val aeronDriver = runBlocking {
-            val driver = AeronDriver(serverConfig(), log)
+            val driver = AeronDriver(serverConfig(), log, null)
             driver.start()
             driver
         }

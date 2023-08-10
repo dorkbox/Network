@@ -46,7 +46,7 @@ class AeronPubSubTest : BaseTest() {
                 conf.enableIPv6 = false
                 conf.uniqueAeronDirectory = true
 
-                val driver = AeronDriver(conf, log)
+                val driver = AeronDriver(conf, log, null)
                 driver.start()
                 driver
             }
@@ -60,7 +60,7 @@ class AeronPubSubTest : BaseTest() {
                 conf.enableIPv6 = false
                 conf.uniqueAeronDirectory = true
 
-                val driver = AeronDriver(conf, log)
+                val driver = AeronDriver(conf, log, null)
                 driver.start()
 
                 clientDrivers.add(driver)
@@ -131,7 +131,7 @@ class AeronPubSubTest : BaseTest() {
                 conf.enableIPv6 = false
                 conf.uniqueAeronDirectory = true
 
-                val driver = AeronDriver(conf, log)
+                val driver = AeronDriver(conf, log, null)
                 driver.start()
                 driver
             }
@@ -145,7 +145,7 @@ class AeronPubSubTest : BaseTest() {
                 conf.enableIPv6 = false
                 conf.uniqueAeronDirectory = true
 
-                val driver = AeronDriver(conf, log)
+                val driver = AeronDriver(conf, log, null)
                 driver.start()
 
                 clientDrivers.add(driver)
