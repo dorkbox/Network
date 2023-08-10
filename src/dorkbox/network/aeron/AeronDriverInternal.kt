@@ -746,6 +746,12 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             return true
         }
 
+        // ignore the extra driver checks, because in SOME situations, when trying to reconnect upon an error, the
+        // driver gets into a bad state. When this happens, we cannot rely on the driver stat info!
+        if (criticalDriverError) {
+            return false
+        }
+
         // check to see if we ALREADY have loaded this location.
         // null or empty snapshot means that this location is currently unused
         // >0 can also happen because the location is old. It's not running, but still has info because it hasn't been cleaned up yet

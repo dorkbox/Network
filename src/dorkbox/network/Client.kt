@@ -840,6 +840,15 @@ open class Client<CONNECTION : Connection>(
             }
         },
         onShutdown = {
+            val criticalDriverError = aeronDriver.criticalDriverError
+            val endpoints: Array<EndPoint<*>> = if (criticalDriverError) {
+                    aeronDriver.internal.endPointUsages.toTypedArray()
+                } else {
+                    @Suppress("UNCHECKED_CAST")
+                    arrayOfNulls<EndPoint<*>?>(0) as Array<EndPoint<*>>
+                }
+
+
             // this can be closed when the connection is remotely closed in ADDITION to manually closing
             logger.debug { "Client event dispatch closing..." }
 

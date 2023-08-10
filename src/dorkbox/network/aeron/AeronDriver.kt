@@ -653,7 +653,18 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      */
     suspend fun closed() = internal.closed()
 
-    suspend fun isInUse(): Boolean = internal.isInUse(logger)
+    /**
+     * Checks to see if there are any critical network errors (for example, a VPN connection getting disconnected while running)
+     */
+    var criticalDriverError: Boolean
+        get() {
+            return internal.criticalDriverError
+        }
+        set(value) {
+            internal.criticalDriverError = value
+        }
+
+    suspend fun isInUse(endPoint: EndPoint<*>?): Boolean = internal.isInUse(endPoint, logger)
 
     /**
      * @return the aeron media driver log file for a specific publication.
