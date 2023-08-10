@@ -203,7 +203,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     }
 
 
-    suspend fun addError(function: Throwable.() -> Unit) {
+    fun addError(function: Throwable.() -> Unit) = runBlocking {
         // always add this to the global one
         onError(function)
 
