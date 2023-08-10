@@ -261,20 +261,41 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
         hook = Thread {
             runBlocking {
-                close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = true)
+                close(
+                    closeEverything = true, releaseWaitingThreads = true
+                )
             }
         }
 
         Runtime.getRuntime().addShutdownHook(hook)
     }
 
-    internal fun isServer(function: Server<CONNECTION>.() -> Unit) {
+
+    internal val typeName: String
+        get() {
+            return if (type == Server::class.java) {
+                "server"
+            } else {
+                "client"
+            }
+        }
+
+    internal val otherTypeName: String
+        get() {
+            return if (type == Server::class.java) {
+                "client"
+            } else {
+                "server"
+            }
+        }
+
+    internal fun ifServer(function: Server<CONNECTION>.() -> Unit) {
         if (type == Server::class.java) {
             function(this as Server<CONNECTION>)
         }
     }
 
-    internal fun isClient(function: Client<CONNECTION>.() -> Unit) {
+    internal fun ifClient(function: Client<CONNECTION>.() -> Unit) {
         if (type == Client::class.java) {
             function(this as Client<CONNECTION>)
         }
@@ -298,6 +319,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         // on the first run, we depend on these to be 0
         shutdownLatch = dorkbox.util.sync.CountDownLatch(1)
         pollerClosedLatch = dorkbox.util.sync.CountDownLatch(1)
+        closeLatch = dorkbox.util.sync.CountDownLatch(1)
+
         endpointIsRunning.lazySet(true)
         shutdown = false
         shutdownEventPoller = false
@@ -567,8 +590,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             is DisconnectMessage -> {
                 // NOTE: This MUST be on a new co-routine (this is...)
                 runBlocking {
-                    connection.close(false)
                     logger.debug { "Received disconnect message from $otherTypeName" }
+                    connection.close(sendDisconnectMessage = false,
+                                     notifyDisconnect = true)
                 }
             }
 
@@ -759,6 +783,22 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         return shutdown
     }
 
+    /**
+     * Waits for this endpoint to be internally shutdown, but not 100% fully closed (which only happens manually)
+     *
+     * @return true if the wait completed before the timeout
+     */
+    internal suspend fun waitForEndpointShutdown(timeoutMS: Long = 0L): Boolean {
+        return if (timeoutMS > 0) {
+            pollerClosedLatch.await(timeoutMS, TimeUnit.MILLISECONDS) &&
+            shutdownLatch.await(timeoutMS, TimeUnit.MILLISECONDS)
+        } else {
+            pollerClosedLatch.await()
+            shutdownLatch.await()
+            true
+        }
+    }
+
 
     /**
      * Waits for this endpoint to be closed
@@ -768,7 +808,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     }
 
     /**
-     * Waits for this endpoint to be closed.
+     * Waits for this endpoint to be fully closed. A disconnect from the network (or remote endpoint) will not signal this to continue.
      *
      * @return true if the wait completed before the timeout
      */
@@ -776,13 +816,14 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         // if we are restarting the network state, we want to continue to wait for a proper close event.
         // when shutting down, it can take up to 5 seconds to fully register as "shutdown"
 
-        return if (timeoutMS > 0) {
-            pollerClosedLatch.await(timeoutMS, TimeUnit.MILLISECONDS) && shutdownLatch.await(timeoutMS, TimeUnit.MILLISECONDS)
+        val success = if (timeoutMS > 0) {
+            closeLatch.await(timeoutMS, TimeUnit.MILLISECONDS)
         } else {
-            pollerClosedLatch.await()
-            shutdownLatch.await()
+            closeLatch.await()
             true
         }
+
+        return success
     }
 
 
@@ -799,10 +840,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      */
     internal suspend fun close(
         closeEverything: Boolean,
-        initiatedByClientClose: Boolean,
-        initiatedByShutdown: Boolean)
+        releaseWaitingThreads: Boolean)
     {
-        logger.debug { "Requesting close: closeEverything=$closeEverything, initiatedByClientClose=$initiatedByClientClose, initiatedByShutdown=$initiatedByShutdown" }
+        logger.debug { "Requesting close: closeEverything=$closeEverything, releaseWaitingThreads=$releaseWaitingThreads" }
 
         // 1) endpoints can call close()
         // 2) client can close the endpoint if the connection is D/C from aeron (and the endpoint was not closed manually)
@@ -824,10 +864,11 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             return
         }
 
-        if (!shutdownPreviouslyStarted && !initiatedByShutdown) {
+        if (!shutdownPreviouslyStarted && Thread.currentThread() != hook) {
             try {
                 Runtime.getRuntime().removeShutdownHook(hook)
             } catch (ignored: Exception) {
+            } catch (ignored: RuntimeException) {
             }
         }
 
@@ -837,22 +878,27 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // always do this. It is OK to run this multiple times
             // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
             // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
-            logger.trace { "Closing ${connections.size()} via the close event" }
             connections.forEach {
-                it.closeImmediately(true)
+                it.closeImmediately(sendDisconnectMessage = true,
+                                    notifyDisconnect = true)
             }
 
-            // don't do these things if we are "closed" from a client connection disconnect
-            if (closeEverything && !initiatedByClientClose) {
-                // THIS WILL SHUT DOWN THE EVENT POLLER IMMEDIATELY! BUT IN AN ASYNC MANNER!
-                shutdownEventPoller = true
-                // if we close the poller AND listener manager too quickly, events will not get published
-                pollerClosedLatch.await()
-            }
+
+
+            // this closes the endpoint specific instance running in the poller
+
+            // THIS WILL SHUT DOWN THE EVENT POLLER IMMEDIATELY! BUT IN AN ASYNC MANNER!
+            shutdownEventPoller = true
+
+            // if we close the poller AND listener manager too quickly, events will not get published
+            pollerClosedLatch.await()
 
             // this will ONLY close the event dispatcher if ALL endpoints have closed it.
             // when an endpoint closes, the poll-loop shuts down, and removes itself from the list of poll actions that need to be performed.
             networkEventPoller.close(logger, this)
+
+
+
 
             // Connections MUST be closed first, because we want to make sure that no RMI messages can be received
             // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
@@ -870,15 +916,22 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
                     // Remove from memory the data from the back-end storage
                     storage.close()
-
-                    aeronDriver.close()
                 }
 
+                    aeronDriver.close()
+
+                    shutdown = true
+
                 // the shutdown here must be in the launchSequentially lambda, this way we can guarantee the driver is closed before we move on
-                shutdown = true
                 shutdownLatch.countDown()
                 shutdownInProgress.lazySet(false)
-                logger.info { "Done shutting down endpoint." }
+
+                if (releaseWaitingThreads) {
+                    logger.trace { "Counting down the close latch..." }
+                    closeLatch.countDown()
+                }
+
+                logger.info { "Done shutting down the endpoint." }
             }
         }
     }

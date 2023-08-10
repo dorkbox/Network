@@ -487,8 +487,10 @@ open class Client<CONNECTION : Connection>(
             return
         }
 
+
         // the lifecycle of a client is the ENDPOINT (measured via the network event poller) and CONNECTION (measure from connection closed)
-        if (!waitForClose()) {
+        // if we are reconnecting, then we do not want to wait for the ENDPOINT to close first!
+        if (!waitForEndpointShutdown()) {
             if (endpointIsRunning.value) {
                 listenerManager.notifyError(ServerException("Unable to start, the client is already running!"))
             } else {
@@ -952,7 +954,9 @@ open class Client<CONNECTION : Connection>(
      */
     fun close(closeEverything: Boolean = true) {
         runBlocking {
-            close(closeEverything = closeEverything, initiatedByClientClose = false, initiatedByShutdown = false)
+            close(
+                closeEverything = closeEverything, releaseWaitingThreads = true
+            )
         }
     }
 

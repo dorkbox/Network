@@ -225,7 +225,7 @@ open class Server<CONNECTION : Connection>(
             return@runBlocking
         }
 
-        if (!waitForClose()) {
+        if (!waitForEndpointShutdown()) {
             listenerManager.notifyError(ServerException("Unable to start the server!"))
             return@runBlocking
         }
@@ -408,7 +408,9 @@ open class Server<CONNECTION : Connection>(
      */
     fun close(closeEverything: Boolean = true) {
         runBlocking {
-            close(closeEverything = closeEverything, initiatedByClientClose = false, initiatedByShutdown = false)
+            close(
+                closeEverything = closeEverything, releaseWaitingThreads = true
+            )
         }
     }
 
