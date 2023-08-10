@@ -237,7 +237,9 @@ internal class EventPoller {
         val wasRunning = running
 
         running = false
-        shutdownLatch.await()
+        while (!shutdownLatch.await(200)) {
+            logger.error { "Waiting for poller to close. It should not take this long" }
+        }
         configured = false
 
         if (wasRunning) {

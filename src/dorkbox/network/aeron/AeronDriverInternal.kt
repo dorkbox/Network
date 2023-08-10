@@ -76,7 +76,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         fun notifyError(exception: Throwable) {
             onErrorGlobalList.value.forEach {
                 try {
-                    driverLogger.error(exception) { "Aeron error!" }
                     it(exception)
                 } catch (t: Throwable) {
                     // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
@@ -420,7 +419,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
             if (!hasDelay) {
                 hasDelay = true
-                logger.debug { "Aeron Driver [$driverId]: Delaying creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+                logger.debug { "Aeron Driver [$driverId]: Delaying creation of ex-publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
             }
             // the publication has not ACTUALLY been created yet!
             delay(50)
@@ -480,7 +479,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription to aeron")
-            ex.cleanStackTraceInternal()
             throw ex
         }
 
@@ -554,7 +552,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
             val e = Exception("Aeron Driver [$driverId]: Error closing $name [$logInfo] :: sessionId=${publication.sessionId()}, streamId=${publication.streamId()}")
-            e.cleanStackTraceInternal()
             throw e
         }
 
@@ -596,7 +593,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
             val e = Exception("Aeron Driver [$driverId]: Error closing publication [$logInfo] :: sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}")
-            e.cleanStackTraceInternal()
             throw e
         }
 
@@ -848,7 +844,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             }
         }
 
-
+        // check to make sure it's actually deleted
         if (driverDirectory.isDirectory) {
             if (endPoint != null) {
                 endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory"))
@@ -864,6 +860,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         // actually remove it, since we've passed all the checks to guarantee it's closed...
         AeronDriver.driverConfigurations.remove(driverId)
+
+        logger.debug { "Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'" }
         closed = true
 
         return true

@@ -234,7 +234,8 @@ open class Server<CONNECTION : Connection>(
             startDriver()
             verifyState()
             initializeState()
-        } catch (e: Exception) {
+        }
+        catch (e: Exception) {
             resetOnError()
             listenerManager.notifyError(ServerException("Unable to start the server!", e))
             return@runBlocking
@@ -243,6 +244,9 @@ open class Server<CONNECTION : Connection>(
         this@Server.port1 = port1
         this@Server.port2 = port2
 
+        bind0()
+    }
+    private suspend fun bind0() {
         config as ServerConfiguration
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint

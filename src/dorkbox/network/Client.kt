@@ -219,7 +219,13 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientException if there are misc errors
      */
     @Suppress("DuplicatedCode")
-    suspend fun reconnect(connectionTimeoutSec: Int = this.connectionTimeoutSec) {
+    suspend fun reconnect() {
+        if (connectionTimeoutSec == 0) {
+            logger.info { "Reconnecting..." }
+        } else {
+            logger.info { "Reconnecting... (timeout in $connectionTimeoutSec seconds)" }
+        }
+
         connect(
             remoteAddress = address,
             remoteAddressString = addressString,

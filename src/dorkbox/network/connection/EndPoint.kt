@@ -295,6 +295,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * The client calls this every time it attempts a connection.
      */
     internal fun initializeState() {
+        // on the first run, we depend on these to be 0
         shutdownLatch = dorkbox.util.sync.CountDownLatch(1)
         pollerClosedLatch = dorkbox.util.sync.CountDownLatch(1)
         endpointIsRunning.lazySet(true)
@@ -561,6 +562,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 // NOTE: This MUST be on a new co-routine (this is...)
                 runBlocking {
                     connection.close(false)
+                    logger.debug { "Received disconnect message from $otherTypeName" }
                 }
             }
 
