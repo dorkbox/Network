@@ -38,7 +38,7 @@ internal class Handshaker<CONNECTION : Connection>(
     config: Configuration,
     serialization: Serialization<CONNECTION>,
     private val listenerManager: ListenerManager<CONNECTION>,
-    aeronDriver: AeronDriver,
+    val aeronDriver: AeronDriver,
     val newException: (String, Throwable?) -> Throwable
 ) {
     private val handshakeReadKryo: KryoReader<CONNECTION>
@@ -70,86 +70,14 @@ internal class Handshaker<CONNECTION : Connection>(
      * @return true if the message was successfully sent by aeron
      */
     @Suppress("DuplicatedCode")
-    internal suspend inline fun writeMessage(publication: Publication, logInfo: String, message: HandshakeMessage) {
+    internal suspend inline fun writeMessage(publication: Publication, logInfo: String, message: HandshakeMessage): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace { "[$logInfo] (${message.connectKey}) send HS: $message" }
 
-
         try {
             val buffer = handshakeWriteKryo.write(message)
-            val objectSize = buffer.position()
-            val internalBuffer = buffer.internalBuffer
 
-            var timeoutInNanos = 0L
-            var startTime = 0L
-
-            var result: Long
-            while (true) {
-                result = publication.offer(internalBuffer, 0, objectSize)
-                if (result >= 0) {
-                    // success!
-                    return
-                }
-
-                /**
-                 * Since the publication is not connected, we weren't able to send data to the remote endpoint.
-                 *
-                 * According to Aeron Docs, Pubs and Subs can "come and go", whatever that means. We just want to make sure that we
-                 * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
-                 */
-                if (result == Publication.NOT_CONNECTED) {
-                    if (timeoutInNanos == 0L) {
-                        timeoutInNanos = writeTimeoutNS
-                        startTime = System.nanoTime()
-                    }
-
-                    if (System.nanoTime() - startTime < timeoutInNanos) {
-                        // we should retry.
-                        handshakeSendIdleStrategy.idle()
-                        continue
-                    } else if (publication.isConnected) {
-                        // more critical error sending the message. we shouldn't retry or anything.
-                        // this exception will be a ClientException or a ServerException
-                        val exception = newException(
-                            "[$logInfo] Error sending message. (Connection in non-connected state longer than linger timeout. ${
-                                AeronDriver.errorCodeName(result)
-                            })",
-                            null
-                        )
-                        exception.cleanStackTraceInternal()
-                        listenerManager.notifyError(exception)
-                        throw exception
-                    }
-                    else {
-                        // publication was actually closed, so no bother throwing an error
-                        return
-                    }
-                }
-
-                /**
-                 * The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
-                 *  val NOT_CONNECTED: Long = -1
-                 *
-                 * The offer failed due to back pressure from the subscribers preventing further transmission.
-                 *  val BACK_PRESSURED: Long = -2
-                 *
-                 * The offer failed due to an administration action and should be retried.
-                 * The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
-                 *  val ADMIN_ACTION: Long = -3
-                 */
-                if (result >= Publication.ADMIN_ACTION) {
-                    // we should retry.
-                    handshakeSendIdleStrategy.idle()
-                    continue
-                }
-
-                // more critical error sending the message. we shouldn't retry or anything.
-                // this exception will be a ClientException or a ServerException
-                val exception = newException("[$logInfo] Error sending handshake message. $message (${AeronDriver.errorCodeName(result)})", null)
-                exception.cleanStackTraceInternal()
-                listenerManager.notifyError(exception)
-                throw exception
-            }
+            return aeronDriver.send(publication, buffer, logInfo, listenerManager, handshakeSendIdleStrategy)
         } catch (e: Exception) {
             if (e is ClientException || e is ServerException) {
                 throw e

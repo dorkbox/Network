@@ -48,7 +48,7 @@ import java.util.*
  * @throws ClientTimedOutException if we cannot connect to the server in the designated time
  */
 internal class ClientHandshakeDriver(
-    private val aeronDriver: AeronDriver,
+    val aeronDriver: AeronDriver,
     val pubSub: PubSub,
     private val logInfo: String,
     val details: String

@@ -502,7 +502,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                         )
                     }
                 } else {
-                    dataSend(publication, internalBuffer, bufferClaim, 0, objectSize, sendIdleStrategy, connection, abortEarly)
+                    aeronDriver.send(publication, internalBuffer, bufferClaim, 0, objectSize, sendIdleStrategy, connection, abortEarly, listenerManager)
                 }
             }
         } catch (e: Throwable) {
@@ -541,7 +541,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         val internalBuffer = buffer.internalBuffer
         val bufferClaim = kryo.bufferClaim
 
-        return dataSend(publication, internalBuffer, bufferClaim, 0, objectSize, sendIdleStrategy, connection, false)
+        return aeronDriver.send(publication, internalBuffer, bufferClaim, 0, objectSize, sendIdleStrategy, connection, false, listenerManager)
     }
 
     /**
@@ -666,135 +666,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             processMessage(message, connection, readKryo)
         } catch (e: Exception) {
             listenerManager.notifyError(connection, newException("Error de-serializing message", e))
-        }
-    }
-
-    /**
-     * NOTE: This cannot be on a coroutine, because our kryo instances are NOT threadsafe!
-     *
-     * the actual bits that send data on the network.
-     *
-     * There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB.
-     * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
-     * properties from failure and streams with mechanical sympathy.
-     *
-     * This can be overridden if you want to customize exactly how data is sent on the network
-     *
-     * @param publication the connection specific publication
-     * @param internalBuffer the internal buffer that will be copied to the Aeron network driver
-     * @param offset the offset in the internal buffer at which to start copying bytes
-     * @param objectSize the number of bytes to copy (starting at the offset)
-     * @param connection the connection object
-     * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
-     */
-    internal suspend fun dataSend(
-        publication: Publication,
-        internalBuffer: MutableDirectBuffer,
-        bufferClaim: BufferClaim,
-        offset: Int,
-        objectSize: Int,
-        sendIdleStrategy: CoroutineIdleStrategy,
-        connection: Connection,
-        abortEarly: Boolean
-    ): Boolean {
-        var timeoutInNanos = 0L
-        var startTime = 0L
-
-        var result: Long
-        while (true) {
-            // The maximum claimable length is given by the maxPayloadLength() function, which is the MTU length less header (with defaults this is 1,376 bytes).
-            result = publication.tryClaim(objectSize, bufferClaim)
-            if (result >= 0) {
-                // success!
-                try {
-                    // both .offer and .putBytes add bytes to the underlying termBuffer -- HOWEVER, putBytes is faster as there are no
-                    // extra checks performed BECAUSE we have to do our own data fragmentation management.
-                    // It doesn't make sense to use `.offer`, which ALSO has its own fragmentation handling (which is extra overhead for us)
-                    bufferClaim.buffer().putBytes(DataHeaderFlyweight.HEADER_LENGTH, internalBuffer, offset, objectSize)
-                } finally {
-                    // must commit() or abort() before the unblock timeout (default 15 seconds) occurs.
-                    bufferClaim.commit()
-                }
-
-                return true
-            }
-
-            /**
-             * Since the publication is not connected, we weren't able to send data to the remote endpoint.
-             *
-             * According to Aeron Docs, Pubs and Subs can "come and go", whatever that means. We just want to make sure that we
-             * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
-             */
-            if (result == Publication.NOT_CONNECTED) {
-                if (abortEarly) {
-                    listenerManager.notifyError(newException("[${publication.sessionId()}] Unable to send message. (Connection in non-connected state, aborted attempt! ${AeronDriver.errorCodeName(result)})"))
-                    return false
-                }
-
-                if (timeoutInNanos == 0L) {
-                    timeoutInNanos = (aeronDriver.lingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
-                    startTime = System.nanoTime()
-                }
-
-                if (System.nanoTime() - startTime < timeoutInNanos) {
-                    // we should retry.
-                    sendIdleStrategy.idle()
-                    continue
-                } else if (publication.isConnected) {
-                    // more critical error sending the message. we shouldn't retry or anything.
-                    val errorMessage = "[${publication.sessionId()}] Error sending message. (Connection in non-connected state longer than linger timeout. ${AeronDriver.errorCodeName(result)})"
-
-                    // either client or server. No other choices. We create an exception, because it's more useful!
-                    val exception = newException(errorMessage)
-
-                    // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
-                    // where we see who is calling "send()"
-                    exception.cleanStackTrace(3)
-                    return false
-                } else {
-                    // publication was actually closed, so no bother throwing an error
-                    return false
-                }
-            }
-
-            /**
-             * The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
-             *  val NOT_CONNECTED: Long = -1
-             *
-             * The offer failed due to back pressure from the subscribers preventing further transmission.
-             *  val BACK_PRESSURED: Long = -2
-             *
-             * The offer failed due to an administration action and should be retried.
-             * The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
-             *  val ADMIN_ACTION: Long = -3
-             */
-            if (result >= Publication.ADMIN_ACTION) {
-                // we should retry, BUT we want to suspend ANYONE ELSE trying to write at the same time!
-                sendIdleStrategy.idle()
-                continue
-            }
-
-
-            if (result == Publication.CLOSED && connection.isClosed()) {
-                // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
-                // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
-                // send the message.
-                // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
-
-                listenerManager.notifyError(newException("[${publication.sessionId()}] Unable to send message. (Connection in closed, aborted attempt! ${AeronDriver.errorCodeName(result)})"))
-                return false
-            }
-
-            // more critical error sending the message. we shouldn't retry or anything.
-            val errorMessage = "[${publication.sessionId()}] Error sending message. (${AeronDriver.errorCodeName(result)})"
-
-            // either client or server. No other choices. We create an exception, because it's more useful!
-            val exception = newException(errorMessage)
-
-            // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
-            // where we see who is calling "send()"
-            exception.cleanStackTrace(3)
-            return false
         }
     }
 

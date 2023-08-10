@@ -454,7 +454,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
             // we reuse/recycle objects, so the payload size is not EXACTLY what is specified
             val reusedPayloadSize = headerSize + varIntSize + sizeOfBlockData
 
-            val success = endPoint.dataSend(
+            val success = endPoint.aeronDriver.send(
                 publication = publication,
                 internalBuffer = blockBuffer.internalBuffer,
                 bufferClaim = kryo.bufferClaim,
@@ -462,7 +462,8 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 objectSize = reusedPayloadSize,
                 sendIdleStrategy = sendIdleStrategy,
                 connection = connection,
-                abortEarly = false
+                abortEarly = false,
+                listenerManager = endPoint.listenerManager
             )
 
             if (!success) {
@@ -517,7 +518,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 val reusedPayloadSize = headerSize + varIntSize + amountToSend
 
                 // write out the payload
-                val success = endPoint.dataSend(
+                val success = endPoint.aeronDriver.send(
                     publication = publication,
                     internalBuffer = originalBuffer,
                     bufferClaim = kryo.bufferClaim,
@@ -525,7 +526,8 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                     objectSize = reusedPayloadSize,
                     sendIdleStrategy = sendIdleStrategy,
                     connection = connection,
-                    abortEarly = false
+                    abortEarly = false,
+                    listenerManager = endPoint.listenerManager
                 )
 
                 if (!success) {
@@ -664,7 +666,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
             // we reuse/recycle objects, so the payload size is not EXACTLY what is specified
             val reusedPayloadSize = headerSize + varIntSize + sizeOfBlockData
 
-            val success = endPoint.dataSend(
+            val success = endPoint.aeronDriver.send(
                 publication = publication,
                 internalBuffer = blockBuffer,
                 bufferClaim = kryo.bufferClaim,
@@ -672,7 +674,8 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 objectSize = reusedPayloadSize,
                 sendIdleStrategy = sendIdleStrategy,
                 connection = connection,
-                abortEarly = false
+                abortEarly = false,
+                listenerManager = endPoint.listenerManager
             )
 
             if (!success) {
@@ -696,7 +699,8 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
         }
 
 
-
+        val aeronDriver = endPoint.aeronDriver
+        val listenerManager = endPoint.listenerManager
 
         // now send the block as fast as possible. Aeron will have us back-off if we send too quickly
         while (remainingPayload > 0) {
@@ -742,15 +746,16 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 val reusedPayloadSize = headerSize + varIntSize + amountToSend
 
                 // write out the payload
-                endPoint.dataSend(
-                    publication,
-                    blockBuffer,
-                    kryo.bufferClaim,
-                    0,
-                    reusedPayloadSize,
-                    sendIdleStrategy,
-                    connection,
-                    false
+                aeronDriver.send(
+                    publication = publication,
+                    internalBuffer = blockBuffer,
+                    bufferClaim = kryo.bufferClaim,
+                    offset = 0,
+                    objectSize = reusedPayloadSize,
+                    sendIdleStrategy = sendIdleStrategy,
+                    connection = connection,
+                    abortEarly = false,
+                    listenerManager = listenerManager
                 )
 
                 payloadSent += amountToSend
