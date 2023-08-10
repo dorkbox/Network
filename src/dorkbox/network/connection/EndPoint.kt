@@ -231,13 +231,13 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             }
         }
 
-
-        try {
+        aeronDriver = try {
             @Suppress("LeakingThis")
-            aeronDriver = AeronDriver(this)
+            AeronDriver.new(this@EndPoint)
         } catch (e: Exception) {
-            listenerManager.notifyError(Exception("Error initializing endpoint", e))
-            throw e
+            val exception = Exception("Error initializing endpoint", e)
+            listenerManager.notifyError(exception)
+            throw exception
         }
 
         rmiConnectionSupport = if (type.javaClass == Server::class.java) {
@@ -334,15 +334,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * @throws Exception if there is a problem starting the media driver
      */
     suspend fun startDriver() {
-        if (aeronDriver.closed()) {
-            // Only starts the media driver if we are NOT already running!
-            try {
-                aeronDriver = AeronDriver(this)
-            } catch (e: Exception) {
-                throw newException("Error initializing aeron driver", e)
-            }
-        }
-
+        // recreate the driver if we have previously closed. If we have never run, this does nothing
+        aeronDriver = aeronDriver.newIfClosed()
         aeronDriver.start()
     }
 

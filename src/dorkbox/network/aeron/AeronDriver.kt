@@ -70,10 +70,6 @@ fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, por
  */
 class AeronDriver private constructor(config: Configuration, val logger: KLogger, val endPoint: EndPoint<*>?) {
 
-    constructor(config: Configuration, logger: KLogger) : this(config, logger, null)
-
-    constructor(endPoint: EndPoint<*>) : this(endPoint.config, endPoint.logger, endPoint)
-
     companion object {
         /**
          * Identifier for invalid sessions. This must be < RESERVED_SESSION_ID_LOW
@@ -101,6 +97,21 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         // have to keep track of configurations and drivers, as we do not want to start the same media driver configuration multiple times (this causes problems!)
         internal val driverConfigurations = IntMap<AeronDriverInternal>(4)
 
+        fun new(endPoint: EndPoint<*>): AeronDriver {
+            var driver: AeronDriver? = null
+            runBlocking {
+                withLock {
+                    driver = AeronDriver(endPoint.config, endPoint.logger, endPoint)
+                }
+            }
+
+            return driver!!
+        }
+
+
+        suspend fun withLock(action: suspend () -> Unit) {
+            lock.withReentrantLock(action)
+        }
 
         /**
          * Ensures that an endpoint (using the specified configuration) is NO LONGER running.
@@ -112,8 +123,11 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
                 return true
             }
 
-            val stopped = AeronDriver(configuration, logger, null).use {
-                it.ensureStopped(timeout, 500)
+            var stopped = false
+            withLock {
+                stopped = AeronDriver(configuration, logger, null).use {
+                    it.ensureStopped(timeout, 500)
+                }
             }
 
             // hacky, but necessary for multiple checks
@@ -145,8 +159,11 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
          * @return true if the media driver is active and running
          */
         suspend fun isRunning(configuration: Configuration, logger: KLogger): Boolean {
-            val running = AeronDriver(configuration, logger).use {
-                it.isRunning()
+            var running = false
+            withLock {
+                running = AeronDriver(configuration, logger, null).use {
+                    it.isRunning()
+                }
             }
 
             return running
@@ -468,35 +485,34 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         // assign the driver for this configuration. THIS IS GLOBAL for a JVM, because for a specific configuration, aeron only needs to be initialized ONCE.
         // we have INSTANCE of the "wrapper" AeronDriver, because we want to be able to have references to the logger when doing things,
         // however - the code that actually does stuff is a "singleton" in regard to an aeron configuration
-        internal = runBlocking {
-            lock.withLock {
-                val driverId = mediaDriverConfig.id
+        val driverId = mediaDriverConfig.mediaDriverId()
 
-                var driver = driverConfigurations.get(driverId)
-                if (driver == null) {
-                    driver = AeronDriverInternal(endPoint, mediaDriverConfig, logger)
+        logger.error { "Aeron Driver [$driverId]: Initializing..." }
+        val aeronDriver = driverConfigurations.get(driverId)
+        if (aeronDriver == null) {
+            val driver = AeronDriverInternal(endPoint, mediaDriverConfig, logger)
 
-                    driverConfigurations.put(driverId, driver)
+            driverConfigurations.put(driverId, driver)
 
-                    // register a logger so that we are notified when there is an error in Aeron
-                    driver.addError {
-                        logger.error(this) { "Aeron Driver [$driverId]: error!" }
-                    }
-
-                    if (logEverything) {
-                        logger.debug { "Aeron Driver [$driverId]: Creating at '${driver.aeronDirectory}'" }
-                    }
-                } else {
-                    if (logEverything) {
-                        logger.debug { "Aeron Driver [$driverId]: Reusing driver" }
-                    }
-
-                    // assign our endpoint to the driver
-                    driver.addEndpoint(endPoint)
-                }
-
-                driver
+            // register a logger so that we are notified when there is an error in Aeron
+            driver.addError {
+                logger.error(this) { "Aeron Driver [$driverId]: error!" }
             }
+
+            if (logEverything) {
+                logger.debug { "Aeron Driver [$driverId]: Creating at '${driver.aeronDirectory}'" }
+            }
+
+            internal = driver
+        } else {
+            if (logEverything) {
+                logger.debug { "Aeron Driver [$driverId]: Reusing driver" }
+            }
+
+            // assign our endpoint to the driver
+            aeronDriver.addEndpoint(endPoint)
+
+            internal = aeronDriver
         }
     }
 
@@ -1054,5 +1070,26 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
             listenerManager.notifyError(exception)
             return false
         }
+    }
+
+    suspend fun newIfClosed(): AeronDriver {
+        endPoint!!
+
+        var driver: AeronDriver? = null
+
+        withLock {
+            driver = if (closed()) {
+                // Only starts the media driver if we are NOT already running!
+                try {
+                    AeronDriver(endPoint.config, endPoint.logger, endPoint)
+                } catch (e: Exception) {
+                    throw endPoint.newException("Error initializing aeron driver", e)
+                }
+            } else {
+                this
+            }
+        }
+
+        return driver!!
     }
 }
