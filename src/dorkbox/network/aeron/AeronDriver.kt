@@ -164,7 +164,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
                 driverConfigurations.forEach { entry ->
                     val driver = entry.value
-                    val closed = if (traceEnabled) driver.isInUse(logger) else driver.isRunning()
+                    val closed = if (traceEnabled) driver.isInUse(null, logger) else driver.isRunning()
 
                     if (closed) {
                         logger.error { "Aeron Driver [${driver.driverId}]: still running during check (${driver.aeronDirectory})" }
@@ -176,7 +176,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
                     // this is already checked if we are in trace mode.
                     driverConfigurations.forEach { entry ->
                         val driver = entry.value
-                        if (driver.isInUse(logger)) {
+                        if (driver.isInUse(null, logger)) {
                             logger.error { "Aeron Driver [${driver.driverId}]: still in use during check (${driver.aeronDirectory})" }
                             return@withLock false
                         }

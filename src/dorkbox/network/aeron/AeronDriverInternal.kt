@@ -710,14 +710,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         return context.isRunning()
     }
 
-    suspend fun isInUse(logger: KLogger): Boolean {
+    suspend fun isInUse(endPoint: EndPoint<*>?, logger: KLogger): Boolean {
         // as many "sort-cuts" as we can for checking if the current Aeron Driver/client is still in use
         if (!isRunning()) {
             logger.trace { "Aeron Driver [$driverId]: not running" }
             return false
         }
 
-        val driverId = config.id
         if (registeredPublications.value > 0) {
             if (logger.isTraceEnabled) {
                 val elements = registeredPublicationsTrace.elements
@@ -740,7 +739,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             return true
         }
 
-        if (endPointUsages.isNotEmpty()) {
+        if (endPointUsages.size > 1 && !endPointUsages.contains(endPoint)) {
             logger.debug { "Aeron Driver [$driverId]: still referenced by ${endPointUsages.size} endpoints" }
             return true
         }
@@ -799,6 +798,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         if (isInUse(logger)) {
             logger.debug { "Aeron Driver [$driverId]: in use, not shutting down this instance." }
             return@withLock false
+        if (isInUse(endPoint, logger)) {
         }
 
         val removed = AeronDriver.driverConfigurations[driverId]
