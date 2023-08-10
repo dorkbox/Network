@@ -983,7 +983,7 @@ abstract class Configuration protected constructor() {
          *
          * This is because configs that are DIFFERENT, but have the same values MUST use the same aeron driver.
          */
-        val id: Int get() {
+        fun mediaDriverId(): Int {
             return config.mediaDriverId()
         }
 
