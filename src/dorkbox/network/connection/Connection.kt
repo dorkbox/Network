@@ -328,9 +328,12 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
         // NOTE: notifyDisconnect() is called inside closeAction()!!
+        if (notifyDisconnect) {
+            // if there are errors within the driver, we do not want to notify disconnect, as we will automatically reconnect.
+            endPoint.listenerManager.notifyDisconnect(this)
+        }
 
         endPoint.removeConnection(this)
-        endPoint.listenerManager.notifyDisconnect(this)
 
 
         val connection = this
