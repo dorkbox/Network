@@ -155,6 +155,12 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     @Volatile
     internal var pollerClosedLatch = dorkbox.util.sync.CountDownLatch(0)
 
+    /**
+     * This is only notified when endpoint.close() is called where EVERYTHING is to be closed.
+     */
+    @Volatile
+    private var closeLatch = dorkbox.util.sync.CountDownLatch(1)
+
 
     /**
      * Returns the storage used by this endpoint. This is the backing data structure for key/value pairs, and can be a database, file, etc
@@ -790,7 +796,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
 
     /**
-     * Waits for this endpoint to be closed
+     * Waits for this endpoint to be fully closed. A disconnect from the network (or remote endpoint) will not signal this to continue.
      */
     suspend fun waitForClose(): Boolean {
         return waitForClose(0L)
