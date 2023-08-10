@@ -25,11 +25,13 @@ import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.AeronDriverException
 import dorkbox.network.exceptions.ClientRetryException
+import dorkbox.util.withReentrantLock
 import io.aeron.*
 import io.aeron.driver.MediaDriver
 import io.aeron.status.ChannelEndpointStatus
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mu.KLogger
@@ -37,6 +39,9 @@ import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.BackoffIdleStrategy
 import java.io.File
+import java.io.IOException
+import java.net.BindException
+import java.net.SocketException
 import java.util.concurrent.*
 
 internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: Configuration.MediaDriverConfig, logger: KLogger) {

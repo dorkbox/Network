@@ -25,7 +25,6 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.EventPoller
-import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -43,15 +42,12 @@ import dorkbox.network.serialization.KryoWriter
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.serialization.SettingsStore
 import io.aeron.Publication
-import io.aeron.logbuffer.BufferClaim
 import io.aeron.logbuffer.Header
-import io.aeron.protocol.DataHeaderFlyweight
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
-import org.agrona.MutableDirectBuffer
 import java.util.concurrent.*
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
