@@ -166,7 +166,7 @@ dependencies {
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 
     // https://github.com/dorkbox
-    api("com.dorkbox:ByteUtilities:1.13")
+    api("com.dorkbox:ByteUtilities:1.14")
     api("com.dorkbox:ClassUtils:1.2")
     api("com.dorkbox:Collections:2.3")
     api("com.dorkbox:JNA:1.0")
@@ -175,7 +175,7 @@ dependencies {
     api("com.dorkbox:NetworkUtils:2.22")
     api("com.dorkbox:OS:1.6")
     api("com.dorkbox:Serializers:2.9")
-    api("com.dorkbox:Storage:1.6")
+    api("com.dorkbox:Storage:1.7")
     api("com.dorkbox:Updates:1.1")
     api("com.dorkbox:Utilities:1.44")
 
