@@ -79,14 +79,22 @@ internal class Handshaker<CONNECTION : Connection>(
 
             return aeronDriver.send(publication, buffer, logInfo, listenerManager, handshakeSendIdleStrategy)
         } catch (e: Exception) {
-            if (e is ClientException || e is ServerException) {
+            // if the driver is closed due to a network disconnect or a remote-client termination, we also must close the connection.
+            if (aeronDriver.criticalDriverError) {
+                // we had a HARD network crash/disconnect, we close the driver and then reconnect automatically
+                //NOTE: notifyDisconnect IS NOT CALLED!
+            }
+            else if (e is ClientException || e is ServerException) {
                 throw e
-            } else {
+            }
+            else {
                 val exception = newException("[$logInfo] Error serializing handshake message $message", e)
                 exception.cleanStackTrace(2) // 2 because we do not want to see the stack for the abstract `newException`
                 listenerManager.notifyError(exception)
                 throw exception
             }
+
+            return false
         } finally {
             handshakeSendIdleStrategy.reset()
         }

@@ -506,8 +506,14 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 }
             }
         } catch (e: Throwable) {
+            // if the driver is closed due to a network disconnect or a remote-client termination, we also must close the connection.
+            if (aeronDriver.criticalDriverError) {
+                // we had a HARD network crash/disconnect, we close the driver and then reconnect automatically
+                //NOTE: notifyDisconnect IS NOT CALLED!
+            }
+
             // make sure we atomically create the listener manager, if necessary
-            if (message is MethodResponse && message.result is Exception) {
+            else if (message is MethodResponse && message.result is Exception) {
                 val result = message.result as Exception
                 val newException = SerializationException("Error serializing message ${message.javaClass.simpleName}: '$message'", result)
                 listenerManager.notifyError(connection, newException)

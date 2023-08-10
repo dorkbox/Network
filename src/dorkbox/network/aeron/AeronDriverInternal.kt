@@ -113,6 +113,11 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
     private val stateMutex = Mutex()
 
+    /**
+     * Checks to see if there are any critical network errors (for example, a VPN connection getting disconnected while running)
+     */
+    @Volatile
+    internal var criticalDriverError = false
 
     private var closed = false
     suspend fun closed(): Boolean = stateMutex.withLock {
@@ -128,7 +133,51 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         // configure the aeron error handler
         val filter = config.aeronErrorFilter
         aeronErrorHandler = { error ->
-            if (filter(error)) {
+            // if the network interface is removed (for example, a VPN connection).
+            if (error is io.aeron.exceptions.ChannelEndpointException ||
+                error.cause is BindException ||
+                error.cause is SocketException ||
+                error.cause is IOException) {
+                // this is bad! We must close this connection. THIS WILL BE CALLED AS FAST AS THE CPU CAN RUN (because of how aeron works).
+                if (!criticalDriverError) {
+                    criticalDriverError = true
+
+                    logger.error { "Aeron Driver [$driverId]: Critical driver error!" }
+
+
+                    // make a copy
+                    val endpoints = endPointUsages.toTypedArray()
+                    runBlocking {
+                        endpoints.forEach {
+                            it.connections.forEach {conn ->
+                               conn.closeImmediately(false, false)
+                            }
+                        }
+
+                        // closing the driver here will SEGFAULT the jvm!! (cannot have reentrant code on this thread)
+                    }
+
+                    if (error.message?.startsWith("ERROR - channel error - Network is unreachable") == true) {
+                        val exception = AeronDriverException("Network is disconnected or unreachable.")
+                        exception.cleanAllStackTrace()
+                        notifyError(exception)
+                    } else if (error.message?.startsWith("WARN - failed to send") == true) {
+                        val exception = AeronDriverException("Network socket error, can't send data.")
+                        exception.cleanAllStackTrace()
+                        notifyError(exception)
+                    }
+                    else if (error.message == "Can't assign requested address") {
+                        val exception = AeronDriverException("Network socket error, can't assign requested address.")
+                        exception.cleanAllStackTrace()
+                        notifyError(exception)
+                    } else {
+                        error.cleanStackTrace()
+                        // send this out to the listener-manager so we can be notified of global errors
+                        notifyError(AeronDriverException(error.cause!!))
+                    }
+                }
+            }
+            else if (filter(error)) {
                 error.cleanStackTrace()
                 // send this out to the listener-manager so we can be notified of global errors
                 notifyError(AeronDriverException(error))
@@ -163,6 +212,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     }
 
     private suspend fun removeErrors() = onErrorLocalMutex.withLock {
+        criticalDriverError = false
         onErrorLocalList.forEach {
             removeOnError(it)
         }
