@@ -91,7 +91,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
     }
 
-    val driverId = config.id
+    val driverId = config.mediaDriverId()
 
     private val endPointUsages = mutableListOf<EndPoint<*>>()
 

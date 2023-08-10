@@ -416,13 +416,13 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
             mediaDriverConfig.validate()
 
-            require(!config.contextDefined) { "Aeron configuration has already been initialized, unable to reuse this configuration!" }
+            require(!config.contextDefined) { "Aeron configuration [${config.mediaDriverId()}] has already been initialized, unable to reuse this configuration!" }
 
             // cannot make any more changes to the configuration!
             config.initialize(logger)
 
             // technically possible, but practically unlikely because of the different values calculated
-            require(mediaDriverConfig.id != 0) { "There has been a severe error when calculating the media configuration ID. Aborting" }
+            require(mediaDriverConfig.mediaDriverId() != 0) { "There has been a severe error when calculating the media configuration ID. Aborting" }
 
             return mediaDriverConfig
         }
