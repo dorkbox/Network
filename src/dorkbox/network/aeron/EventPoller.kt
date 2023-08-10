@@ -41,7 +41,7 @@ internal class EventPoller {
         internal const val REMOVE = -1
         val eventLogger = KotlinLogging.logger(EventPoller::class.java.simpleName)
 
-        private class EventAction(val onAction: suspend ()->Int, val onClose: suspend ()->Unit)
+        private class EventAction(val onAction: suspend EventPoller.()->Int, val onClose: suspend ()->Unit)
 
         private val pollDispatcher = Executors.newSingleThreadExecutor(
             NamedThreadFactory("Poll Dispatcher", Configuration.networkThreadGroup, true)
@@ -66,7 +66,7 @@ internal class EventPoller {
     private var delayClose = false
 
     @Volatile
-    private var shutdownLatch = CountDownLatch(0)
+    private var shutdownLatch = dorkbox.util.sync.CountDownLatch(0)
 
 
     @Volatile
@@ -89,7 +89,7 @@ internal class EventPoller {
                 delayClose = false
                 running = true
                 configured = true
-                shutdownLatch = CountDownLatch(1)
+                shutdownLatch = dorkbox.util.sync.CountDownLatch(1)
                 pollStrategy = config.pollIdleStrategy.clone()
 
                 dispatchScope = CoroutineScope(pollDispatcher + SupervisorJob())
@@ -107,7 +107,7 @@ internal class EventPoller {
                             try {
                                 // check to see if we should remove this event (when a client/server closes, it is removed)
                                 // once ALL endpoint are closed, this is shutdown.
-                                val poll = it.onAction()
+                                val poll = it.onAction(this@EventPoller)
 
                                 // <0 means we remove the event from processing
                                 // 0 means we idle
@@ -119,7 +119,7 @@ internal class EventPoller {
 
                                     // check to see if we requested a shutdown
                                     if (delayClose) {
-                                        doClose()
+                                        doClose(eventLogger)
                                     }
                                 } else if (poll > 0) {
                                     pollCount += poll
@@ -133,7 +133,7 @@ internal class EventPoller {
 
                                 // check to see if we requested a shutdown
                                 if (delayClose) {
-                                    doClose()
+                                    doClose(eventLogger)
                                 }
                             }
                         }
@@ -163,7 +163,7 @@ internal class EventPoller {
     /**
      * Will cause the executing thread to wait until the event has been started
      */
-    suspend fun submit(action: suspend () -> Int, onShutdown: suspend () -> Unit) = mutex.withLock {
+    suspend fun submit(action: suspend EventPoller.() -> Int, onShutdown: suspend () -> Unit) = mutex.withLock {
         submitEvents.getAndIncrement()
 
         // this forces the current thread to WAIT until the network poll system has started
@@ -216,7 +216,7 @@ internal class EventPoller {
                 when (pEvents) {
                     0 -> {
                         logger.debug { "Closing the Network Event Poller..." }
-                        doClose()
+                        doClose(logger)
                     }
                     1 -> {
                         // this means we are trying to close on our poll event, and obviously it won't work.
@@ -233,7 +233,7 @@ internal class EventPoller {
         }
     }
 
-    private fun doClose() {
+    private suspend fun doClose(logger: KLogger) {
         val wasRunning = running
 
         running = false
