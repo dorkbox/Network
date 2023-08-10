@@ -150,7 +150,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     private var shutdownLatch = dorkbox.util.sync.CountDownLatch(0)
 
     /**
-     * This is run in lock-step to shutdown/close the client/server event poller. Afterwards, connect/bind can be called again
+     * This is run in lock-step to shutdown/close the client/server event poller. Afterward, connect/bind can be called again
      */
     @Volatile
     internal var pollerClosedLatch = dorkbox.util.sync.CountDownLatch(0)
