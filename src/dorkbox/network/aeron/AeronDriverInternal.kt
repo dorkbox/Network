@@ -788,9 +788,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      *
      * @return true if the driver was successfully stopped.
      */
-    suspend fun close(endPoint: EndPoint<*>?, logger: KLogger): Boolean = stateMutex.withLock {
-        val driverId = config.id
-
+    suspend fun close(endPoint: EndPoint<*>?, logger: KLogger): Boolean = stateMutex.withReentrantLock {
         if (endPoint != null) {
             endPointUsages.remove(endPoint)
         }
@@ -809,8 +807,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val removed = AeronDriver.driverConfigurations[driverId]
         if (removed == null) {
             logger.debug { "Aeron Driver [$driverId]: already closed. Ignoring close request." }
-            return@withLock false
+            return@withReentrantLock false
         }
+
 
         logger.debug { "Aeron Driver [$driverId]: Closing..." }
 
@@ -832,17 +831,14 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
 
         if (mediaDriver == null) {
-            logger.debug { "Aeron Driver [$driverId]: No driver started, not Stopping." }
-            return@withLock false
+            logger.debug { "Aeron Driver [$driverId]: No driver started, not stopping driver or context." }
+
+            // reset our contextDefine value, so that this configuration can safely be reused
+            endPoint?.config?.contextDefined = false
+            return@withReentrantLock false
         }
 
         logger.debug { "Aeron Driver [$driverId]: Stopping driver at '${driverDirectory}'..." }
-
-        if (!isRunning()) {
-            // not running
-            logger.debug { "Aeron Driver [$driverId]: is not running at '${driverDirectory}' for this context. Not Stopping." }
-            return@withLock false
-        }
 
         // if we are the ones that started the media driver, then we must be the ones to close it
         try {
@@ -860,20 +856,26 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         // it can actually close faster, if everything is ideal.
         val timeout = (aeronContext.driverTimeout + AERON_PUBLICATION_LINGER_TIMEOUT) / 4
 
-
         // it can actually close faster, if everything is ideal.
-        if (isRunning()) {
-            // on close, we want to wait for the driver to timeout before considering it "closed". Connections can still LINGER (see below)
-            // on close, the publication CAN linger (in case a client goes away, and then comes back)
-            // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
-            delay(timeout)
-        }
+        try {
+            if (isRunning()) {
+                // on close, we want to wait for the driver to timeout before considering it "closed". Connections can still LINGER (see below)
+                // on close, the publication CAN linger (in case a client goes away, and then comes back)
+                // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
+                delay(timeout)
+            }
 
-        // wait for the media driver to actually stop
-        var count = 10
-        while (--count >= 0 && isRunning()) {
-            logger.warn { "Aeron Driver [$driverId]: still running at '${driverDirectory}'. Waiting for it to stop. Trying to close $count more times." }
-            delay(timeout)
+            // wait for the media driver to actually stop
+            var count = 10
+            while (--count >= 0 && isRunning()) {
+                logger.warn { "Aeron Driver [$driverId]: still running at '${driverDirectory}'. Waiting for it to stop. Trying to close $count more times." }
+                delay(timeout)
+            }
+        }
+        catch (e: Exception) {
+            if (!criticalDriverError) {
+                logger.error(e) { "Error while checking isRunning() state." }
+            }
         }
 
         // make sure the context is also closed, but ONLY if we are the last one
@@ -908,7 +910,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             }
         }
 
-        logger.debug { "Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'" }
 
         // reset our contextDefine value, so that this configuration can safely be reused
         endPoint?.config?.contextDefined = false
@@ -919,7 +920,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         logger.debug { "Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'" }
         closed = true
 
-        return true
+        return@withReentrantLock true
     }
 
     /**
@@ -1062,6 +1063,4 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     override fun toString(): String {
         return "Aeron Driver [${driverId}]"
     }
-
-
 }
