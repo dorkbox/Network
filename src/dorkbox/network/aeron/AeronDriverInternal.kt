@@ -119,8 +119,10 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     @Volatile
     internal var criticalDriverError = false
 
+    @Volatile
     private var closed = false
-    suspend fun closed(): Boolean = stateMutex.withLock {
+
+    fun closed(): Boolean {
         return closed
     }
 
@@ -795,10 +797,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         logger.trace { "Aeron Driver [$driverId]: Requested close... (${endPointUsages.size} endpoints still in use)" }
 
-        if (isInUse(logger)) {
-            logger.debug { "Aeron Driver [$driverId]: in use, not shutting down this instance." }
-            return@withLock false
+        // ignore the extra driver checks, because in SOME situations, when trying to reconnect upon an error, the
         if (isInUse(endPoint, logger)) {
+            if (!criticalDriverError) {
+            // driver gets into a bad state. When this happens, we have to ignore "are we already in use" checks, BECAUSE the driver is now corrupted and unusable!
+                logger.debug { "Aeron Driver [$driverId]: in use, not shutting down this instance." }
+                return@withReentrantLock false
+            }
         }
 
         val removed = AeronDriver.driverConfigurations[driverId]
