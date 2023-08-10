@@ -44,7 +44,7 @@ import java.net.BindException
 import java.net.SocketException
 import java.util.concurrent.*
 
-internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: Configuration.MediaDriverConfig, logger: KLogger) {
+internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration.MediaDriverConfig, logger: KLogger) {
     companion object {
         // on close, the publication CAN linger (in case a client goes away, and then comes back)
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
@@ -98,7 +98,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
     val driverId = config.mediaDriverId()
 
-    private val endPointUsages = mutableListOf<EndPoint<*>>()
+    internal val endPointUsages = mutableListOf<EndPoint<*>>()
 
     @Volatile
     private var aeron: Aeron? = null

@@ -516,6 +516,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         }
     }
 
+
     /**
      * This does TWO things
      *  - start the media driver if not already running
@@ -672,7 +673,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      * @return true if the media driver was explicitly closed
      */
-    suspend fun closed() = internal.closed()
+    fun closed() = internal.closed()
 
     /**
      * Checks to see if there are any critical network errors (for example, a VPN connection getting disconnected while running)
