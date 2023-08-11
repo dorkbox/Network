@@ -525,7 +525,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             }
         } catch (e: Throwable) {
             // if the driver is closed due to a network disconnect or a remote-client termination, we also must close the connection.
-            if (aeronDriver.criticalDriverError) {
+            if (aeronDriver.internal.criticalDriverError) {
                 // we had a HARD network crash/disconnect, we close the driver and then reconnect automatically
                 //NOTE: notifyDisconnect IS NOT CALLED!
             }

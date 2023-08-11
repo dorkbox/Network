@@ -79,7 +79,7 @@ internal class Handshaker<CONNECTION : Connection>(
             return aeronDriver.send(publication, buffer, logInfo, listenerManager, handshakeSendIdleStrategy)
         } catch (e: Exception) {
             // if the driver is closed due to a network disconnect or a remote-client termination, we also must close the connection.
-            if (aeronDriver.criticalDriverError) {
+            if (aeronDriver.internal.criticalDriverError) {
                 // we had a HARD network crash/disconnect, we close the driver and then reconnect automatically
                 //NOTE: notifyDisconnect IS NOT CALLED!
             }

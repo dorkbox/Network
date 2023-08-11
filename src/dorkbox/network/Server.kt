@@ -19,10 +19,7 @@ import dorkbox.bytes.toHexString
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.EventPoller
-import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.IpInfo
+import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.IpListenType
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connectionType.ConnectionRule
@@ -209,7 +206,7 @@ open class Server<CONNECTION : Connection>(
      *              can also be configured independently. This is required, and must be different from port1.
      */
     @Suppress("DuplicatedCode")
-    fun bind(port1: Int, port2: Int = port1+1)  = runBlocking {
+    fun bind(port1: Int, port2: Int = port1+1) = runBlocking {
         if (config.enableIPv4 || config.enableIPv6) {
             require(port1 != port2) { "port1 cannot be the same as port2" }
             require(port1 > 0) { "port1 must be > 0" }
@@ -307,6 +304,13 @@ open class Server<CONNECTION : Connection>(
             }
         },
         onShutdown = {
+            val criticalDriverError = aeronDriver.internal.criticalDriverError
+            val endpoints = if (criticalDriverError) {
+                aeronDriver.internal.endPointUsages
+            } else {
+                null
+            }
+
             logger.debug { "Server event dispatch closing..." }
 
             ipcPoller.close()
@@ -314,6 +318,43 @@ open class Server<CONNECTION : Connection>(
 
             // clear all the handshake info
             handshake.clear()
+
+
+            // we only need to run shutdown methods if there was a network outage or D/C
+            if (!shutdownInProgress.value) {
+                this@Server.close(
+                    closeEverything = false,
+                    notifyDisconnect = !criticalDriverError, // this is because we restart automatically on driver errors
+                    releaseWaitingThreads = !criticalDriverError // this is because we restart automatically on driver errors
+                )
+            }
+
+
+            if (criticalDriverError) {
+                logger.error { "Critical driver error detected, restarting server." }
+
+                EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
+                    waitForEndpointShutdown()
+
+                    // also wait for everyone else to shutdown!!
+                    endpoints!!.forEach {
+                        it.waitForEndpointShutdown()
+                    }
+
+
+                    // if we restart/reconnect too fast, errors from the previous run will still be present!
+                    aeronDriver.delayLingerTimeout()
+
+                    val p1 = this@Server.port1
+                    val p2 = this@Server.port2
+
+                    if (p1 == 0 && p2 == 0) {
+                        bindIpc()
+                    } else {
+                        bind(p1, p2)
+                    }
+                }
+            }
 
             // we can now call bind again
             endpointIsRunning.lazySet(false)

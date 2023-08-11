@@ -514,6 +514,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
 
             internal = aeronDriver
         }
+        logger.error { "Aeron Driver [$driverId]: Initialized critical=${internal.criticalDriverError}" }
     }
 
 
@@ -674,17 +675,6 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      * @return true if the media driver was explicitly closed
      */
     fun closed() = internal.closed()
-
-    /**
-     * Checks to see if there are any critical network errors (for example, a VPN connection getting disconnected while running)
-     */
-    var criticalDriverError: Boolean
-        get() {
-            return internal.criticalDriverError
-        }
-        set(value) {
-            internal.criticalDriverError = value
-        }
 
     suspend fun isInUse(endPoint: EndPoint<*>?): Boolean = internal.isInUse(endPoint, logger)
 
@@ -879,7 +869,8 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 return true
             }
 
-            if (criticalDriverError) {
+            if (internal.criticalDriverError) {
+                logger.error { "Critical error, not able to send data." }
                 // there were critical errors. Don't even try anything! we will reconnect automatically (on the client) when it shuts-down (the connection is closed immediately when an error of this type is encountered
 
                 // aeron will likely report this is as "BACK PRESSURE"
@@ -996,7 +987,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 return true
             }
 
-            if (criticalDriverError) {
+            if (internal.criticalDriverError) {
                 // there were critical errors. Don't even try anything! we will reconnect automatically (on the client) when it shuts-down (the connection is closed immediately when an error of this type is encountered
 
                 // aeron will likely report this is as "BACK PRESSURE"

@@ -505,7 +505,6 @@ open class Client<CONNECTION : Connection>(
         connection0 = null
 
 
-
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         // this also makes sure that the dispatchers are still active.
         // Calling `client.close()` will shutdown the dispatchers (and a new client instance must be created)
@@ -840,12 +839,11 @@ open class Client<CONNECTION : Connection>(
             }
         },
         onShutdown = {
-            val criticalDriverError = aeronDriver.criticalDriverError
-            val endpoints: Array<EndPoint<*>> = if (criticalDriverError) {
-                    aeronDriver.internal.endPointUsages.toTypedArray()
+            val criticalDriverError = aeronDriver.internal.criticalDriverError
+            val endpoints = if (criticalDriverError) {
+                    aeronDriver.internal.endPointUsages
                 } else {
-                    @Suppress("UNCHECKED_CAST")
-                    arrayOfNulls<EndPoint<*>?>(0) as Array<EndPoint<*>>
+                    null
                 }
 
 
@@ -860,11 +858,31 @@ open class Client<CONNECTION : Connection>(
                     initiatedByShutdown = false)
             }
 
+
             // we can now call connect again
             endpointIsRunning.lazySet(false)
             pollerClosedLatch.countDown()
 
-            logger.debug { "Closed the Network Event Poller..." }
+
+            if (criticalDriverError) {
+                logger.error { "Critical driver error detected, reconnecting client" }
+
+                EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
+                    waitForEndpointShutdown()
+
+                    // also wait for everyone else to shutdown!!
+                    endpoints!!.forEach {
+                        it.waitForEndpointShutdown()
+                    }
+
+                    // if we restart/reconnect too fast, errors from the previous run will still be present!
+                    aeronDriver.delayLingerTimeout()
+
+                    reconnect()
+                }
+            } else {
+                logger.debug { "Closed the Network Event Poller..." }
+            }
         })
 
         listenerManager.notifyConnect(newConnection)
