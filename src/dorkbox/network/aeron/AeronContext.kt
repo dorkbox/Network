@@ -65,14 +65,21 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLo
                 .ipcMtuLength(config.ipcMtuSize)
 
                 .initialWindowLength(config.initialWindowLength)
-                .socketSndbufLength(config.sendBufferSize)
-                .socketRcvbufLength(config.receiveBufferSize)
 
                 .conductorThreadFactory(threadFactory)
                 .receiverThreadFactory(threadFactory)
                 .senderThreadFactory(threadFactory)
                 .sharedNetworkThreadFactory(threadFactory)
                 .sharedThreadFactory(threadFactory)
+
+
+            if (config.sendBufferSize > 0) {
+                mediaDriverContext.socketSndbufLength(config.sendBufferSize)
+            }
+
+            if (config.receiveBufferSize > 0) {
+                mediaDriverContext.socketRcvbufLength(config.receiveBufferSize)
+            }
 
             if (config.conductorIdleStrategy != null) {
                 mediaDriverContext.conductorIdleStrategy(config.conductorIdleStrategy)
