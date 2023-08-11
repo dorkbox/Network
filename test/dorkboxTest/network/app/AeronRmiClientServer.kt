@@ -135,10 +135,6 @@ class AeronRmiClientServer {
                 else if (config.client) {
                     val server = acs.server()
 
-                    server.onMessage<ByteArray> {
-                        logger.error { "Received Byte array!" }
-                    }
-
                     val client = acs.client(0)
 
                     client.onDisconnect {
@@ -386,9 +382,7 @@ class AeronRmiClientServer {
         SigInt.register {
             server.logger.info { "Shutting down via sig-int command" }
             runBlocking {
-                server.close(
-                    closeEverything = true, releaseWaitingThreads = true
-                )
+                server.close()
             }
         }
 
