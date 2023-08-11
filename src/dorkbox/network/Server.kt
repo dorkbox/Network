@@ -450,7 +450,9 @@ open class Server<CONNECTION : Connection>(
     fun close(closeEverything: Boolean = true) {
         runBlocking {
             close(
-                closeEverything = closeEverything, releaseWaitingThreads = true
+                closeEverything = closeEverything,
+                notifyDisconnect = true,
+                releaseWaitingThreads = true
             )
         }
     }

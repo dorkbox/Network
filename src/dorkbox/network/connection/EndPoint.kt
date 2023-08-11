@@ -256,7 +256,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         hook = Thread {
             runBlocking {
                 close(
-                    closeEverything = true, releaseWaitingThreads = true
+                    closeEverything = true,
+                    notifyDisconnect = true,
+                    releaseWaitingThreads = true
                 )
             }
         }
@@ -827,6 +829,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      */
     internal suspend fun close(
         closeEverything: Boolean,
+        notifyDisconnect: Boolean,
         releaseWaitingThreads: Boolean)
     {
         logger.debug { "Requesting close: closeEverything=$closeEverything, releaseWaitingThreads=$releaseWaitingThreads" }
@@ -845,13 +848,16 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // Remove from memory the data from the back-end storage
             storage.close()
 
-            aeronDriver.close()
-
             // don't do anything more, since we've already shutdown!
             return
         }
 
-        if (!shutdownPreviouslyStarted && Thread.currentThread() != hook) {
+        if (shutdownPreviouslyStarted) {
+            logger.debug { "Shutdown previously started, ignoring..." }
+            return
+        }
+
+        if (Thread.currentThread() != hook) {
             try {
                 Runtime.getRuntime().removeShutdownHook(hook)
             } catch (ignored: Exception) {
@@ -867,7 +873,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
             connections.forEach {
                 it.closeImmediately(sendDisconnectMessage = true,
-                                    notifyDisconnect = true)
+                                    notifyDisconnect = notifyDisconnect)
             }
 
 
@@ -905,9 +911,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                     storage.close()
                 }
 
-                    aeronDriver.close()
+                aeronDriver.close()
 
-                    shutdown = true
+                shutdown = true
 
                 // the shutdown here must be in the launchSequentially lambda, this way we can guarantee the driver is closed before we move on
                 shutdownLatch.countDown()

@@ -854,8 +854,9 @@ open class Client<CONNECTION : Connection>(
             if (!shutdownInProgress.value) {
                 this@Client.close(
                     closeEverything = false,
-                    initiatedByClientClose = true,
-                    initiatedByShutdown = false)
+                    notifyDisconnect = !criticalDriverError, // this is because we restart automatically on driver errors
+                    releaseWaitingThreads = !criticalDriverError // this is because we restart automatically on driver errors
+                )
             }
 
 
@@ -982,7 +983,9 @@ open class Client<CONNECTION : Connection>(
     fun close(closeEverything: Boolean = true) {
         runBlocking {
             close(
-                closeEverything = closeEverything, releaseWaitingThreads = true
+                closeEverything = closeEverything,
+                notifyDisconnect = true,
+                releaseWaitingThreads = true
             )
         }
     }

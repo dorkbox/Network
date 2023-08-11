@@ -905,6 +905,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 }
                 else {
                     logger.info { "[${publication.sessionId()}] Connection disconnected while sending data, closing connection." }
+                    internal.criticalDriverError = true
 
                     // publication was actually closed or the server was closed, so no bother throwing an error
                     connection.closeImmediately(sendDisconnectMessage = false,
@@ -938,7 +939,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
 
                 val exception = endPoint!!.newException(
-                    "[${publication.sessionId()}] Unable to send message. (Connection in closed, aborted attempt! ${
+                    "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${
                         AeronDriver.errorCodeName(result)
                     })"
                 )
@@ -1042,7 +1043,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
 
                 val exception = endPoint!!.newException(
-                    "[${publication.sessionId()}] Unable to send message. (Connection in closed, aborted attempt! ${
+                    "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${
                         AeronDriver.errorCodeName(result)
                     })"
                 )
