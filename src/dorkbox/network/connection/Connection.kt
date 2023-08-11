@@ -53,6 +53,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     internal val publication = info.pub
     private lateinit var image: Image
 
+    // only accessed on a single thread!
+    private val connectionExpirationTimoutNanos = endPoint.config.connectionExpirationTimoutNanos
+    private var connectionTimeoutTimeNanos = 0L
+
     /**
      * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has its own logic on the remote endpoint,
      * and can have its own back-pressure.
@@ -275,6 +279,35 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     fun isClosed(): Boolean {
         return isClosed.value
     }
+
+    /**
+     * We must account for network blips. The blips will be recovered by aeron, but we want to make sure that we are actually
+     * disconnected for a set period of time before we start the close process for a connection
+     *
+     * @return `true` if this connection has been closed via aeron
+     */
+    fun isConnected(): Boolean {
+        // we ONLY want to actually, legit check, 1 time every XXX ms.
+        val now = System.nanoTime()
+
+        // as long as we are connected, we reset the state, so that if there is a network blip, we want to make sure that it is
+        // a network blip for a while, instead of just once or twice. (which WILL happen)
+        if (subscription.isConnected && publication.isConnected) {
+            // reset connection timeout
+            connectionTimeoutTimeNanos = now
+
+            // we are still connected (true means we are closed)
+            return false
+        }
+
+
+        // make sure that our "isConnected" state lasts LONGER than the expiry timeout!
+
+        // 1) connections take a little bit of time from polling -> connecting (because of how we poll connections before 'connecting' them).
+        // 2) network blips happen. Aeron will recover, and we want to make sure that WE don't instantly DC
+        return now - connectionTimeoutTimeNanos >= connectionExpirationTimoutNanos
+    }
+
 
     /**
      * Closes the connection, and removes all connection specific listeners

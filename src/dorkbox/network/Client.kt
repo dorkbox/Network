@@ -822,7 +822,7 @@ open class Client<CONNECTION : Connection>(
         action = {
             // if we initiate a disconnect manually, then there is no need to wait for aeron to verify it's closed
             // we only want to wait for aeron to verify it's closed if we are SUPPOSED to be connected, but there's a network blip
-            if (!(shutdownEventPoller || newConnection.isClosed())) {
+            if (!(shutdownEventPoller || newConnection.isClosed() || newConnection.isConnected())) {
                 newConnection.poll()
             } else {
                 // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
