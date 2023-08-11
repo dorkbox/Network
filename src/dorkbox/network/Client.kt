@@ -839,23 +839,19 @@ open class Client<CONNECTION : Connection>(
             }
         },
         onShutdown = {
-            val criticalDriverError = aeronDriver.internal.criticalDriverError
-            val endpoints = if (criticalDriverError) {
-                    aeronDriver.internal.endPointUsages
-                } else {
-                    null
-                }
-
+            val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
 
             // this can be closed when the connection is remotely closed in ADDITION to manually closing
             logger.debug { "Client event dispatch closing..." }
 
             // we only need to run shutdown methods if there was a network outage or D/C
             if (!shutdownInProgress.value) {
+                // this is because we restart automatically on driver errors
+                val standardClose = !mustRestartDriverOnError
                 this@Client.close(
                     closeEverything = false,
-                    notifyDisconnect = !criticalDriverError, // this is because we restart automatically on driver errors
-                    releaseWaitingThreads = !criticalDriverError // this is because we restart automatically on driver errors
+                    notifyDisconnect = standardClose,
+                    releaseWaitingThreads = standardClose
                 )
             }
 
@@ -865,14 +861,14 @@ open class Client<CONNECTION : Connection>(
             pollerClosedLatch.countDown()
 
 
-            if (criticalDriverError) {
+            if (mustRestartDriverOnError) {
                 logger.error { "Critical driver error detected, reconnecting client" }
 
                 EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
                     waitForEndpointShutdown()
 
                     // also wait for everyone else to shutdown!!
-                    endpoints!!.forEach {
+                    aeronDriver.internal.endPointUsages.forEach {
                         it.waitForEndpointShutdown()
                     }
 

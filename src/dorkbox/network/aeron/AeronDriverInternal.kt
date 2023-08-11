@@ -124,7 +124,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      * Checks to see if there are any critical network errors (for example, a VPN connection getting disconnected while running)
      */
     @Volatile
-    internal var criticalDriverError = false
+    internal var mustRestartDriverOnError = false
 
     @Volatile
     private var closed = false
@@ -148,8 +148,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 error.cause is SocketException ||
                 error.cause is IOException) {
                 // this is bad! We must close this connection. THIS WILL BE CALLED AS FAST AS THE CPU CAN RUN (because of how aeron works).
-                if (!criticalDriverError) {
-                    criticalDriverError = true
+                if (!mustRestartDriverOnError) {
+                    mustRestartDriverOnError = true
 
                     logger.error { "Aeron Driver [$driverId]: Critical driver error!" }
 
@@ -160,8 +160,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                                      releaseWaitingThreads = false)
                         }
                     }
-
-
 
                     if (error.message?.startsWith("ERROR - channel error - Network is unreachable") == true) {
                         val exception = AeronDriverException("Network is disconnected or unreachable.")
@@ -218,7 +216,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     }
 
     private suspend fun removeErrors() = onErrorLocalMutex.withLock {
-        criticalDriverError = false
+        mustRestartDriverOnError = false
         onErrorLocalList.forEach {
             removeOnError(it)
         }
@@ -752,7 +750,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         // ignore the extra driver checks, because in SOME situations, when trying to reconnect upon an error, the
         // driver gets into a bad state. When this happens, we cannot rely on the driver stat info!
-        if (criticalDriverError) {
+        if (mustRestartDriverOnError) {
             return false
         }
 
@@ -807,7 +805,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         // ignore the extra driver checks, because in SOME situations, when trying to reconnect upon an error, the
         if (isInUse(endPoint, logger)) {
-            if (criticalDriverError) {
+            if (mustRestartDriverOnError) {
                 // driver gets into a bad state. When this happens, we have to ignore "are we already in use" checks, BECAUSE the driver is now corrupted and unusable!
             }
             else {
@@ -890,7 +888,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             }
         }
         catch (e: Exception) {
-            if (!criticalDriverError) {
+            if (!mustRestartDriverOnError) {
                 logger.error(e) { "Error while checking isRunning() state." }
             }
         }

@@ -487,7 +487,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
         // however - the code that actually does stuff is a "singleton" in regard to an aeron configuration
         val driverId = mediaDriverConfig.mediaDriverId()
 
-        logger.error { "Aeron Driver [$driverId]: Initializing..." }
+        logger.info { "Aeron Driver [$driverId]: Initializing..." }
         val aeronDriver = driverConfigurations.get(driverId)
         if (aeronDriver == null) {
             val driver = AeronDriverInternal(endPoint, mediaDriverConfig, logger)
@@ -514,7 +514,6 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
 
             internal = aeronDriver
         }
-        logger.error { "Aeron Driver [$driverId]: Initialized critical=${internal.criticalDriverError}" }
     }
 
 
@@ -769,7 +768,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
     /**
      * Make sure that we DO NOT approach the Aeron linger timeout!
      */
-    suspend fun delayLingerTimeout(multiplier: Number) = internal.delayLingerTimeout(multiplier.toDouble())
+    suspend fun delayLingerTimeout(multiplier: Number = 1) = internal.delayLingerTimeout(multiplier.toDouble())
 
     /**
      * A safer way to try to close the media driver if in the ENTIRE JVM, our process is the only one using aeron with it's specific configuration
@@ -869,7 +868,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 return true
             }
 
-            if (internal.criticalDriverError) {
+            if (internal.mustRestartDriverOnError) {
                 logger.error { "Critical error, not able to send data." }
                 // there were critical errors. Don't even try anything! we will reconnect automatically (on the client) when it shuts-down (the connection is closed immediately when an error of this type is encountered
 
@@ -905,7 +904,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 }
                 else {
                     logger.info { "[${publication.sessionId()}] Connection disconnected while sending data, closing connection." }
-                    internal.criticalDriverError = true
+                    internal.mustRestartDriverOnError = true
 
                     // publication was actually closed or the server was closed, so no bother throwing an error
                     connection.closeImmediately(sendDisconnectMessage = false,
@@ -988,7 +987,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 return true
             }
 
-            if (internal.criticalDriverError) {
+            if (internal.mustRestartDriverOnError) {
                 // there were critical errors. Don't even try anything! we will reconnect automatically (on the client) when it shuts-down (the connection is closed immediately when an error of this type is encountered
 
                 // aeron will likely report this is as "BACK PRESSURE"

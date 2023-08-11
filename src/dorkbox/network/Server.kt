@@ -304,13 +304,7 @@ open class Server<CONNECTION : Connection>(
             }
         },
         onShutdown = {
-            val criticalDriverError = aeronDriver.internal.criticalDriverError
-            val endpoints = if (criticalDriverError) {
-                aeronDriver.internal.endPointUsages
-            } else {
-                null
-            }
-
+            val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
             logger.debug { "Server event dispatch closing..." }
 
             ipcPoller.close()
@@ -322,22 +316,24 @@ open class Server<CONNECTION : Connection>(
 
             // we only need to run shutdown methods if there was a network outage or D/C
             if (!shutdownInProgress.value) {
+                // this is because we restart automatically on driver errors
+                val standardClose = !mustRestartDriverOnError
                 this@Server.close(
                     closeEverything = false,
-                    notifyDisconnect = !criticalDriverError, // this is because we restart automatically on driver errors
-                    releaseWaitingThreads = !criticalDriverError // this is because we restart automatically on driver errors
+                    notifyDisconnect = standardClose,
+                    releaseWaitingThreads = standardClose
                 )
             }
 
 
-            if (criticalDriverError) {
+            if (mustRestartDriverOnError) {
                 logger.error { "Critical driver error detected, restarting server." }
 
                 EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
                     waitForEndpointShutdown()
 
                     // also wait for everyone else to shutdown!!
-                    endpoints!!.forEach {
+                    aeronDriver.internal.endPointUsages.forEach {
                         it.waitForEndpointShutdown()
                     }
 
