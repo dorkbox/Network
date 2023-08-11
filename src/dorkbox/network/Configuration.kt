@@ -48,7 +48,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         /**
          * Gets the version number.
          */
-        const val version = "6.6"
+        const val version = "6.7"
     }
 
     /**
@@ -415,19 +415,6 @@ abstract class Configuration protected constructor() {
      * How long a connection must be disconnected before we cleanup the memory associated with it
      */
     var connectionCloseTimeoutInSeconds: Int = 10
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
-
-    /**
-     * How often to check if the underlying aeron publication/subscription is connected or not.
-     *
-     * Aeron Publications and Subscriptions are, and can be, constantly in flux (because of UDP!).
-     *
-     * Too low and it's wasting CPU cycles, too high and there will be some lag when detecting if a connection has been disconnected.
-     */
-    var connectionCheckIntervalNanos = TimeUnit.MILLISECONDS.toNanos(200)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -1063,7 +1050,6 @@ abstract class Configuration protected constructor() {
         config.udpId = udpId
         config.enableRemoteSignatureValidation = enableRemoteSignatureValidation
         config.connectionCloseTimeoutInSeconds = connectionCloseTimeoutInSeconds
-        config.connectionCheckIntervalNanos = connectionCheckIntervalNanos
         config.connectionExpirationTimoutNanos = connectionExpirationTimoutNanos
         config.isReliable = isReliable
         config.pingTimeoutSeconds = pingTimeoutSeconds
@@ -1127,7 +1113,6 @@ abstract class Configuration protected constructor() {
 
         if (enableRemoteSignatureValidation != other.enableRemoteSignatureValidation) return false
         if (connectionCloseTimeoutInSeconds != other.connectionCloseTimeoutInSeconds) return false
-        if (connectionCheckIntervalNanos != other.connectionCheckIntervalNanos) return false
         if (connectionExpirationTimoutNanos != other.connectionExpirationTimoutNanos) return false
 
         if (isReliable != other.isReliable) return false
@@ -1160,7 +1145,6 @@ abstract class Configuration protected constructor() {
         result = 31 * result + udpId
         result = 31 * result + pingTimeoutSeconds
         result = 31 * result + connectionCloseTimeoutInSeconds
-        result = 31 * result + connectionCheckIntervalNanos.hashCode()
         result = 31 * result + connectionExpirationTimoutNanos.hashCode()
         result = 31 * result + isReliable.hashCode()
         result = 31 * result + messageDispatch.hashCode()

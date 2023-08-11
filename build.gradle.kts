@@ -37,7 +37,7 @@ object Extras {
     // set for the project
     const val description = "High-performance, event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "6.6"
+    const val version = "6.7"
 
     // set as project.ext
     const val name = "Network"
@@ -168,7 +168,7 @@ dependencies {
     // https://github.com/dorkbox
     api("com.dorkbox:ByteUtilities:1.14")
     api("com.dorkbox:ClassUtils:1.2")
-    api("com.dorkbox:Collections:2.3")
+    api("com.dorkbox:Collections:2.4")
     api("com.dorkbox:JNA:1.0")
     api("com.dorkbox:MinLog:2.5")
     api("com.dorkbox:NetworkDNS:2.11")
@@ -220,7 +220,6 @@ dependencies {
     // https://github.com/MicroUtils/kotlin-logging
     api("io.github.microutils:kotlin-logging:3.0.5")
     api("org.slf4j:slf4j-api:2.0.7")
-
 
 
 
