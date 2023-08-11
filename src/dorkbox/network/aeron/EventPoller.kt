@@ -238,12 +238,13 @@ internal class EventPoller {
 
         running = false
         while (!shutdownLatch.await(200)) {
-            logger.error { "Waiting for poller to close. It should not take this long" }
+            logger.error { "Waiting for Network Event Poller to close. It should not take this long" }
         }
         configured = false
 
         if (wasRunning) {
-            dispatchScope.cancel("Closed event dispatch")
+            dispatchScope.cancel("Closed Network Event Poller dispatch")
         }
+        logger.error { "Closed Network Event Poller: wasRunning=$wasRunning" }
     }
 }

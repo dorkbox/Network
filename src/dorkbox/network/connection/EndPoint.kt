@@ -220,16 +220,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         // NOTE: in the event that we are IPC -- only ONE SERVER can be running IPC at a time for a single driver!
         if (type == Server::class.java && config.enableIpc) {
             runBlocking {
-                var configuration = config.copy()
+                val configuration = config.copy()
                 if (AeronDriver.isLoaded(configuration, logger)) {
-                    val e = ServerException("Only one server at a time can share a single aeron driver! Make the driver unique or change it's directory: ${configuration.aeronDirectory}")
-                    listenerManager.notifyError(e)
-                    throw e
-                }
-
-
-                configuration = config.copy()
-                if (AeronDriver.isRunning(configuration, logger)) {
                     val e = ServerException("Only one server at a time can share a single aeron driver! Make the driver unique or change it's directory: ${configuration.aeronDirectory}")
                     listenerManager.notifyError(e)
                     throw e
