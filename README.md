@@ -72,7 +72,7 @@ Maven Info
     <dependency>
       <groupId>com.dorkbox</groupId>
       <artifactId>Network</artifactId>
-      <version>6.7</version>
+      <version>6.8</version>
     </dependency>
 </dependencies>
 ```
@@ -82,7 +82,7 @@ Gradle Info
 ```
 dependencies {
     ...
-    implementation("com.dorkbox:Network:6.7")
+    implementation("com.dorkbox:Network:6.8")
 }
 ```
 

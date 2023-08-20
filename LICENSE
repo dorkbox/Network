@@ -415,12 +415,6 @@
          Dorkbox LLC
 
        Extra license information
-         - SLF4J - Simple facade or abstraction for various logging frameworks
-           [MIT License]
-           https://www.slf4j.org
-           Copyright 2023
-             QOS.ch
-
          - Kotlin - 
            [The Apache Software License, Version 2.0]
            https://github.com/JetBrains/kotlin
@@ -440,6 +434,12 @@
            https://github.com/twall/jna
            Copyright 2023
              Timothy Wall
+
+         - SLF4J - Simple facade or abstraction for various logging frameworks
+           [MIT License]
+           https://www.slf4j.org
+           Copyright 2023
+             QOS.ch
 
          - OS - Information about the system, Java runtime, OS, Window Manager, and Desktop Environment.
            [The Apache Software License, Version 2.0]
@@ -671,12 +671,6 @@
                Copyright 2023
                  JetBrains s.r.o.
 
-             - SLF4J - Simple facade or abstraction for various logging frameworks
-               [MIT License]
-               https://www.slf4j.org
-               Copyright 2023
-                 QOS.ch
-
              - JNA - Simplified native library access for Java.
                [The Apache Software License, Version 2.0]
                https://github.com/twall/jna
@@ -688,6 +682,12 @@
                https://github.com/twall/jna
                Copyright 2023
                  Timothy Wall
+
+             - SLF4J - Simple facade or abstraction for various logging frameworks
+               [MIT License]
+               https://www.slf4j.org
+               Copyright 2023
+                 QOS.ch
 
              - Kotlin - 
                [The Apache Software License, Version 2.0]
@@ -897,12 +897,6 @@
            Copyright 2023
              JetBrains s.r.o.
 
-         - SLF4J - Simple facade or abstraction for various logging frameworks
-           [MIT License]
-           https://www.slf4j.org
-           Copyright 2023
-             QOS.ch
-
          - JNA - Simplified native library access for Java.
            [The Apache Software License, Version 2.0]
            https://github.com/twall/jna
@@ -914,6 +908,12 @@
            https://github.com/twall/jna
            Copyright 2023
              Timothy Wall
+
+         - SLF4J - Simple facade or abstraction for various logging frameworks
+           [MIT License]
+           https://www.slf4j.org
+           Copyright 2023
+             QOS.ch
 
          - Kotlin - 
            [The Apache Software License, Version 2.0]
@@ -1140,12 +1140,6 @@
            Copyright 2023
              Ohad Shai
 
-         - SLF4J - Simple facade or abstraction for various logging frameworks
-           [MIT License]
-           https://www.slf4j.org
-           Copyright 2023
-             QOS.ch
-
          - Kryo - Fast and efficient binary object graph serialization framework for Java
            [BSD 3-Clause License]
            https://github.com/EsotericSoftware/kryo
@@ -1167,6 +1161,12 @@
                [BSD 3-Clause License]
                https://github.com/EsotericSoftware/minlog
                  Nathan Sweet
+
+         - SLF4J - Simple facade or abstraction for various logging frameworks
+           [MIT License]
+           https://www.slf4j.org
+           Copyright 2023
+             QOS.ch
 
          - Kotlin - 
            [The Apache Software License, Version 2.0]
@@ -1283,6 +1283,12 @@
                Copyright 2011
                  Mario Zechner
                  Nathan Sweet
+
+             - SLF4J - Simple facade or abstraction for various logging frameworks
+               [MIT License]
+               https://www.slf4j.org
+               Copyright 2023
+                 QOS.ch
 
              - Kotlin - 
                [The Apache Software License, Version 2.0]
