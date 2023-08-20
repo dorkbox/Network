@@ -24,7 +24,7 @@ gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show th
 
 plugins {
     id("com.dorkbox.GradleUtils") version "3.17"
-    id("com.dorkbox.Licensing") version "2.25"
+    id("com.dorkbox.Licensing") version "2.26"
     id("com.dorkbox.VersionUpdate") version "2.8"
     id("com.dorkbox.GradlePublish") version "1.18"
 
@@ -162,29 +162,29 @@ shadowJar.apply {
 
 
 dependencies {
-    api("org.jetbrains.kotlinx:atomicfu:0.21.0")
+    api("org.jetbrains.kotlinx:atomicfu:0.22.0")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 
     // https://github.com/dorkbox
     api("com.dorkbox:ByteUtilities:1.14")
-    api("com.dorkbox:ClassUtils:1.2")
+    api("com.dorkbox:ClassUtils:1.3")
     api("com.dorkbox:Collections:2.4")
-    api("com.dorkbox:JNA:1.0")
+    api("com.dorkbox:JNA:1.2")
     api("com.dorkbox:MinLog:2.5")
-    api("com.dorkbox:NetworkDNS:2.11")
-    api("com.dorkbox:NetworkUtils:2.22")
-    api("com.dorkbox:OS:1.6")
+    api("com.dorkbox:NetworkDNS:2.14")
+    api("com.dorkbox:NetworkUtils:2.23")
+    api("com.dorkbox:OS:1.8")
     api("com.dorkbox:Serializers:2.9")
-    api("com.dorkbox:Storage:1.7")
+    api("com.dorkbox:Storage:1.8")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.44")
+    api("com.dorkbox:Utilities:1.45")
 
 
     // how we bypass using reflection/jpms to access fields for java17+
     api("org.javassist:javassist:3.29.2-GA")
 
 
-    val jnaVersion = "5.12.1"
+    val jnaVersion = "5.13.0"
     api("net.java.dev.jna:jna-jpms:${jnaVersion}")
     api("net.java.dev.jna:jna-platform-jpms:${jnaVersion}")
 
@@ -219,7 +219,7 @@ dependencies {
 
     // https://github.com/MicroUtils/kotlin-logging
     api("io.github.microutils:kotlin-logging:3.0.5")
-    api("org.slf4j:slf4j-api:2.0.7")
+    implementation("org.slf4j:slf4j-api:2.0.7")
 
 
 
