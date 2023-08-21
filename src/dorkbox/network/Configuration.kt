@@ -48,7 +48,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         /**
          * Gets the version number.
          */
-        const val version = "6.9"
+        const val version = "6.9.1"
     }
 
     /**

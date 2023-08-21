@@ -37,7 +37,7 @@ object Extras {
     // set for the project
     const val description = "High-performance, event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "6.9"
+    const val version = "6.9.1"
 
     // set as project.ext
     const val name = "Network"
@@ -205,14 +205,6 @@ dependencies {
     // https://github.com/lz4/lz4-java
     api("org.lz4:lz4-java:1.8.0")
 
-    // this is NOT the same thing as LMAX disruptor.
-    // This is just a slightly faster queue than LMAX. (LMAX is a fast queue + other things w/ a difficult DSL)
-    // https://github.com/conversant/disruptor_benchmark
-    // https://www.youtube.com/watch?v=jVMOgQgYzWU
-    //api("com.conversantmedia:disruptor:1.2.19")
-
-    // https://github.com/jhalterman/typetools
-    api("net.jodah:typetools:0.6.3")
 
     // Expiring Map (A high performance thread-safe map that expires entries)
     // https://github.com/jhalterman/expiringmap

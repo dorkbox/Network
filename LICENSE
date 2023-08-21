@@ -100,12 +100,6 @@
          Yann Collet
          Adrien Grand
 
-     - TypeTools - A simple, zero-dependency library for working with types. Supports Java 1.6+ and Android.
-       [The Apache Software License, Version 2.0]
-       https://github.com/jhalterman/typetools
-       Copyright 2023
-         Jonathan Halterman and friends
-
      - Jodah Expiring Map - high performance thread-safe map that expires entries
        [The Apache Software License, Version 2.0]
        https://github.com/jhalterman/expiringmap
