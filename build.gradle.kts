@@ -28,16 +28,16 @@ plugins {
     id("com.dorkbox.VersionUpdate") version "2.8"
     id("com.dorkbox.GradlePublish") version "1.18"
 
-    id("com.github.johnrengelman.shadow") version "7.1.2"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 
-    kotlin("jvm") version "1.8.0"
+    kotlin("jvm") version "1.9.0"
 }
 
 object Extras {
     // set for the project
     const val description = "High-performance, event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "6.8"
+    const val version = "6.9"
 
     // set as project.ext
     const val name = "Network"
@@ -166,9 +166,10 @@ dependencies {
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 
     // https://github.com/dorkbox
-    api("com.dorkbox:ByteUtilities:1.14")
+    api("com.dorkbox:ByteUtilities:2.0")
     api("com.dorkbox:ClassUtils:1.3")
     api("com.dorkbox:Collections:2.4")
+    api("com.dorkbox:HexUtilities:1.1")
     api("com.dorkbox:JNA:1.2")
     api("com.dorkbox:MinLog:2.5")
     api("com.dorkbox:NetworkDNS:2.14")
@@ -177,7 +178,7 @@ dependencies {
     api("com.dorkbox:Serializers:2.9")
     api("com.dorkbox:Storage:1.8")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.45")
+    api("com.dorkbox:Utilities:1.46")
 
 
     // how we bypass using reflection/jpms to access fields for java17+
@@ -190,7 +191,7 @@ dependencies {
 
 
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.41.4"
+    val aeronVer = "1.42.0"
     api("io.aeron:aeron-driver:$aeronVer")
     // ALL of aeron, in case we need to debug aeron behavior
 //    api("io.aeron:aeron-all:$aeronVer")

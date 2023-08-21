@@ -16,7 +16,7 @@
 package dorkbox.network.connection
 
 import dorkbox.bytes.Hash
-import dorkbox.bytes.toHexString
+import dorkbox.hex.toHexString
 import dorkbox.network.handshake.ClientConnectionInfo
 import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput

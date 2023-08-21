@@ -16,6 +16,7 @@ module dorkbox.network {
     requires transitive dorkbox.classUtils;
     requires transitive dorkbox.collections;
     requires transitive dorkbox.dns;
+    requires transitive dorkbox.hexUtils;
     requires transitive dorkbox.updates;
     requires transitive dorkbox.utilities;
     requires transitive dorkbox.netutil;

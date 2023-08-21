@@ -15,7 +15,7 @@
  */
 package dorkbox.network
 
-import dorkbox.bytes.toHexString
+import dorkbox.hex.toHexString
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.EventPoller
@@ -117,7 +117,7 @@ open class Server<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "6.8"
+        const val version = "6.9"
 
         /**
          * Ensures that an endpoint (using the specified configuration) is NO LONGER running.
@@ -172,7 +172,7 @@ open class Server<CONNECTION : Connection>(
     internal lateinit var handshake: ServerHandshake<CONNECTION>
 
     private val string0: String by lazy {
-        "EndPoint [Server: $${storage.publicKey.toHexString()}]"
+        "EndPoint [Server: ${storage.publicKey.toHexString()}]"
     }
 
     final override fun newException(message: String, cause: Throwable?): Throwable {

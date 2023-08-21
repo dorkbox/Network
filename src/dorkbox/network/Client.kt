@@ -15,8 +15,8 @@
  */
 package dorkbox.network
 
-import dorkbox.bytes.toHexString
 import dorkbox.dns.DnsClient
+import dorkbox.hex.toHexString
 import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
@@ -117,7 +117,7 @@ open class Client<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "6.8"
+        const val version = "6.9"
 
         /**
          * Ensures that the client (using the specified configuration) is NO LONGER running.
@@ -199,7 +199,7 @@ open class Client<CONNECTION : Connection>(
     private var connection0: CONNECTION? = null
 
     private val string0: String by lazy {
-        "EndPoint [Client: $${storage.publicKey.toHexString()}]"
+        "EndPoint [Client: ${storage.publicKey.toHexString()}]"
     }
 
     final override fun newException(message: String, cause: Throwable?): Throwable {

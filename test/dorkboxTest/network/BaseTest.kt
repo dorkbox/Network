@@ -22,7 +22,7 @@ import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import com.esotericsoftware.kryo.KryoException
-import dorkbox.bytes.toHexString
+import dorkbox.hex.toHexString
 import dorkbox.network.*
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
