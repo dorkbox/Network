@@ -454,6 +454,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         logger = KotlinLogging.logger(type.simpleName)
         this.maxMessageSize = maxMessageSize
 
+        logger.info { "UDP frame size: $maxMessageSize" }
+
         val firstInitialization = initialized.compareAndSet(expect = false, update = true)
 
         if (type == Server::class.java) {
@@ -790,7 +792,6 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      * @return takes a kryo instance from the pool, or creates one if the pool was empty
      */
     private fun newWriteKryo(): KryoWriter<CONNECTION> {
-        logger.debug { "Creating new Kryo($maxMessageSize)" }
         val kryo = KryoWriter<CONNECTION>(maxMessageSize)
         newGlobalKryo(kryo)
 
