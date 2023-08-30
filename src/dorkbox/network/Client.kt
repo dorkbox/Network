@@ -226,6 +226,12 @@ open class Client<CONNECTION : Connection>(
             logger.info { "Reconnecting... (timeout in $connectionTimeoutSec seconds)" }
         }
 
+        if (!isShutdown()) {
+            // if we aren't closed already, close now.
+            close(false)
+            waitForClose()
+        }
+
         connect(
             remoteAddress = address,
             remoteAddressString = addressString,
