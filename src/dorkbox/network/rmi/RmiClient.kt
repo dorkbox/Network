@@ -178,7 +178,7 @@ internal class RmiClient(val isGlobal: Boolean,
     @Volatile private var enableEquals = false
 
     // if we are ASYNC, then this method immediately returns
-    private suspend fun sendRequest(isAsync: Boolean, invokeMethod: MethodRequest, logger: KLogger): Any? {
+    private fun sendRequest(isAsync: Boolean, invokeMethod: MethodRequest, logger: KLogger): Any? {
         // there is a STRANGE problem, where if we DO NOT respond/reply to method invocation, and immediate invoke multiple methods --
         // the "server" side can have out-of-order method invocation. There are 2 ways to solve this
         //  1) make the "server" side single threaded
@@ -209,6 +209,7 @@ internal class RmiClient(val isGlobal: Boolean,
 
             connection.send(invokeMethod)
 
+            // NOTE: this is blocking!
             responseManager.waitForReply(rmiWaiter, timeoutMillis, logger, connection)
         }
     }

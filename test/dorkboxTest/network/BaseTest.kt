@@ -91,6 +91,10 @@ abstract class BaseTest {
             }
         }
 
+        fun pause(timeToSleep: Long) {
+            Thread.sleep(timeToSleep)
+        }
+
         fun clientConfig(block: Configuration.() -> Unit = {}): ClientConfiguration {
 
             val configuration = ClientConfiguration()
@@ -224,7 +228,7 @@ abstract class BaseTest {
      *  - connect
      *  - disconnect
      */
-    suspend fun stopEndPoints(stopAfterMillis: Long = 0L) {
+    fun stopEndPoints(stopAfterMillis: Long = 0L) {
         if (isStopping) {
             return
         }
@@ -240,7 +244,9 @@ abstract class BaseTest {
                 mutex.unlock()
             }
 
-            mutex.withLock { }
+            runBlocking {
+                mutex.withLock { }
+            }
 
             return
         }
@@ -248,7 +254,7 @@ abstract class BaseTest {
         isStopping = true
 
         if (stopAfterMillis > 0L) {
-            delay(stopAfterMillis)
+            Thread.sleep(stopAfterMillis)
         }
 
         val clients = endPointConnections.filterIsInstance<Client<Connection>>()

@@ -19,6 +19,7 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 
@@ -89,7 +90,9 @@ class SerializationValidationTest : BaseTest() {
                 logger.error("Connected")
                 rmi.getGlobal<TestObject>(1).apply {
                     logger.error("Starting test")
-                    setValue(43.21f)
+                    runBlocking {
+                        setValue(43.21f)
+                    }
 
                     // Normal remote method call.
                     Assert.assertEquals(43.21f, other(), .0001f)
@@ -138,7 +141,9 @@ class SerializationValidationTest : BaseTest() {
                 logger.error("Connected")
                 rmi.getGlobal<TestObject>(1).apply {
                     logger.error("Starting test")
-                    setValue(43.21f)
+                    runBlocking {
+                        setValue(43.21f)
+                    }
 
                     // Normal remote method call.
                     Assert.assertEquals(43.21f, other(), .0001f)

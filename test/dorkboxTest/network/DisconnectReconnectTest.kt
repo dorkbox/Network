@@ -45,7 +45,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
-                delay(2000)
+                pause(2000L)
 
                 logger.error("Disconnecting....")
                 close()
@@ -110,7 +110,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             client.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
-                delay(2000)
+                pause(2000)
 
                 logger.error("Disconnecting....")
                 close()
@@ -174,7 +174,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
-                delay(2000)
+                pause(2000)
 
                 logger.error("Disconnecting via RMI ....")
 
@@ -246,7 +246,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
-                delay(2000)
+                pause(2000)
 
                 logger.error("Disconnecting....")
                 close()
@@ -306,7 +306,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
-                delay(2000)
+                pause(2000)
 
                 logger.error("Disconnecting....")
                 close()

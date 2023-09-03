@@ -94,7 +94,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
      * @return true if we should continue parsing the incoming message, false if we should abort (as we are DONE processing data)
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD. ONLY RESPONSES ARE ON ACTION DISPATCH!
-    suspend fun validateMessageTypeAndDoPending(
+    fun validateMessageTypeAndDoPending(
         server: Server<CONNECTION>,
         handshaker: Handshaker<CONNECTION>,
         handshakePublication: Publication,
@@ -166,7 +166,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
      * @return true if we should continue parsing the incoming message, false if we should abort
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    private suspend fun validateUdpConnectionInfo(
+    private fun validateUdpConnectionInfo(
         server: Server<CONNECTION>,
         handshaker: Handshaker<CONNECTION>,
         handshakePublication: Publication,
@@ -225,7 +225,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
     /**
      * @return true if the connection was SUCCESS. False if the handshake poller should immediately close the publication
      */
-    suspend fun processIpcHandshakeMessageServer(
+    fun processIpcHandshakeMessageServer(
         server: Server<CONNECTION>,
         handshaker: Handshaker<CONNECTION>,
         aeronDriver: AeronDriver,
@@ -410,7 +410,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
      *
      * @return true if the connection was SUCCESS. False if the handshake poller should immediately close the publication
      */
-    suspend fun processUdpHandshakeMessageServer(
+    fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
         handshaker: Handshaker<CONNECTION>,
         handshakePublication: Publication,

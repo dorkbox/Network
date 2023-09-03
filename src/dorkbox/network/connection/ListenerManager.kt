@@ -24,6 +24,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import net.jodah.typetools.TypeResolver
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.write
 
 /**
  * Manages all of the different connect/disconnect/etc listeners
@@ -154,38 +156,39 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
 
         internal inline fun <reified T> remove(thing: T, array: Array<T>): Array<T> {
             // remove the subscription form the array
+            // THIS IS IDENTITY CHECKS, NOT EQUALITY
             return array.filter { it !== thing }.toTypedArray()
         }
     }
 
     // initialize emtpy arrays
     @Volatile
-    private var onConnectFilterList = Array<suspend (CONNECTION.() -> Boolean)>(0) { { true } }
-    private val onConnectFilterMutex = Mutex()
+    private var onConnectFilterList = Array<(CONNECTION.() -> Boolean)>(0) { { true } }
+    private val onConnectFilterLock = ReentrantReadWriteLock()
 
     @Volatile
-    private var onInitList = Array<suspend (CONNECTION.() -> Unit)>(0) { { } }
-    private val onInitMutex = Mutex()
+    private var onInitList = Array<(CONNECTION.() -> Unit)>(0) { { } }
+    private val onInitLock = ReentrantReadWriteLock()
 
     @Volatile
-    private var onConnectList = Array<suspend (CONNECTION.() -> Unit)>(0) { { } }
-    private val onConnectMutex = Mutex()
+    private var onConnectList = Array<(CONNECTION.() -> Unit)>(0) { { } }
+    private val onConnectLock = ReentrantReadWriteLock()
 
     @Volatile
-    private var onDisconnectList = Array<suspend CONNECTION.() -> Unit>(0) { { } }
-    private val onDisconnectMutex = Mutex()
+    private var onDisconnectList = Array<CONNECTION.() -> Unit>(0) { { } }
+    private val onDisconnectLock = ReentrantReadWriteLock()
 
     @Volatile
-    private var onErrorList = Array<suspend CONNECTION.(Throwable) -> Unit>(0) { {  } }
-    private val onErrorMutex = Mutex()
+    private var onErrorList = Array<CONNECTION.(Throwable) -> Unit>(0) { {  } }
+    private val onErrorLock = ReentrantReadWriteLock()
 
     @Volatile
-    private var onErrorGlobalList = Array<suspend Throwable.() -> Unit>(0) { { } }
-    private val onErrorGlobalMutex = Mutex()
+    private var onErrorGlobalList = Array<Throwable.() -> Unit>(0) { { } }
+    private val onErrorGlobalLock = ReentrantReadWriteLock()
 
     @Volatile
-    private var onMessageMap = IdentityMap<Class<*>, Array<suspend CONNECTION.(Any) -> Unit>>(32, LOAD_FACTOR)
-    private val onMessageMutex = Mutex()
+    private var onMessageMap = IdentityMap<Class<*>, Array<CONNECTION.(Any) -> Unit>>(32, LOAD_FACTOR)
+    private val onMessageLock = ReentrantReadWriteLock()
 
     // used to keep a cache of class hierarchy for distributing messages
     private val classHierarchyCache = ClassHierarchy(LOAD_FACTOR)
@@ -196,7 +199,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * If there are no rules added, then all connections are allowed
      * If there are rules added, then a rule MUST be matched to be allowed
      */
-    suspend fun filter(ipFilterRule: IpFilterRule) {
+    fun filter(ipFilterRule: IpFilterRule) {
         filter {
             // IPC will not filter, so this is OK to coerce to not-null
             ipFilterRule.matches(remoteAddress!!)
@@ -216,8 +219,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * For a server, this function will be called for ALL clients.
      */
-    suspend fun filter(function: suspend CONNECTION.() -> Boolean) {
-        onConnectFilterMutex.withLock {
+    fun filter(function: CONNECTION.() -> Boolean) {
+        onConnectFilterLock.write {
             // we have to follow the single-writer principle!
             onConnectFilterList = add(function, onConnectFilterList)
         }
@@ -229,8 +232,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * For a server, this function will be called for ALL client connections.
      */
-    suspend fun onInit(function: suspend CONNECTION.() -> Unit) {
-        onInitMutex.withLock {
+    fun onInit(function: CONNECTION.() -> Unit) {
+        onInitLock.write {
             // we have to follow the single-writer principle!
             onInitList = add(function, onInitList)
         }
@@ -240,8 +243,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * Adds a function that will be called when a client/server connection first establishes a connection with the remote end.
      * 'onInit()' callbacks will execute for both the client and server before `onConnect()` will execute will "connects" with each other
      */
-    suspend fun onConnect(function: suspend CONNECTION.() -> Unit) {
-        onConnectMutex.withLock {
+    fun onConnect(function: CONNECTION.() -> Unit) {
+        onConnectLock.write {
             // we have to follow the single-writer principle!
             onConnectList = add(function, onConnectList)
         }
@@ -252,8 +255,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * Do not try to send messages! The connection will already be closed, resulting in an error if you attempt to do so.
      */
-    suspend fun onDisconnect(function: suspend CONNECTION.() -> Unit) {
-        onDisconnectMutex.withLock {
+    fun onDisconnect(function: CONNECTION.() -> Unit) {
+        onDisconnectLock.write {
             // we have to follow the single-writer principle!
             onDisconnectList = add(function, onDisconnectList)
         }
@@ -264,8 +267,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * The error is also sent to an error log before this method is called.
      */
-    suspend fun onError(function: suspend CONNECTION.(Throwable) -> Unit) {
-        onErrorMutex.withLock {
+    fun onError(function: CONNECTION.(Throwable) -> Unit) {
+        onErrorLock.write {
             // we have to follow the single-writer principle!
             onErrorList = add(function, onErrorList)
         }
@@ -276,8 +279,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * The error is also sent to an error log before this method is called.
      */
-    suspend fun onError(function: suspend Throwable.() -> Unit) {
-        onErrorGlobalMutex.withLock {
+    fun onError(function: Throwable.() -> Unit) {
+        onErrorGlobalLock.write {
             // we have to follow the single-writer principle!
             onErrorGlobalList = add(function, onErrorGlobalList)
         }
@@ -288,8 +291,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
-    suspend fun <MESSAGE> onMessage(function: suspend CONNECTION.(MESSAGE) -> Unit) {
-        onMessageMutex.withLock {
+    fun <MESSAGE> onMessage(function: CONNECTION.(MESSAGE) -> Unit) {
+        onMessageLock.write {
             // we have to follow the single-writer principle!
 
             // this is the connection generic parameter for the listener, works for lambda expressions as well
@@ -316,16 +319,16 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 val tempMap = onMessageMap
 
                 @Suppress("UNCHECKED_CAST")
-                val func = function as suspend (CONNECTION, Any) -> Unit
+                val func = function as (CONNECTION, Any) -> Unit
 
-                val newMessageArray: Array<suspend (CONNECTION, Any) -> Unit>
-                val onMessageArray: Array<suspend (CONNECTION, Any) -> Unit>? = tempMap.get(messageClass)
+                val newMessageArray: Array<(CONNECTION, Any) -> Unit>
+                val onMessageArray: Array<(CONNECTION, Any) -> Unit>? = tempMap.get(messageClass)
 
                 if (onMessageArray != null) {
                     newMessageArray = add(function, onMessageArray)
                 } else {
                     @Suppress("RemoveExplicitTypeArguments")
-                    newMessageArray = Array<suspend (CONNECTION, Any) -> Unit>(1) { { _, _ -> } }
+                    newMessageArray = Array<(CONNECTION, Any) -> Unit>(1) { { _, _ -> } }
                     newMessageArray[0] = func
                 }
 
@@ -346,7 +349,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * @return true if the connection will be allowed to connect. False if we should terminate this connection
      */
-    suspend fun notifyFilter(connection: CONNECTION): Boolean {
+    fun notifyFilter(connection: CONNECTION): Boolean {
         // remote address will NOT be null at this stage, but best to verify.
         val remoteAddress = connection.remoteAddress
         if (remoteAddress == null) {
@@ -377,7 +380,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * NOTE: This is run directly on the thread that calls it! Things that happen in event are TIME-CRITICAL, and must happen before connect happens.
      * Because of this guarantee, init is immediately executed where connect is on a separate thread
      */
-    suspend fun notifyInit(connection: CONNECTION) {
+    fun notifyInit(connection: CONNECTION) {
         val list = onInitList
         list.forEach {
             try {
@@ -502,7 +505,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * @return true if there were listeners assigned for this message type
      */
-    suspend fun notifyOnMessage(connection: CONNECTION, message: Any): Boolean {
+    fun notifyOnMessage(connection: CONNECTION, message: Any): Boolean {
         val messageClass: Class<*> = message.javaClass
 
         // have to save the types + hierarchy (note: duplicates are OK, since they will just be overwritten)
@@ -525,7 +528,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
         val tempMap = onMessageMap
         var hasListeners = false
         hierarchy.forEach { clazz ->
-            val onMessageArray: Array<suspend (CONNECTION, Any) -> Unit>? = tempMap.get(clazz)
+            val onMessageArray: Array<(CONNECTION, Any) -> Unit>? = tempMap[clazz]
             if (onMessageArray != null) {
                 hasListeners = true
 
@@ -545,30 +548,30 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     /**
      * This will remove all listeners that have been registered!
      */
-    suspend fun close() {
+    fun close() {
         // we have to follow the single-writer principle!
         logger.debug { "Closing the listener manager" }
 
-        onConnectFilterMutex.withLock {
+        onConnectFilterLock.write {
             onConnectFilterList = Array(0) { { true } }
         }
-        onInitMutex.withLock {
+        onInitLock.write {
             onInitList = Array(0) { { } }
         }
-        onConnectMutex.withLock {
+        onConnectLock.write {
             onConnectList = Array(0) { { } }
         }
-        onDisconnectMutex.withLock {
+        onDisconnectLock.write {
             onDisconnectList = Array(0) { { } }
         }
-        onErrorMutex.withLock {
+        onErrorLock.write {
             onErrorList = Array(0) { {  } }
         }
-        onErrorGlobalMutex.withLock {
+        onErrorGlobalLock.write {
             onErrorGlobalList = Array(0) { { } }
         }
-        onMessageMutex.withLock {
-            onMessageMap = IdentityMap<Class<*>, Array<suspend CONNECTION.(Any) -> Unit>>(32, LOAD_FACTOR)
+        onMessageLock.write {
+            onMessageMap = IdentityMap(32, LOAD_FACTOR)
         }
     }
 }

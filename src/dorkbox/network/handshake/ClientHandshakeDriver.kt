@@ -54,7 +54,7 @@ internal class ClientHandshakeDriver(
     val details: String
 ) {
     companion object {
-        suspend fun build(
+        fun build(
             config: Configuration,
             aeronDriver: AeronDriver,
             autoChangeToIpc: Boolean,
@@ -182,7 +182,7 @@ internal class ClientHandshakeDriver(
         }
 
         @Throws(ClientTimedOutException::class)
-        private suspend fun buildIPC(
+        private fun buildIPC(
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             sessionIdPub: Int,
@@ -221,7 +221,7 @@ internal class ClientHandshakeDriver(
         }
 
         @Throws(ClientTimedOutException::class)
-        private suspend fun buildUDP(
+        private fun buildUDP(
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             remoteAddress: InetAddress,
@@ -329,7 +329,7 @@ internal class ClientHandshakeDriver(
         }
     }
 
-    suspend fun close() {
+    fun close() {
         // only the subs are allocated on the client!
 //        sessionIdAllocator.free(pubSub.sessionIdPub)
 //        sessionIdAllocator.free(sessionIdSub)

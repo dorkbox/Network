@@ -39,7 +39,7 @@ import java.net.InetAddress
 internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
     companion object {
-        suspend fun build(
+        fun build(
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             handshakeConnection: ClientHandshakeDriver,
@@ -109,7 +109,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
         }
 
         @Throws(ClientTimedOutException::class)
-        private suspend fun buildIPC(
+        private fun buildIPC(
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             sessionIdPub: Int,
@@ -157,7 +157,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
         }
 
         @Throws(ClientTimedOutException::class)
-        private suspend fun buildUDP(
+        private fun buildUDP(
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             sessionIdPub: Int,

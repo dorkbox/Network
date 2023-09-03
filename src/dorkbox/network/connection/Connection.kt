@@ -27,6 +27,7 @@ import io.aeron.protocol.DataHeaderFlyweight
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
 import javax.crypto.SecretKey
 
@@ -61,7 +62,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has its own logic on the remote endpoint,
      * and can have its own back-pressure.
      */
-    internal val sendIdleStrategy = endPoint.config.sendIdleStrategy.clone()
+    internal val sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
 
     /**
      * This is the client UUID. This is useful determine if the same client is connecting multiple times to a server (instead of only using IP address)
@@ -168,11 +169,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * When this is called, we should always have a subscription image!
      */
-    internal suspend fun setImage() {
+    internal fun setImage() {
         var triggered = false
         while (subscription.hasNoImages()) {
             triggered = true
-            delay(50)
+            Thread.sleep(50)
         }
 
         if (triggered) {
@@ -196,7 +197,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      *  @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    internal suspend fun send(message: Any, abortEarly: Boolean): Boolean {
+    internal fun send(message: Any, abortEarly: Boolean): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
         return endPoint.write(message, publication, sendIdleStrategy, this@Connection, maxMessageSize, abortEarly)
@@ -209,7 +210,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    suspend fun send(message: Any): Boolean {
+    fun send(message: Any): Boolean {
         return send(message, false)
     }
 
@@ -218,7 +219,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @return true if the message was successfully sent by aeron
      */
-    suspend fun ping(pingTimeoutSeconds: Int = endPoint.config.pingTimeoutSeconds, function: suspend Ping.() -> Unit = {}): Boolean {
+    fun ping(pingTimeoutSeconds: Int = endPoint.config.pingTimeoutSeconds, function: Ping.() -> Unit = {}): Boolean {
         return endPoint.ping(this, pingTimeoutSeconds, function)
     }
 
@@ -243,7 +244,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * (via connection.addListener), meaning that ONLY that listener attached to
      * the connection is notified on that event (ie, admin type listeners)
      */
-    suspend fun onDisconnect(function: suspend Connection.() -> Unit) {
+    fun onDisconnect(function: Connection.() -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
             origManager ?: ListenerManager(logger)
@@ -255,7 +256,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Adds a function that will be called only for this connection, when a client/server receives a message
      */
-    suspend fun <MESSAGE> onMessage(function: suspend Connection.(MESSAGE) -> Unit) {
+    fun <MESSAGE> onMessage(function: Connection.(MESSAGE) -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
             origManager ?: ListenerManager(logger)
@@ -269,7 +270,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * This is ALWAYS called on a new dispatch
      */
-    internal suspend fun notifyOnMessage(message: Any): Boolean {
+    internal fun notifyOnMessage(message: Any): Boolean {
         return listenerManager.value?.notifyOnMessage(this, message) ?: false
     }
 
@@ -312,7 +313,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    suspend fun close() {
+    fun close() {
         close(sendDisconnectMessage = true,
               notifyDisconnect = true)
     }
@@ -320,7 +321,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    internal suspend fun close(sendDisconnectMessage: Boolean, notifyDisconnect: Boolean) {
+    internal fun close(sendDisconnectMessage: Boolean, notifyDisconnect: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
@@ -336,7 +337,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     // connection.close() -> this
     // endpoint.close() -> connection.close() -> this
-    internal suspend fun closeImmediately(sendDisconnectMessage: Boolean, notifyDisconnect: Boolean) {
+    internal fun closeImmediately(sendDisconnectMessage: Boolean, notifyDisconnect: Boolean) {
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (!isClosed.compareAndSet(expect = false, update = true)) {
             return

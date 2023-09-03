@@ -27,15 +27,10 @@ import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.AeronDriverException
 import dorkbox.network.exceptions.ClientRetryException
-import dorkbox.util.withReentrantLock
 import io.aeron.*
 import io.aeron.driver.MediaDriver
 import io.aeron.status.ChannelEndpointStatus
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
@@ -45,6 +40,8 @@ import java.io.IOException
 import java.net.BindException
 import java.net.SocketException
 import java.util.concurrent.*
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.write
 
 internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration.MediaDriverConfig, logger: KLogger) {
     companion object {
@@ -52,23 +49,25 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
         private const val AERON_PUBLICATION_LINGER_TIMEOUT = 5_000L  // in MS
 
+        private const val AERON_PUB_SUB_TIMEOUT = 50L // in MS
+
         private val driverLogger = KotlinLogging.logger(AeronDriver::class.java.simpleName)
 
         private val onErrorGlobalList = atomic(Array<Throwable.() -> Unit>(0) { { } })
-        private val onErrorGlobalMutex = Mutex()
+        private val onErrorGlobalLock = ReentrantReadWriteLock()
 
         /**
          * Called when there is an Aeron error
          */
-        suspend fun onError(function: Throwable.() -> Unit) {
-            onErrorGlobalMutex.withLock {
+        fun onError(function: Throwable.() -> Unit) {
+            onErrorGlobalLock.write {
                 // we have to follow the single-writer principle!
                 onErrorGlobalList.lazySet(ListenerManager.add(function, onErrorGlobalList.value))
             }
         }
 
-        private suspend fun removeOnError(function: Throwable.() -> Unit) {
-            onErrorGlobalMutex.withLock {
+        private fun removeOnError(function: Throwable.() -> Unit) {
+            onErrorGlobalLock.write {
                 // we have to follow the single-writer principle!
                 onErrorGlobalList.lazySet(ListenerManager.remove(function, onErrorGlobalList.value))
             }
@@ -107,7 +106,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     private var mediaDriver: MediaDriver? = null
 
     private val onErrorLocalList = mutableListOf<Throwable.() -> Unit>()
-    private val onErrorLocalMutex = Mutex()
+    private val onErrorLocalLock = ReentrantReadWriteLock()
 
     private val context: AeronContext
     private val aeronErrorHandler: (Throwable) -> Unit
@@ -118,7 +117,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     private val registeredPublicationsTrace: LockFreeHashSet<Long> = LockFreeHashSet()
     private val registeredSubscriptionsTrace: LockFreeHashSet<Long> = LockFreeHashSet()
 
-    private val stateMutex = Mutex()
+    private val stateLock = ReentrantReadWriteLock()
 
     /**
      * Checks to see if there are any critical network errors (for example, a VPN connection getting disconnected while running)
@@ -205,20 +204,22 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     }
 
 
-    fun addError(function: Throwable.() -> Unit) = runBlocking {
+    fun addError(function: Throwable.() -> Unit) {
         // always add this to the global one
         onError(function)
 
         // this is so we can track all the added error listeners (and removed them when we close, since the DRIVER has a global list)
-        onErrorLocalMutex.withLock {
+        onErrorLocalLock.write {
             onErrorLocalList.add(function)
         }
     }
 
-    private suspend fun removeErrors() = onErrorLocalMutex.withLock {
-        mustRestartDriverOnError = false
-        onErrorLocalList.forEach {
-            removeOnError(it)
+    private fun removeErrors() {
+        onErrorLocalLock.write {
+            mustRestartDriverOnError = false
+            onErrorLocalList.forEach {
+                removeOnError(it)
+            }
         }
     }
 
@@ -229,7 +230,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      *
      *  @return true if we are successfully connected to the aeron client
      */
-    suspend fun start(logger: KLogger): Boolean = stateMutex.withLock {
+    fun start(logger: KLogger): Boolean = stateLock.write {
         require(!closed) { "Aeron Driver [$driverId]: Cannot start a driver that was closed. A new driver + context must be created" }
 
         val isLoaded = mediaDriver != null && aeron != null && aeron?.isClosed == false
@@ -247,7 +248,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 // SOMETIMES aeron is in the middle of shutting down, and this prevents us from trying to connect to
                 // that instance
                 logger.debug { "Aeron Driver [$driverId]: Already running. Double checking status..." }
-                delay(context.driverTimeout / 2)
+                Thread.sleep(context.driverTimeout / 2)
                 running = isRunning()
             }
 
@@ -261,7 +262,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                         break
                     } catch (e: Exception) {
                         logger.warn(e) { "Aeron Driver [$driverId]: Unable to start at ${context.directory}. Retrying $count more times..." }
-                        delay(context.driverTimeout)
+                        Thread.sleep(context.driverTimeout)
                     }
                 }
             } else {
@@ -310,13 +311,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      * The publication returned is threadsafe.
      */
     @Suppress("DEPRECATION")
-    suspend fun addPublication(
+    fun addPublication(
         logger: KLogger,
         publicationUri: ChannelUriStringBuilder,
         streamId: Int,
         logInfo: String,
         isIpc: Boolean
-    ): Publication = stateMutex.withLock {
+    ): Publication = stateLock.write {
 
         val uri = publicationUri.build()
 
@@ -380,7 +381,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 logger.debug { "Aeron Driver [$driverId]: Delaying creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
             }
             // the publication has not ACTUALLY been created yet!
-            delay(50)
+            Thread.sleep(AERON_PUB_SUB_TIMEOUT)
         }
 
         if (hasDelay) {
@@ -405,12 +406,12 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      * This is not a thread-safe publication!
      */
     @Suppress("DEPRECATION")
-    suspend fun addExclusivePublication(
+    fun addExclusivePublication(
         logger: KLogger,
         publicationUri: ChannelUriStringBuilder,
         streamId: Int,
         logInfo: String,
-        isIpc: Boolean): Publication = stateMutex.withLock {
+        isIpc: Boolean): Publication = stateLock.write {
 
         val uri = publicationUri.build()
 
@@ -476,7 +477,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 logger.debug { "Aeron Driver [$driverId]: Delaying creation of ex-publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
             }
             // the publication has not ACTUALLY been created yet!
-            delay(50)
+            Thread.sleep(AERON_PUB_SUB_TIMEOUT)
         }
 
         if (hasDelay) {
@@ -502,12 +503,12 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      * {@link Aeron.Context#unavailableImageHandler(UnavailableImageHandler)} from the {@link Aeron.Context}.
      */
     @Suppress("DEPRECATION")
-    suspend fun addSubscription(
+    fun addSubscription(
         logger: KLogger,
         subscriptionUri: ChannelUriStringBuilder,
         streamId: Int,
         logInfo: String,
-        isIpc: Boolean): Subscription = stateMutex.withLock {
+        isIpc: Boolean): Subscription = stateLock.write {
 
         val uri = subscriptionUri.build()
 
@@ -572,7 +573,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 logger.debug { "Aeron Driver [$driverId]: Delaying creation of subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
             }
             // the subscription has not ACTUALLY been created yet!
-           delay(50)
+            Thread.sleep(AERON_PUB_SUB_TIMEOUT)
         }
 
         if (hasDelay) {
@@ -591,7 +592,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     /**
      * Guarantee that the publication is closed AND the backing file is removed
      */
-    suspend fun close(publication: Publication, logger: KLogger, logInfo: String) = stateMutex.withLock {
+    fun close(publication: Publication, logger: KLogger, logInfo: String) = stateLock.write {
         val name = if (publication is ConcurrentPublication) {
             "publication"
         } else {
@@ -620,13 +621,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             // aeron is async. close() doesn't immediately close, it just submits the close command!
             // THIS CAN TAKE A WHILE TO ACTUALLY CLOSE!
             while (publication.isConnected || publication.channelStatus() == ChannelEndpointStatus.ACTIVE || aeron1.getPublication(registrationId) != null) {
-                delay(50)
+                Thread.sleep(AERON_PUB_SUB_TIMEOUT)
             }
         } else {
             // aeron is async. close() doesn't immediately close, it just submits the close command!
             // THIS CAN TAKE A WHILE TO ACTUALLY CLOSE!
             while (publication.isConnected || publication.channelStatus() == ChannelEndpointStatus.ACTIVE || aeron1.getExclusivePublication(registrationId) != null) {
-                delay(50)
+                Thread.sleep(AERON_PUB_SUB_TIMEOUT)
             }
         }
 
@@ -641,7 +642,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     /**
      * Guarantee that the publication is closed AND the backing file is removed
      */
-    suspend fun close(subscription: Subscription, logger: KLogger, logInfo: String) {
+    fun close(subscription: Subscription, logger: KLogger, logInfo: String) = stateLock.write {
         logger.trace { "Aeron Driver [$driverId]: Closing subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
 
         val aeron1 = aeron
@@ -660,7 +661,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         // aeron is async. close() doesn't immediately close, it just submits the close command!
         // THIS CAN TAKE A WHILE TO ACTUALLY CLOSE!
         while (subscription.isConnected || subscription.channelStatus() == ChannelEndpointStatus.ACTIVE || subscription.images().isNotEmpty()) {
-            delay(50)
+            Thread.sleep(AERON_PUB_SUB_TIMEOUT)
         }
 
         // deleting log files is generally not recommended in a production environment as it can result in data loss and potential disruption of the messaging system!!
@@ -676,7 +677,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      *
      * @return true if the media driver is STOPPED.
      */
-    suspend fun ensureStopped(timeoutMS: Long, intervalTimeoutMS: Long, logger: KLogger): Boolean {
+    fun ensureStopped(timeoutMS: Long, intervalTimeoutMS: Long, logger: KLogger): Boolean {
         if (closed) {
             return true
         }
@@ -691,7 +692,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 didLog = true
                 logger.debug { "Aeron Driver [$driverId]: Still running (${aeronDirectory}). Waiting for it to stop..." }
             }
-            delay(intervalTimeoutMS)
+            Thread.sleep(intervalTimeoutMS)
         }
 
         return !isRunning()
@@ -714,7 +715,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         return context.isRunning()
     }
 
-    suspend fun isInUse(endPoint: EndPoint<*>?, logger: KLogger): Boolean {
+    fun isInUse(endPoint: EndPoint<*>?, logger: KLogger): Boolean {
         // as many "sort-cuts" as we can for checking if the current Aeron Driver/client is still in use
         if (!isRunning()) {
             logger.trace { "Aeron Driver [$driverId]: not running" }
@@ -796,7 +797,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      *
      * @return true if the driver was successfully stopped.
      */
-    suspend fun close(endPoint: EndPoint<*>?, logger: KLogger): Boolean = stateMutex.withReentrantLock {
+    fun close(endPoint: EndPoint<*>?, logger: KLogger): Boolean = stateLock.write {
         if (endPoint != null) {
             endPointUsages.remove(endPoint)
         }
@@ -813,7 +814,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
                 // reset our contextDefine value, so that this configuration can safely be reused
                 endPoint?.config?.contextDefined = false
-                return@withReentrantLock false
+                return@write false
             }
         }
 
@@ -822,7 +823,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             logger.debug { "Aeron Driver [$driverId]: already closed. Ignoring close request." }
             // reset our contextDefine value, so that this configuration can safely be reused
             endPoint?.config?.contextDefined = false
-            return@withReentrantLock false
+            return@write false
         }
 
 
@@ -850,7 +851,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
             // reset our contextDefine value, so that this configuration can safely be reused
             endPoint?.config?.contextDefined = false
-            return@withReentrantLock false
+            return@write false
         }
 
         logger.debug { "Aeron Driver [$driverId]: Stopping driver at '${driverDirectory}'..." }
@@ -877,14 +878,14 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 // on close, we want to wait for the driver to timeout before considering it "closed". Connections can still LINGER (see below)
                 // on close, the publication CAN linger (in case a client goes away, and then comes back)
                 // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
-                delay(timeout)
+                Thread.sleep(timeout)
             }
 
             // wait for the media driver to actually stop
             var count = 10
             while (--count >= 0 && isRunning()) {
                 logger.warn { "Aeron Driver [$driverId]: still running at '${driverDirectory}'. Waiting for it to stop. Trying to close $count more times." }
-                delay(timeout)
+                Thread.sleep(timeout)
             }
         }
         catch (e: Exception) {
@@ -935,7 +936,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         logger.debug { "Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'" }
         closed = true
 
-        return@withReentrantLock true
+        return@write true
     }
 
     /**
@@ -1052,15 +1053,15 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     /**
      * Make sure that we DO NOT approach the Aeron linger timeout!
      */
-    suspend fun delayDriverTimeout(multiplier: Number = 1) {
-        delay((driverTimeout() * multiplier.toDouble()).toLong())
+    fun delayDriverTimeout(multiplier: Number = 1) {
+        Thread.sleep((driverTimeout() * multiplier.toDouble()).toLong())
     }
 
     /**
      * Make sure that we DO NOT approach the Aeron linger timeout!
      */
-    suspend fun delayLingerTimeout(multiplier: Number = 1) {
-        delay(driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds((lingerNs() * multiplier.toDouble()).toLong())) )
+    fun delayLingerTimeout(multiplier: Number = 1) {
+        Thread.sleep(driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds((lingerNs() * multiplier.toDouble()).toLong())) )
     }
 
     override fun equals(other: Any?): Boolean {

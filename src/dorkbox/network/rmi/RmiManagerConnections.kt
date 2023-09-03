@@ -38,7 +38,7 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
     /**
      * called on "server"
      */
-    suspend fun onConnectionObjectCreateRequest(serialization: Serialization<CONNECTION>, connection: CONNECTION, message: ConnectionObjectCreateRequest) {
+    fun onConnectionObjectCreateRequest(serialization: Serialization<CONNECTION>, connection: CONNECTION, message: ConnectionObjectCreateRequest) {
         val callbackId = RmiUtils.unpackLeft(message.packedIds)
         val kryoId = RmiUtils.unpackRight(message.packedIds)
         val objectParameters = message.objectParameters
@@ -70,7 +70,7 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
     /**
      * called on "client"
      */
-    suspend fun onConnectionObjectCreateResponse(connection: CONNECTION, message: ConnectionObjectCreateResponse) {
+    fun onConnectionObjectCreateResponse(connection: CONNECTION, message: ConnectionObjectCreateResponse) {
         val callbackId = RmiUtils.unpackLeft(message.packedIds)
         val rmiId = RmiUtils.unpackRight(message.packedIds)
 
@@ -103,7 +103,7 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
     /**
      * called on "client" or "server"
      */
-    suspend fun onConnectionObjectDeleteRequest(connection: CONNECTION, message: ConnectionObjectDeleteRequest) {
+    fun onConnectionObjectDeleteRequest(connection: CONNECTION, message: ConnectionObjectDeleteRequest) {
         val rmiId = message.rmiId
 
         // we only delete the impl object if the RMI id is valid!

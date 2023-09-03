@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import dorkbox.network.rmi.messages.ConnectionObjectDeleteResponse
 import dorkbox.network.rmi.messages.MethodRequest
 import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.serialization.Serialization
+import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import java.lang.reflect.Proxy
 import java.util.*
@@ -93,7 +94,7 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
      * Manages ALL OF THE RMI SCOPES
      */
     @Suppress("DuplicatedCode")
-    suspend fun processMessage(
+    fun processMessage(
         serialization: Serialization<CONNECTION>,
         connection: CONNECTION,
         message: Any,
@@ -189,47 +190,49 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
                 if (isCoroutine) {
                     // https://stackoverflow.com/questions/47654537/how-to-run-suspend-method-via-reflection
                     // https://discuss.kotlinlang.org/t/calling-coroutines-suspend-functions-via-reflection/4672
-                    var suspendResult = kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn<Any?> { cont ->
-                        // if we are a coroutine, we have to replace the LAST arg with the coroutine object
-                        // we KNOW this is OK, because a continuation arg will always be there!
-                        args!![args.size - 1] = cont
+                    runBlocking {
+                        var suspendResult = kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn<Any?> { cont ->
+                            // if we are a coroutine, we have to replace the LAST arg with the coroutine object
+                            // we KNOW this is OK, because a continuation arg will always be there!
+                            args!![args.size - 1] = cont
 
-                        var insideResult: Any?
-                        try {
-                            // args!! is safe to do here (even though it doesn't make sense)
-                            insideResult = cachedMethod.invoke(connection, implObject, args)
-                        } catch (ex: Exception) {
-                            insideResult = ex.cause
-                            // added to prevent a stack overflow when references is false, (because 'cause' == "this").
-                            // See:
-                            // https://groups.google.com/forum/?fromgroups=#!topic/kryo-users/6PDs71M1e9Y
-                            if (insideResult == null) {
-                                insideResult = ex
+                            var insideResult: Any?
+                            try {
+                                // args!! is safe to do here (even though it doesn't make sense)
+                                insideResult = cachedMethod.invoke(connection, implObject, args)
+                            } catch (ex: Exception) {
+                                insideResult = ex.cause
+                                // added to prevent a stack overflow when references is false, (because 'cause' == "this").
+                                // See:
+                                // https://groups.google.com/forum/?fromgroups=#!topic/kryo-users/6PDs71M1e9Y
+                                if (insideResult == null) {
+                                    insideResult = ex
+                                }
+                                else {
+                                    insideResult.initCause(null)
+                                }
                             }
-                            else {
-                                insideResult.initCause(null)
-                            }
-                        }
-                        insideResult
-                    }
-
-
-                    if (suspendResult === kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
-                        // we were suspending, and the stack will resume when possible, then it will call the response below
-                    }
-                    else {
-                        if (suspendResult === Unit) {
-                            // kotlin suspend returns, that DO NOT have a return value, REALLY return kotlin.Unit. This means there is no
-                            // return value!
-                            suspendResult = null
-                        } else if (suspendResult is Exception) {
-                            RmiUtils.cleanStackTraceForImpl(suspendResult, true)
-                            logger.error("Connection ${connection.id}", suspendResult)
+                            insideResult
                         }
 
-                        if (sendResponse) {
-                            val rmiMessage = returnRmiMessage(message, suspendResult, logger)
-                            connection.send(rmiMessage)
+
+                        if (suspendResult === kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
+                            // we were suspending, and the stack will resume when possible, then it will call the response below
+                        }
+                        else {
+                            if (suspendResult === Unit) {
+                                // kotlin suspend returns, that DO NOT have a return value, REALLY return kotlin.Unit. This means there is no
+                                // return value!
+                                suspendResult = null
+                            } else if (suspendResult is Exception) {
+                                RmiUtils.cleanStackTraceForImpl(suspendResult, true)
+                                logger.error("Connection ${connection.id}", suspendResult)
+                            }
+
+                            if (sendResponse) {
+                                val rmiMessage = returnRmiMessage(message, suspendResult, logger)
+                                connection.send(rmiMessage)
+                            }
                         }
                     }
                 }

@@ -117,7 +117,7 @@ open class Server<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "6.9.1"
+        const val version = Configuration.version
 
         /**
          * Ensures that an endpoint (using the specified configuration) is NO LONGER running.
@@ -182,10 +182,6 @@ open class Server<CONNECTION : Connection>(
         return serverException
     }
 
-    init {
-        verifyState()
-    }
-
     /**
      * Binds the server IPC only, using the previously set AERON configuration
      */
@@ -229,7 +225,6 @@ open class Server<CONNECTION : Connection>(
 
         try {
             startDriver()
-            verifyState()
             initializeState()
         }
         catch (e: Exception) {

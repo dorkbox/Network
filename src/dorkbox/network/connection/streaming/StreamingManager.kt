@@ -41,11 +41,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
 import org.agrona.MutableDirectBuffer
+import org.agrona.concurrent.IdleStrategy
 import org.agrona.concurrent.UnsafeBuffer
 import java.io.File
 import java.io.FileInputStream
 
-internal class StreamingManager<CONNECTION : Connection>(private val logger: KLogger, private val messageDispatch: CoroutineScope, val config: Configuration) {
+internal class StreamingManager<CONNECTION : Connection>(private val logger: KLogger, val config: Configuration) {
 
     companion object {
         private const val KILOBYTE = 1024
@@ -241,23 +242,19 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 }
 
 
-                // NOTE: This MUST be on a new co-routine
-                messageDispatch.launch {
-                    val listenerManager = endPoint.listenerManager
+                val listenerManager = endPoint.listenerManager
+                try {
+                    var hasListeners = listenerManager.notifyOnMessage(connection, streamedMessage)
 
-                    try {
-                        var hasListeners = listenerManager.notifyOnMessage(connection, streamedMessage)
+                    // each connection registers, and is polled INDEPENDENTLY for messages.
+                    hasListeners = hasListeners or connection.notifyOnMessage(streamedMessage)
 
-                        // each connection registers, and is polled INDEPENDENTLY for messages.
-                        hasListeners = hasListeners or connection.notifyOnMessage(streamedMessage)
-
-                        if (!hasListeners) {
-                            logger.error("No streamed message callbacks found for ${streamedMessage::class.java.name}")
-                        }
-                    } catch (e: Exception) {
-                        val newException = StreamingException("Error processing message ${streamedMessage::class.java.name}", e)
-                        listenerManager.notifyError(connection, newException)
+                    if (!hasListeners) {
+                        logger.error("No streamed message callbacks found for ${streamedMessage::class.java.name}")
                     }
+                } catch (e: Exception) {
+                    val newException = StreamingException("Error processing message ${streamedMessage::class.java.name}", e)
+                    listenerManager.notifyError(connection, newException)
                 }
             }
             StreamingState.FAILED -> {
@@ -334,12 +331,12 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
         }
     }
 
-    private suspend fun sendFailMessageAndThrow(
+    private fun sendFailMessageAndThrow(
         e: Exception,
         streamSessionId: Int,
         publication: Publication,
         endPoint: EndPoint<CONNECTION>,
-        sendIdleStrategy: CoroutineIdleStrategy,
+        sendIdleStrategy: IdleStrategy,
         connection: CONNECTION,
         kryo: KryoWriter<CONNECTION>
     ) {
@@ -377,14 +374,14 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
      *
      * @return true if ALL the message blocks were successfully sent by aeron, false otherwise. Exceptions are caught and rethrown!
      */
-    suspend fun send(
+    fun send(
         publication: Publication,
         originalBuffer: MutableDirectBuffer,
         maxMessageSize: Int,
         objectSize: Int,
         endPoint: EndPoint<CONNECTION>,
         kryo: KryoWriter<CONNECTION>,
-        sendIdleStrategy: CoroutineIdleStrategy,
+        sendIdleStrategy: IdleStrategy,
         connection: CONNECTION
     ): Boolean {
         // NOTE: our max object size for IN-MEMORY messages is an INT. For file transfer it's a LONG (so everything here is cast to a long)
@@ -576,12 +573,12 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
      * @return true if ALL the message blocks were successfully sent by aeron, false otherwise. Exceptions are caught and rethrown!
      */
     @Suppress("SameParameterValue")
-    suspend fun sendFile(
+    fun sendFile(
         file: File,
         publication: Publication,
         endPoint: EndPoint<CONNECTION>,
         kryo: KryoWriter<CONNECTION>,
-        sendIdleStrategy: CoroutineIdleStrategy,
+        sendIdleStrategy: IdleStrategy,
         connection: CONNECTION,
         streamSessionId: Int
     ): Boolean {

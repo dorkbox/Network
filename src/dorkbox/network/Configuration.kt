@@ -44,13 +44,6 @@ import java.nio.channels.ClosedByInterruptException
 import java.util.concurrent.*
 
 class ServerConfiguration : dorkbox.network.Configuration() {
-    companion object {
-        /**
-         * Gets the version number.
-         */
-        const val version = "6.9.1"
-    }
-
     /**
      * The address for the server to listen on. "*" will accept connections from all interfaces, otherwise specify
      * the hostname (or IP) to bind to.
@@ -212,6 +205,11 @@ class ClientConfiguration : dorkbox.network.Configuration() {
 abstract class Configuration protected constructor() {
     @OptIn(ExperimentalCoroutinesApi::class)
     companion object {
+        /**
+         * Gets the version number.
+         */
+        const val version = "6.10"
+
         internal val NOP_LOGGER = KotlinLogging.logger(NOPLogger.NOP_LOGGER)
 
         internal const val errorMessage = "Cannot set a property after the configuration context has been created!"
@@ -224,8 +222,6 @@ abstract class Configuration protected constructor() {
 
         const val UDP_HANDSHAKE_STREAM_ID: Int = 0x1337cafe  // 322423550
         const val IPC_HANDSHAKE_STREAM_ID: Int = 0x1337c0de  // 322420958
-
-        private val defaultMessageCoroutineScope = Dispatchers.Default
 
         private val defaultAeronFilter: (error: Throwable) -> Boolean = { error ->
             // we suppress these because they are already handled
@@ -451,18 +447,6 @@ abstract class Configuration protected constructor() {
             require(!contextDefined) { errorMessage }
             field = value
         }
-
-    /**
-     * Responsible for publishing messages that arrive via the network.
-     *
-     * Normally, events should be dispatched asynchronously across a thread pool, but in certain circumstances you may want to constrain this to a single thread dispatcher or other, custom dispatcher.
-     */
-    var messageDispatch = defaultMessageCoroutineScope
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
-
 
     /**
      * Allows the user to change how endpoint settings and public key information are saved.
@@ -1053,7 +1037,6 @@ abstract class Configuration protected constructor() {
         config.connectionExpirationTimoutNanos = connectionExpirationTimoutNanos
         config.isReliable = isReliable
         config.pingTimeoutSeconds = pingTimeoutSeconds
-        config.messageDispatch = messageDispatch
         config.settingsStore = settingsStore
         config.serialization = serialization
         config.maxStreamSizeInMemoryMB = maxStreamSizeInMemoryMB
@@ -1147,7 +1130,6 @@ abstract class Configuration protected constructor() {
         result = 31 * result + connectionCloseTimeoutInSeconds
         result = 31 * result + connectionExpirationTimoutNanos.hashCode()
         result = 31 * result + isReliable.hashCode()
-        result = 31 * result + messageDispatch.hashCode()
         result = 31 * result + settingsStore.hashCode()
         result = 31 * result + serialization.hashCode()
         result = 31 * result + maxStreamSizeInMemoryMB

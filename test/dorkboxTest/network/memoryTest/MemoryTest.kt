@@ -102,7 +102,9 @@ class MemoryTest : BaseTest() {
                     while (true) {
                         i++
                         try {
-                            remoteObject.setOtherSus(i)
+                            runBlocking {
+                                remoteObject.setOtherSus(i)
+                            }
                         } catch (e: Exception) {
                             logger.error("Timeout when calling RMI method")
                             e.printStackTrace()

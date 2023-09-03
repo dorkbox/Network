@@ -16,6 +16,7 @@
 
 package dorkbox.network.connection
 
+import com.conversantmedia.util.concurrent.DisruptorBlockingQueue
 import dorkbox.network.Configuration
 import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
@@ -24,15 +25,13 @@ import mu.KotlinLogging
 import java.util.concurrent.*
 
 /**
- * This MUST be run on multiple coroutines! There are deadlock issues if it is only one.
- *
- * This class LITERALLY forces a coroutine dispatcher to be exclusively on a single thread.
+ * Event logic throughout the network MUST be run on multiple threads! There are deadlock issues if it is only one.
  *
  * WARNING: The logic in this class will ONLY work in this class, as it relies on this specific behavior. Do not use it elsewhere!
  */
 enum class EventDispatcher {
     // NOTE: CLOSE must be last!
-    HANDSHAKE, CONNECT, DISCONNECT, RESPONSE_MANAGER, ERROR, CLOSE;
+    HANDSHAKE, CONNECT, DISCONNECT, ERROR, CLOSE;
 
     companion object {
         private val DEBUG_EVENTS = false
@@ -40,10 +39,10 @@ enum class EventDispatcher {
 
         private val logger = KotlinLogging.logger(EventDispatcher::class.java.simpleName)
 
-        private val threadIds = values().map { atomic(0L) }.toTypedArray()
+        private val threadIds = entries.map { atomic(0L) }.toTypedArray()
 
 
-        private val executors = values().map { event ->
+        private val executors = entries.map { event ->
             // It CANNOT be the default dispatch because there will be thread starvation
             // NOTE: THIS CANNOT CHANGE!! IT WILL BREAK EVERYTHING IF IT CHANGES!
             Executors.newSingleThreadExecutor(
@@ -53,11 +52,20 @@ enum class EventDispatcher {
                     threadIds[event.ordinal].lazySet(thread.id)
                 }
             )
-        }
+        }.toTypedArray()
 
-        private val eventData = executors.map { executor ->
-            CoroutineScope(executor.asCoroutineDispatcher()  + SupervisorJob())
-        }
+        private val queues = executors.map { executor ->
+            val disruptor = DisruptorBlockingQueue<java.lang.Runnable>(16_000)
+
+            executor.submit {
+                while (true) {
+                    val event = disruptor.take()
+                    event.run()
+                }
+            }
+
+            disruptor
+        }.toTypedArray()
 
 
         init {
@@ -74,7 +82,7 @@ enum class EventDispatcher {
          * No values specified means we check ALL events
          */
         fun isDispatch(): Boolean {
-            return isCurrentEvent(*values())
+            return isCurrentEvent(*entries.toTypedArray())
         }
 
         /**
@@ -82,7 +90,7 @@ enum class EventDispatcher {
          *
          * No values specified means we check ALL events
          */
-        fun isCurrentEvent(vararg events: EventDispatcher = values()): Boolean {
+        fun isCurrentEvent(vararg events: EventDispatcher = entries.toTypedArray()): Boolean {
             val threadId = Thread.currentThread().id
 
             events.forEach { event ->
@@ -128,24 +136,24 @@ enum class EventDispatcher {
          *
          * If an event is RE-ENTRANT, then it will immediately execute!
          */
-        private fun launch(event: EventDispatcher, function: suspend () -> Unit): Job {
+        private fun launch(event: EventDispatcher, function: () -> Unit) {
             val eventId = event.ordinal
 
-            return if (DEBUG_EVENTS) {
+            if (DEBUG_EVENTS) {
                 val id = traceId.getAndIncrement()
-                eventData[eventId].launch(block = {
+                queues[eventId].add(Runnable {
                     logger.debug { "Starting $event : $id" }
                     function()
                     logger.debug { "Finished $event : $id" }
                 })
             } else {
-                eventData[eventId].launch {
+                queues[eventId].add(Runnable {
                     function()
-                }
+                })
             }
         }
 
-        suspend fun launchSequentially(endEvent: EventDispatcher, function: suspend () -> Unit) {
+        fun launchSequentially(endEvent: EventDispatcher, function: () -> Unit) {
             // If one of our callbacks requested a shutdown, we wait until all callbacks have run ... THEN shutdown
             val event = getCurrentEvent()
 
@@ -166,7 +174,7 @@ enum class EventDispatcher {
         }
     }
 
-    fun launch(function: suspend () -> Unit): Job {
-        return launch(this, function)
+    fun launch(function: () -> Unit) {
+        launch(this, function)
     }
 }

@@ -31,6 +31,7 @@ import io.aeron.Publication
 import io.aeron.logbuffer.FrameDescriptor
 import mu.KLogger
 import org.agrona.DirectBuffer
+import org.agrona.concurrent.IdleStrategy
 
 internal class Handshaker<CONNECTION : Connection>(
     private val logger: KLogger,
@@ -42,7 +43,7 @@ internal class Handshaker<CONNECTION : Connection>(
 ) {
     private val handshakeReadKryo: KryoReader<CONNECTION>
     private val handshakeWriteKryo: KryoWriter<CONNECTION>
-    private val handshakeSendIdleStrategy: CoroutineIdleStrategy
+    private val handshakeSendIdleStrategy: IdleStrategy
 
     private val writeTimeoutNS = (aeronDriver.lingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
 
@@ -57,7 +58,7 @@ internal class Handshaker<CONNECTION : Connection>(
         serialization.newHandshakeKryo(handshakeReadKryo)
         serialization.newHandshakeKryo(handshakeWriteKryo)
 
-        handshakeSendIdleStrategy = config.sendIdleStrategy.clone()
+        handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
     }
 
     /**
@@ -69,7 +70,7 @@ internal class Handshaker<CONNECTION : Connection>(
      * @return true if the message was successfully sent by aeron
      */
     @Suppress("DuplicatedCode")
-    internal suspend inline fun writeMessage(publication: Publication, logInfo: String, message: HandshakeMessage): Boolean {
+    internal fun writeMessage(publication: Publication, logInfo: String, message: HandshakeMessage): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace { "[$logInfo] (${message.connectKey}) send HS: $message" }
 

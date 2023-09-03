@@ -31,20 +31,16 @@ import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.handshake.RandomId65kAllocator
 import dorkbox.network.serialization.AeronOutput
 import dorkbox.util.Sys
-import dorkbox.util.withReentrantLock
 import io.aeron.*
 import io.aeron.driver.reports.LossReportReader
 import io.aeron.driver.reports.LossReportUtil
 import io.aeron.logbuffer.BufferClaim
 import io.aeron.protocol.DataHeaderFlyweight
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.*
 import org.agrona.concurrent.AtomicBuffer
+import org.agrona.concurrent.IdleStrategy
 import org.agrona.concurrent.UnsafeBuffer
 import org.agrona.concurrent.errors.ErrorLogReader
 import org.agrona.concurrent.ringbuffer.RingBufferDescriptor
@@ -55,6 +51,9 @@ import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 
 fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, port: Int): ChannelUriStringBuilder {
     this.endpoint(AeronDriver.address(isIpv4, addressString, port))
@@ -92,25 +91,25 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
 
 
         // prevents multiple instances, within the same JVM, from starting at the exact same time.
-        private val lock = Mutex()
+        private val lock = ReentrantReadWriteLock()
 
         // have to keep track of configurations and drivers, as we do not want to start the same media driver configuration multiple times (this causes problems!)
         internal val driverConfigurations = IntMap<AeronDriverInternal>(4)
 
         fun new(endPoint: EndPoint<*>): AeronDriver {
             var driver: AeronDriver? = null
-            runBlocking {
-                withLock {
-                    driver = AeronDriver(endPoint.config, endPoint.logger, endPoint)
-                }
+            lock.write {
+                driver = AeronDriver(endPoint.config, endPoint.logger, endPoint)
             }
 
             return driver!!
         }
 
 
-        suspend fun withLock(action: suspend () -> Unit) {
-            lock.withReentrantLock(action)
+        fun withLock(action: () -> Unit) {
+            lock.write {
+                action()
+            }
         }
 
         /**
@@ -118,7 +117,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
          *
          * @return true if the media driver is STOPPED.
          */
-        suspend fun ensureStopped(configuration: Configuration, logger: KLogger, timeout: Long): Boolean {
+        fun ensureStopped(configuration: Configuration, logger: KLogger, timeout: Long): Boolean {
             if (!isLoaded(configuration.copy(), logger)) {
                 return true
             }
@@ -141,15 +140,15 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
          *
          * @return true if the media driver is loaded.
          */
-        suspend fun isLoaded(configuration: Configuration, logger: KLogger): Boolean {
+        fun isLoaded(configuration: Configuration, logger: KLogger): Boolean {
             // not EVERYTHING is used for the media driver. For ** REUSING ** the media driver, only care about those specific settings
             val mediaDriverConfig = getDriverConfig(configuration, logger)
 
             // assign the driver for this configuration. THIS IS GLOBAL for a JVM, because for a specific configuration, aeron only needs to be initialized ONCE.
             // we have INSTANCE of the "wrapper" AeronDriver, because we want to be able to have references to the logger when doing things,
             // however - the code that actually does stuff is a "singleton" in regard to an aeron configuration
-            return lock.withLock {
-                driverConfigurations.get(mediaDriverConfig.mediaDriverId()) != null
+            return lock.read {
+                driverConfigurations[mediaDriverConfig.mediaDriverId()] != null
             }
         }
 
@@ -158,9 +157,9 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
          *
          * @return true if the media driver is active and running
          */
-        suspend fun isRunning(configuration: Configuration, logger: KLogger): Boolean {
+        fun isRunning(configuration: Configuration, logger: KLogger): Boolean {
             var running = false
-            withLock {
+            lock.read {
                 running = AeronDriver(configuration, logger, null).use {
                     it.isRunning()
                 }
@@ -181,7 +180,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
          * @return true if all JVM tracked Aeron drivers are closed, false otherwise
          */
         suspend fun areAllInstancesClosed(logger: KLogger = KotlinLogging.logger(AeronDriver::class.java.simpleName)): Boolean {
-            return lock.withLock {
+            return lock.read {
                 val traceEnabled = logger.isTraceEnabled
 
                 driverConfigurations.forEach { entry ->
@@ -190,7 +189,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
 
                     if (closed) {
                         logger.error { "Aeron Driver [${driver.driverId}]: still running during check (${driver.aeronDirectory})" }
-                        return@withLock false
+                        return@read false
                     }
                 }
 
@@ -200,7 +199,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                         val driver = entry.value
                         if (driver.isInUse(null, logger)) {
                             logger.error { "Aeron Driver [${driver.driverId}]: still in use during check (${driver.aeronDirectory})" }
-                            return@withLock false
+                            return@read false
                         }
                     }
                 }
@@ -524,7 +523,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      *  @return true if we are successfully connected to the aeron client
      */
-    suspend fun start()= lock.withReentrantLock {
+    fun start() = lock.write {
         internal.start(logger)
     }
 
@@ -534,11 +533,11 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      * The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
      */
-    suspend fun waitForConnection(
+    fun waitForConnection(
         publication: Publication,
         handshakeTimeoutNs: Long,
         logInfo: String,
-        onErrorHandler: suspend (Throwable) -> Exception
+        onErrorHandler: (Throwable) -> Exception
     ) {
         if (publication.isConnected) {
             return
@@ -551,7 +550,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 return
             }
 
-            delay(200L)
+            Thread.sleep(200L)
         }
 
         close(publication, logInfo)
@@ -564,11 +563,11 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
     /**
      * For subscriptions, in the client we want to guarantee that the remote server has connected BACK to us!
      */
-    suspend fun waitForConnection(
+    fun waitForConnection(
         subscription: Subscription,
         handshakeTimeoutNs: Long,
         logInfo: String,
-        onErrorHandler: suspend (Throwable) -> Exception
+        onErrorHandler: (Throwable) -> Exception
     ) {
         if (subscription.isConnected) {
             return
@@ -581,7 +580,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 return
             }
 
-            delay(200L)
+            Thread.sleep(200L)
         }
 
         close(subscription, logInfo)
@@ -598,7 +597,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      * The publication returned is thread-safe.
      */
-    suspend fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String, isIpc: Boolean): Publication {
+    fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String, isIpc: Boolean): Publication {
         return internal.addPublication(logger, publicationUri, streamId, logInfo, isIpc)
     }
 
@@ -609,7 +608,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      * This is not a thread-safe publication!
      */
-    suspend fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String, isIpc: Boolean): Publication {
+    fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String, isIpc: Boolean): Publication {
         return internal.addExclusivePublication(logger, publicationUri, streamId, logInfo, isIpc)
     }
 
@@ -622,7 +621,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      * {@link Aeron.Context#availableImageHandler(AvailableImageHandler)} and
      * {@link Aeron.Context#unavailableImageHandler(UnavailableImageHandler)} from the {@link Aeron.Context}.
      */
-    suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String, isIpc: Boolean): Subscription {
+    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String, isIpc: Boolean): Subscription {
         return internal.addSubscription(logger, subscriptionUri, streamId, logInfo, isIpc)
     }
 
@@ -634,7 +633,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      * This can throw exceptions!
      */
-    suspend fun close(publication: Publication, logInfo: String) {
+    fun close(publication: Publication, logInfo: String) {
         internal.close(publication, logger, logInfo)
     }
 
@@ -643,7 +642,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      * This can throw exceptions!
      */
-    suspend fun close(subscription: Subscription, logInfo: String) {
+    fun close(subscription: Subscription, logInfo: String) {
         internal.close(subscription, logger, logInfo)
     }
 
@@ -653,7 +652,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      * @return true if the media driver is STOPPED.
      */
-    suspend fun ensureStopped(timeoutMS: Long, intervalTimeoutMS: Long): Boolean =
+    fun ensureStopped(timeoutMS: Long, intervalTimeoutMS: Long): Boolean =
         internal.ensureStopped(timeoutMS, intervalTimeoutMS, logger)
 
     /**
@@ -675,7 +674,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      */
     fun closed() = internal.closed()
 
-    suspend fun isInUse(endPoint: EndPoint<*>?): Boolean = internal.isInUse(endPoint, logger)
+    fun isInUse(endPoint: EndPoint<*>?): Boolean = internal.isInUse(endPoint, logger)
 
     /**
      * @return the aeron media driver log file for a specific publication.
@@ -768,7 +767,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
     /**
      * Make sure that we DO NOT approach the Aeron linger timeout!
      */
-    suspend fun delayLingerTimeout(multiplier: Number = 1) = internal.delayLingerTimeout(multiplier.toDouble())
+    fun delayLingerTimeout(multiplier: Number = 1) = internal.delayLingerTimeout(multiplier.toDouble())
 
     /**
      * A safer way to try to close the media driver if in the ENTIRE JVM, our process is the only one using aeron with it's specific configuration
@@ -778,7 +777,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      * @return true if the driver was successfully stopped.
      */
-    suspend fun closeIfSingle(): Boolean = lock.withLock {
+    fun closeIfSingle(): Boolean = lock.write {
         if (!isInUse(endPoint)) {
             if (logEverything) {
                 internal.close(endPoint, logger)
@@ -802,7 +801,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      * @return true if the driver was successfully stopped.
      */
-    suspend fun close(): Boolean = lock.withReentrantLock {
+    fun close(): Boolean = lock.write {
         if (logEverything) {
             internal.close(endPoint, logger)
         } else {
@@ -810,7 +809,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
         }
     }
 
-    suspend fun <R> use(block: suspend (AeronDriver) -> R): R {
+    fun <R> use(block: (AeronDriver) -> R): R {
         return try {
             block(this)
         } finally {
@@ -838,13 +837,13 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    internal suspend fun <CONNECTION: Connection> send(
+    internal fun <CONNECTION: Connection> send(
         publication: Publication,
         internalBuffer: MutableDirectBuffer,
         bufferClaim: BufferClaim,
         offset: Int,
         objectSize: Int,
-        sendIdleStrategy: CoroutineIdleStrategy,
+        sendIdleStrategy: IdleStrategy,
         connection: Connection,
         abortEarly: Boolean,
         listenerManager: ListenerManager<CONNECTION>
@@ -969,12 +968,12 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
      *
      * @return true if the message was successfully sent by aeron
      */
-    internal suspend fun <CONNECTION: Connection> send(
+    internal fun <CONNECTION: Connection> send(
         publication: Publication,
         buffer: AeronOutput,
         logInfo: String,
         listenerManager: ListenerManager<CONNECTION>,
-        handshakeSendIdleStrategy: CoroutineIdleStrategy
+        handshakeSendIdleStrategy: IdleStrategy
     ): Boolean {
         val objectSize = buffer.position()
         val internalBuffer = buffer.internalBuffer
@@ -1064,7 +1063,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
         }
     }
 
-    suspend fun newIfClosed(): AeronDriver {
+    fun newIfClosed(): AeronDriver {
         endPoint!!
 
         var driver: AeronDriver? = null

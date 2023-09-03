@@ -177,7 +177,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    suspend fun hello(handshakeConnection: ClientHandshakeDriver, handshakeTimeoutNs: Long) : ClientConnectionInfo {
+    fun hello(handshakeConnection: ClientHandshakeDriver, handshakeTimeoutNs: Long) : ClientConnectionInfo {
         val pubSub = handshakeConnection.pubSub
 
         // is our pub still connected??
@@ -215,7 +215,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 break
             }
 
-            delay(100)
+            Thread.sleep(100)
         }
 
         val failedEx = failedException
@@ -238,7 +238,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    suspend fun done(
+    fun done(
         handshakeConnection: ClientHandshakeDriver,
         clientConnection: ClientConnectionDriver,
         handshakeTimeoutNs: Long,
@@ -287,7 +287,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 startTime = System.nanoTime()
             }
 
-            delay(100)
+            Thread.sleep(100)
         }
 
         val failedEx = failedException

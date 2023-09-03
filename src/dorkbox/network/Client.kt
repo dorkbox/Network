@@ -119,7 +119,7 @@ open class Client<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "6.9.1"
+        const val version = Configuration.version
 
         /**
          * Ensures that the client (using the specified configuration) is NO LONGER running.
@@ -221,7 +221,7 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientException if there are misc errors
      */
     @Suppress("DuplicatedCode")
-    suspend fun reconnect() {
+    fun reconnect() {
         if (connectionTimeoutSec == 0) {
             logger.info { "Reconnecting..." }
         } else {
@@ -442,7 +442,7 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientException if there are misc errors
      */
     @Suppress("DuplicatedCode")
-    private suspend fun connect(
+    private fun connect(
         remoteAddress: InetAddress?,
         remoteAddressString: String,
         remoteAddressPrettyString: String,
@@ -518,7 +518,6 @@ open class Client<CONNECTION : Connection>(
         // Calling `client.close()` will shutdown the dispatchers (and a new client instance must be created)
         try {
             startDriver()
-            verifyState()
             initializeState()
         } catch (e: Exception) {
             resetOnError()
@@ -700,7 +699,7 @@ open class Client<CONNECTION : Connection>(
 
 
     // the handshake process might have to restart this connection process.
-    private suspend fun connect0(handshake: ClientHandshake<CONNECTION>, handshakeConnection: ClientHandshakeDriver, handshakeTimeoutNs: Long) {
+    private fun connect0(handshake: ClientHandshake<CONNECTION>, handshakeConnection: ClientHandshakeDriver, handshakeTimeoutNs: Long) {
         // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
 
 
@@ -935,7 +934,7 @@ open class Client<CONNECTION : Connection>(
      *
      * @return true if the message was sent successfully, false if the connection has been closed
      */
-    suspend fun send(message: Any): Boolean {
+    fun send(message: Any): Boolean {
         val c = connection0
 
         return if (c != null) {
@@ -954,7 +953,7 @@ open class Client<CONNECTION : Connection>(
      *
      * @return true if the ping was successfully sent to the client
      */
-    suspend fun ping(pingTimeoutSeconds: Int = config.pingTimeoutSeconds, function: suspend Ping.() -> Unit): Boolean {
+    fun ping(pingTimeoutSeconds: Int = config.pingTimeoutSeconds, function: Ping.() -> Unit): Boolean {
         val c = connection0
 
         if (c != null) {

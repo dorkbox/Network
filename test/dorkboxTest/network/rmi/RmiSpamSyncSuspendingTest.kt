@@ -21,6 +21,7 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.BaseTest
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.atomic.*
@@ -97,7 +98,9 @@ class RmiSpamSyncSuspendingTest : BaseTest() {
                     }
 
                     try {
-                        remoteObject.setOther(i)
+                        runBlocking {
+                            remoteObject.setOther(i)
+                        }
                     } catch (e: Exception) {
                         logger.error("Timeout when calling RMI method")
                         e.printStackTrace()

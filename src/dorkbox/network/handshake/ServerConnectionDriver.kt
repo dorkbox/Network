@@ -32,7 +32,7 @@ import java.net.InetAddress
  */
 internal class ServerConnectionDriver(val pubSub: PubSub) {
     companion object {
-        suspend fun build(isIpc: Boolean,
+        fun build(isIpc: Boolean,
                           aeronDriver: AeronDriver,
                           sessionIdPub: Int, sessionIdSub: Int,
                           streamIdPub: Int, streamIdSub: Int,
@@ -77,7 +77,7 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
             return ServerConnectionDriver(pubSub)
         }
 
-        private suspend fun buildIPC(
+        private fun buildIPC(
             aeronDriver: AeronDriver,
             sessionIdPub: Int, sessionIdSub: Int,
             streamIdPub: Int, streamIdSub: Int,
@@ -104,7 +104,7 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
                           reliable)
         }
 
-        private suspend fun buildUdp(
+        private fun buildUdp(
             aeronDriver: AeronDriver,
             ipInfo: IpInfo,
             sessionIdPub: Int, sessionIdSub: Int,

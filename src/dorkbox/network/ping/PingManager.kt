@@ -26,7 +26,7 @@ import java.util.concurrent.*
  * How to handle ping messages
  */
 internal class PingManager<CONNECTION : Connection> {
-    suspend fun manage(connection: CONNECTION, responseManager: ResponseManager, ping: Ping, logger: KLogger) {
+    fun manage(connection: CONNECTION, responseManager: ResponseManager, ping: Ping, logger: KLogger) {
         if (ping.pongTime == 0L) {
             // this is on the server.
             ping.pongTime = System.currentTimeMillis()
@@ -43,7 +43,7 @@ internal class PingManager<CONNECTION : Connection> {
             // process the ping message so that our ping callback does something
 
             // this will be null if the ping took longer than XXX seconds and was cancelled
-            val result = responseManager.getWaiterCallback<suspend Ping.() -> Unit>(rmiId, logger)
+            val result = responseManager.getWaiterCallback<Ping.() -> Unit>(rmiId, logger)
             if (result != null) {
                 result(ping)
             } else {
@@ -57,7 +57,7 @@ internal class PingManager<CONNECTION : Connection> {
      *
      * @return true if the message was successfully sent by aeron
      */
-    internal suspend fun ping(
+    internal fun ping(
         connection: Connection,
         pingTimeoutSeconds: Int,
         responseManager: ResponseManager,

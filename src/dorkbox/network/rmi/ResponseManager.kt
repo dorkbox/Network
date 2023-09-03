@@ -18,7 +18,7 @@ package dorkbox.network.rmi
 import dorkbox.network.Configuration
 import dorkbox.network.connection.Connection
 import dorkbox.objectPool.ObjectPool
-import dorkbox.objectPool.SuspendingPool
+import dorkbox.objectPool.Pool
 import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
@@ -58,7 +58,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
 
 
     private val rmiWaitersInUse = atomic(0)
-    private val waiterCache: SuspendingPool<ResponseWaiter>
+    private val waiterCache: Pool<ResponseWaiter>
 
     private val pendingLock = ReentrantReadWriteLock()
     private val pending = arrayOfNulls<Any?>(maxValuesInCache+1) // +1 because it's possible to have the value 65535 in the cache
@@ -79,7 +79,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         ids.shuffle()
 
         // populate the array of randomly assigned ID's + waiters.
-        waiterCache = ObjectPool.suspending(ids)
+        waiterCache = ObjectPool.blocking(ids)
     }
 
     /**
@@ -113,7 +113,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      *
      * This is ONLY called when we want to get the data out of the stored entry, because we are operating ASYNC. (pure RMI async is different)
      */
-    suspend fun <T> getWaiterCallback(id: Int, logger: KLogger): T? {
+    fun <T> getWaiterCallback(id: Int, logger: KLogger): T? {
         logger.trace { "[RM] get-callback: $id" }
 
         val previous = pendingLock.write {
@@ -141,7 +141,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      *
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
-    suspend fun prep(logger: KLogger): ResponseWaiter {
+    fun prep(logger: KLogger): ResponseWaiter {
         val waiter = waiterCache.take()
         rmiWaitersInUse.getAndIncrement()
         logger.trace { "[RM] prep in-use: ${rmiWaitersInUse.value}" }
@@ -161,7 +161,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      *
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
-    suspend fun prepWithCallback(logger: KLogger, function: Any): Int {
+    fun prepWithCallback(logger: KLogger, function: Any): Int {
         val waiter = waiterCache.take()
         rmiWaitersInUse.getAndIncrement()
         logger.trace { "[RM] prep in-use: ${rmiWaitersInUse.value}" }
@@ -185,7 +185,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
     /**
      * Cancels the RMI request in the given timeout, the callback is executed inside the read lock
      */
-    suspend fun cancelRequest(timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
+    fun cancelRequest(timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
         scope.launch {
             delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
@@ -209,7 +209,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      *
      * @return the result (can be null) or timeout exception
      */
-    suspend fun waitForReply(
+    fun waitForReply(
         responseWaiter: ResponseWaiter,
         timeoutMillis: Long,
         logger: KLogger,
@@ -243,7 +243,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
             // if no response yet, it will suspend and either
             //   A) get response
             //   B) timeout
-            responseWaiter.doWait()
+            runBlocking {
+                responseWaiter.doWait()
+            }
 
             // always cancel the timeout
             responseTimeoutJob.cancel()
@@ -253,7 +255,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
             // If the response is ALREADY here, the doWait() returns instantly (with result)
             // if no response yet, it will suspend and
             //   A) get response
-            responseWaiter.doWait()
+            runBlocking {
+                responseWaiter.doWait()
+            }
         }
 
 
@@ -281,13 +285,13 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         return resultOrWaiter
     }
 
-    suspend fun close() {
+    fun close() {
         // technically, this isn't closing it, so much as it's cleaning it out
         logger.debug { "Closing the response manager for RMI" }
 
         // wait for responses, or wait for timeouts!
         while (rmiWaitersInUse.value > 0) {
-            delay(100)
+            Thread.sleep(50)
         }
 
         pendingLock.write {
@@ -297,8 +301,6 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         }
 
         scope.cancel("Closing the response manager for RMI")
-        withContext(Dispatchers.IO) {
-            executor.awaitTermination(500, TimeUnit.MILLISECONDS)
-        }
+        executor.awaitTermination(500, TimeUnit.MILLISECONDS)
     }
 }

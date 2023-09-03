@@ -19,6 +19,7 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.atomic.*
@@ -90,7 +91,9 @@ class RmiNestedTest : BaseTest() {
 
                 rmi.create<TestObject> {
                     logger.error("Starting test")
-                    setValue(43.21f)
+                    runBlocking {
+                        setValue(43.21f)
+                    }
 
                     // Normal remote method call.
                     Assert.assertEquals(43.21f, other(), .0001f)
@@ -107,7 +110,9 @@ class RmiNestedTest : BaseTest() {
 
 
                     // make sure the "local" object and the "remote" object have the same values
-                    Assert.assertEquals(12.34f, getOtherValue(), .0001f)
+                    runBlocking {
+                        Assert.assertEquals(12.34f, getOtherValue(), .0001f)
+                    }
 
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
@@ -159,7 +164,9 @@ class RmiNestedTest : BaseTest() {
                 logger.error("Connected")
                 rmi.create<TestObject> {
                     logger.error("Starting test")
-                    setValue(43.21f)
+                    runBlocking {
+                        setValue(43.21f)
+                    }
 
                     // Normal remote method call.
                     Assert.assertEquals(43.21f, other(), .0001f)
@@ -176,7 +183,9 @@ class RmiNestedTest : BaseTest() {
 
 
                     // make sure the "local" object and the "remote" object have the same values
-                    Assert.assertEquals(12.34f, getOtherValue(), .0001f)
+                    runBlocking {
+                        Assert.assertEquals(12.34f, getOtherValue(), .0001f)
+                    }
 
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
@@ -228,10 +237,14 @@ class RmiNestedTest : BaseTest() {
 
                 rmi.create<TestObject> {
                     logger.error("Starting test")
-                    setOtherValue(43.21f)
+                    runBlocking {
+                        setOtherValue(43.21f)
+                    }
 
                     // Normal remote method call.
-                    Assert.assertEquals(43.21f, getOtherValue(), .0001f)
+                    runBlocking {
+                        Assert.assertEquals(43.21f, getOtherValue(), .0001f)
+                    }
 
                     // real object
                     val otherObject: OtherObject = getOtherObject()
@@ -271,10 +284,12 @@ class RmiNestedTest : BaseTest() {
 
                 rmi.create<TestObject> {
                     logger.error("Starting test")
-                    setOtherValue(43.21f)
+                    runBlocking {
+                        setOtherValue(43.21f)
 
-                    // Normal remote method call.
-                    Assert.assertEquals(43.21f, getOtherValue(), .0001f)
+                        // Normal remote method call.
+                        Assert.assertEquals(43.21f, getOtherValue(), .0001f)
+                    }
 
                     // real object
                     val otherObject: OtherObject = getOtherObject()

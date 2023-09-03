@@ -66,11 +66,11 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
         proxyObjects.put(rmiId, remoteObject)
     }
 
-    private fun <Iface> registerCallback(callback: suspend Iface.() -> Unit): Int {
+    private fun <Iface> registerCallback(callback: Iface.() -> Unit): Int {
         return remoteObjectCreationCallbacks.register(callback)
     }
 
-    internal fun removeCallback(callbackId: Int): suspend Any.() -> Unit {
+    internal fun removeCallback(callbackId: Int): Any.() -> Unit {
         // callback's area always correct, because we track them ourselves.
         return remoteObjectCreationCallbacks.remove(callbackId)!!
     }
@@ -146,7 +146,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      *
      * @see RemoteObject
      */
-    suspend fun <Iface> create(vararg objectParameters: Any?, callback: suspend Iface.() -> Unit) {
+    fun <Iface> create(vararg objectParameters: Any?, callback: Iface.() -> Unit) {
         val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0) ?: callback.javaClass
         val kryoId = serialization.getKryoIdForRmiClient(iFaceClass)
 
@@ -171,7 +171,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      *
      * @see RemoteObject
      */
-    suspend fun <Iface> create(callback: suspend Iface.() -> Unit) {
+    fun <Iface> create(callback: Iface.() -> Unit) {
         val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0) ?: callback.javaClass
         val kryoId = serialization.getKryoIdForRmiClient(iFaceClass)
 
@@ -185,7 +185,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      *
      * Future '.get' requests will succeed, as they do not check the existence of the implementation object (methods called on it will fail)
      */
-    suspend fun delete(rmiObjectId: Int) {
+    fun delete(rmiObjectId: Int) {
         // we only create the proxy + execute the callback if the RMI id is valid!
         if (rmiObjectId == RemoteObjectStorage.INVALID_RMI) {
             val exception = Exception("Unable to delete RMI object!")
@@ -298,7 +298,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
     /**
      * on the "client" to create a connection-specific remote object (that exists on the server)
      */
-    private suspend fun <Iface> createRemoteObject(connection: CONNECTION, kryoId: Int, objectParameters: Array<Any?>?, callback: suspend Iface.() -> Unit) {
+    private fun <Iface> createRemoteObject(connection: CONNECTION, kryoId: Int, objectParameters: Array<Any?>?, callback: Iface.() -> Unit) {
         val callbackId = registerCallback(callback)
 
         // There is no rmiID yet, because we haven't created it!

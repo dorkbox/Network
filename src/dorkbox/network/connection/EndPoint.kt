@@ -48,6 +48,7 @@ import kotlinx.coroutines.*
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
+import org.agrona.concurrent.IdleStrategy
 import java.util.concurrent.*
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
@@ -101,8 +102,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         logger.error(exception) { "Uncaught Coroutine Error!" }
     }
 
-    private val messageDispatch = CoroutineScope(config.messageDispatch + SupervisorJob())
-
     internal val listenerManager = ListenerManager<CONNECTION>(logger)
 
     val connections = ConcurrentIterator<CONNECTION>()
@@ -147,19 +146,19 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal var shutdownEventPoller = false
 
     @Volatile
-    private var shutdownLatch = dorkbox.util.sync.CountDownLatch(0)
+    private var shutdownLatch = CountDownLatch(0)
 
     /**
      * This is run in lock-step to shutdown/close the client/server event poller. Afterward, connect/bind can be called again
      */
     @Volatile
-    internal var pollerClosedLatch = dorkbox.util.sync.CountDownLatch(0)
+    internal var pollerClosedLatch = CountDownLatch(0)
 
     /**
      * This is only notified when endpoint.close() is called where EVERYTHING is to be closed.
      */
     @Volatile
-    private var closeLatch = dorkbox.util.sync.CountDownLatch(1)
+    private var closeLatch = CountDownLatch(1)
 
 
     /**
@@ -172,7 +171,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger)
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
-    private val streamingManager = StreamingManager<CONNECTION>(logger, messageDispatch, config)
+    private val streamingManager = StreamingManager<CONNECTION>(logger, config)
 
     private val pingManager = PingManager<CONNECTION>()
 
@@ -298,24 +297,15 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     }
 
     /**
-     * Make sure that the different dispatchers are currently active.
-     *
-     * The client calls this every time it attempts a connection.
-     */
-    internal fun verifyState() {
-        require(messageDispatch.isActive) { "The Message Dispatch is no longer active. It has been shutdown" }
-    }
-
-    /**
      * Make sure that shutdown latch is properly initialized
      *
      * The client calls this every time it attempts a connection.
      */
     internal fun initializeState() {
         // on the first run, we depend on these to be 0
-        shutdownLatch = dorkbox.util.sync.CountDownLatch(1)
-        pollerClosedLatch = dorkbox.util.sync.CountDownLatch(1)
-        closeLatch = dorkbox.util.sync.CountDownLatch(1)
+        shutdownLatch = CountDownLatch(1)
+        pollerClosedLatch = CountDownLatch(1)
+        closeLatch = CountDownLatch(1)
 
         endpointIsRunning.lazySet(true)
         shutdown = false
@@ -333,7 +323,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @throws Exception if there is a problem starting the media driver
      */
-    suspend fun startDriver() {
+    fun startDriver() {
         // recreate the driver if we have previously closed. If we have never run, this does nothing
         aeronDriver = aeronDriver.newIfClosed()
         aeronDriver.start()
@@ -346,7 +336,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * the same driver will probably crash (unless they have been appropriately stopped).
      * If false, then the Aeron driver is only stopped if it is safe to do so
      */
-    suspend fun stopDriver(forceTerminate: Boolean = false) {
+    fun stopDriver(forceTerminate: Boolean = false) {
         if (forceTerminate) {
             aeronDriver.close()
         } else {
@@ -399,20 +389,16 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * For a server, this function will be called for ALL client connections.
      */
-    fun onInit(function: suspend CONNECTION.() -> Unit){
-        runBlocking {
-            listenerManager.onInit(function)
-        }
+    fun onInit(function: CONNECTION.() -> Unit){
+        listenerManager.onInit(function)
     }
 
     /**
      * Adds a function that will be called when a client/server connection first establishes a connection with the remote end.
      * 'onInit()' callbacks will execute for both the client and server before `onConnect()` will execute will "connects" with each other
      */
-    fun onConnect(function: suspend CONNECTION.() -> Unit) {
-        runBlocking {
-            listenerManager.onConnect(function)
-        }
+    fun onConnect(function: CONNECTION.() -> Unit) {
+        listenerManager.onConnect(function)
     }
 
     /**
@@ -420,10 +406,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * Do not try to send messages! The connection will already be closed, resulting in an error if you attempt to do so.
      */
-    fun onDisconnect(function: suspend CONNECTION.() -> Unit) {
-        runBlocking {
-            listenerManager.onDisconnect(function)
-        }
+    fun onDisconnect(function: CONNECTION.() -> Unit) {
+        listenerManager.onDisconnect(function)
     }
 
     /**
@@ -431,10 +415,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onError(function: suspend CONNECTION.(Throwable) -> Unit) {
-        runBlocking {
-            listenerManager.onError(function)
-        }
+    fun onError(function: CONNECTION.(Throwable) -> Unit) {
+        listenerManager.onError(function)
     }
 
     /**
@@ -442,10 +424,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onErrorGlobal(function: suspend (Throwable) -> Unit) {
-        runBlocking {
-            listenerManager.onError(function)
-        }
+    fun onErrorGlobal(function: (Throwable) -> Unit) {
+        listenerManager.onError(function)
     }
 
     /**
@@ -453,7 +433,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
-    fun <Message : Any> onMessage(function: suspend CONNECTION.(Message) -> Unit) {
+    fun <Message : Any> onMessage(function: CONNECTION.(Message) -> Unit) {
         runBlocking {
             listenerManager.onMessage(function)
         }
@@ -464,7 +444,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the message was successfully sent by aeron
      */
-    internal suspend fun ping(connection: Connection, pingTimeoutMs: Int, function: suspend Ping.() -> Unit): Boolean {
+    internal fun ping(connection: Connection, pingTimeoutMs: Int, function: suspend Ping.() -> Unit): Boolean {
         return pingManager.ping(connection, pingTimeoutMs, responseManager, logger, function)
     }
 
@@ -475,10 +455,10 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    open suspend fun write(
+    open fun write(
         message: Any,
         publication: Publication,
-        sendIdleStrategy: CoroutineIdleStrategy,
+        sendIdleStrategy: IdleStrategy,
         connection: Connection,
         maxMessageSize: Int,
         abortEarly: Boolean
@@ -548,7 +528,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    open suspend fun writeUnsafe(message: Any, publication: Publication, sendIdleStrategy: CoroutineIdleStrategy, connection: CONNECTION, kryo: KryoWriter<CONNECTION>): Boolean {
+    open fun writeUnsafe(message: Any, publication: Publication, sendIdleStrategy: IdleStrategy, connection: CONNECTION, kryo: KryoWriter<CONNECTION>): Boolean {
         // NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
 
         // since ANY thread can call 'send', we have to take kryo instances in a safe way
@@ -565,6 +545,10 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     /**
      * Processes a message that has been read off the network.
      *
+     * The thread that reads this data, IS NOT the thread that consumes data off the network socket, but rather the data is consumed off
+     * of the logfile (hopefully on a mem-disk). This allows for backpressure and network messages to arrive **faster** that what can be
+     * processed.
+     *
      * This is written in a way that permits modifying/overriding how data is processed on the network
      *
      * There are custom objects that are used (Ping, RmiMessages, Streaming object, etc.) are manage and use custom object types. These types
@@ -578,22 +562,17 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // IF we get this message in time, then we do not have to wait for the connection to expire before closing it
             is DisconnectMessage -> {
                 // NOTE: This MUST be on a new co-routine (this is...)
-                runBlocking {
-                    logger.debug { "Received disconnect message from $otherTypeName" }
-                    connection.close(sendDisconnectMessage = false,
-                                     notifyDisconnect = true)
-                }
+                logger.debug { "Received disconnect message from $otherTypeName" }
+                connection.close(sendDisconnectMessage = false,
+                                 notifyDisconnect = true)
             }
 
             is Ping -> {
                 // PING will also measure APP latency, not just NETWORK PIPE latency
-                // NOTE: This MUST be on a new co-routine, specifically the messageDispatch
-                messageDispatch.launch {
-                    try {
-                        pingManager.manage(connection, responseManager, message, logger)
-                    } catch (e: Exception) {
-                        listenerManager.notifyError(connection, PingException("Error while processing Ping message", e))
-                    }
+                try {
+                    pingManager.manage(connection, responseManager, message, logger)
+                } catch (e: Exception) {
+                    listenerManager.notifyError(connection, PingException("Error while processing Ping message", e))
                 }
             }
 
@@ -603,13 +582,10 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             is RmiMessage -> {
                 // if we are an RMI message/registration, we have very specific, defined behavior.
                 // We do not use the "normal" listener callback pattern because this requires special functionality
-                // NOTE: This MUST be on a new co-routine, specifically the messageDispatch (it IS NOT the EventDispatch.RESPONSE_MANAGER!)
-                messageDispatch.launch {
-                    try {
-                        rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
-                    } catch (e: Exception) {
-                        listenerManager.notifyError(connection, RMIException("Error while processing RMI message", e))
-                    }
+                try {
+                    rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
+                } catch (e: Exception) {
+                    listenerManager.notifyError(connection, RMIException("Error while processing RMI message", e))
                 }
             }
 
@@ -632,20 +608,17 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
 
             is Any -> {
-                // NOTE: This MUST be on a new co-routine
-                messageDispatch.launch {
-                    try {
-                        var hasListeners = listenerManager.notifyOnMessage(connection, message)
+                try {
+                    var hasListeners = listenerManager.notifyOnMessage(connection, message)
 
-                        // each connection registers, and is polled INDEPENDENTLY for messages.
-                        hasListeners = hasListeners or connection.notifyOnMessage(message)
+                    // each connection registers, and is polled INDEPENDENTLY for messages.
+                    hasListeners = hasListeners or connection.notifyOnMessage(message)
 
-                        if (!hasListeners) {
-                            listenerManager.notifyError(connection, MessageDispatchException("No message callbacks found for ${message::class.java.name}"))
-                        }
-                    } catch (e: Exception) {
-                        listenerManager.notifyError(connection, MessageDispatchException("Error processing message ${message::class.java.name}", e))
+                    if (!hasListeners) {
+                        listenerManager.notifyError(connection, MessageDispatchException("No message callbacks found for ${message::class.java.name}"))
                     }
+                } catch (e: Exception) {
+                    listenerManager.notifyError(connection, MessageDispatchException("Error processing message ${message::class.java.name}", e))
                 }
             }
 
@@ -777,7 +750,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the wait completed before the timeout
      */
-    internal suspend fun waitForEndpointShutdown(timeoutMS: Long = 0L): Boolean {
+    internal fun waitForEndpointShutdown(timeoutMS: Long = 0L): Boolean {
         return if (timeoutMS > 0) {
             pollerClosedLatch.await(timeoutMS, TimeUnit.MILLISECONDS) &&
             shutdownLatch.await(timeoutMS, TimeUnit.MILLISECONDS)
@@ -792,7 +765,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     /**
      * Waits for this endpoint to be fully closed. A disconnect from the network (or remote endpoint) will not signal this to continue.
      */
-    suspend fun waitForClose(): Boolean {
+    fun waitForClose(): Boolean {
         return waitForClose(0L)
     }
 
@@ -801,7 +774,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the wait completed before the timeout
      */
-    suspend fun waitForClose(timeoutMS: Long = 0L): Boolean {
+    fun waitForClose(timeoutMS: Long = 0L): Boolean {
         // if we are restarting the network state, we want to continue to wait for a proper close event.
         // when shutting down, it can take up to 5 seconds to fully register as "shutdown"
 
@@ -827,7 +800,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @param closeEverything unless explicitly called, this is only false when a connection is closed in the client.
      */
-    internal suspend fun close(
+    internal fun close(
         closeEverything: Boolean,
         notifyDisconnect: Boolean,
         releaseWaitingThreads: Boolean)

@@ -24,11 +24,11 @@ import dorkbox.network.connection.EventDispatcher
 import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import java.util.concurrent.*
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.write
 
 /**
  * there are threading issues if there are client(s) and server's within the same JVM, where we have thread starvation
@@ -58,7 +58,7 @@ internal class EventPoller {
 
     @Volatile
     private var running = false
-    private var mutex = Mutex()
+    private var lock = ReentrantReadWriteLock()
 
     // this is thread safe
     private val pollEvents = ConcurrentIterator<EventAction>()
@@ -69,7 +69,7 @@ internal class EventPoller {
     private var delayClose = false
 
     @Volatile
-    private var shutdownLatch = dorkbox.util.sync.CountDownLatch(0)
+    private var shutdownLatch = CountDownLatch(0)
 
 
     @Volatile
@@ -82,7 +82,7 @@ internal class EventPoller {
     }
 
     fun configure(logger: KLogger, config: Configuration, endPoint: EndPoint<*>) = runBlocking {
-        mutex.withLock {
+        lock.write {
             logger.debug { "Initializing the Network Event Poller..." }
             configureEventsEndpoints.add(ByteArrayWrapper.wrap(endPoint.storage.publicKey))
 
@@ -92,7 +92,7 @@ internal class EventPoller {
                 delayClose = false
                 running = true
                 configured = true
-                shutdownLatch = dorkbox.util.sync.CountDownLatch(1)
+                shutdownLatch = CountDownLatch(1)
                 pollStrategy = config.pollIdleStrategy.clone()
 
                 dispatchScope = CoroutineScope(pollDispatcher + SupervisorJob())
@@ -166,7 +166,7 @@ internal class EventPoller {
     /**
      * Will cause the executing thread to wait until the event has been started
      */
-    suspend fun submit(action: EventActionOperator, onClose: EventCloseOperator) = mutex.withLock {
+    fun submit(action: EventActionOperator, onClose: EventCloseOperator) = lock.write {
         submitEvents.getAndIncrement()
 
         // this forces the current thread to WAIT until the network poll system has started
@@ -198,7 +198,7 @@ internal class EventPoller {
     /**
      * Waits for all events to finish running
      */
-    suspend fun close(logger: KLogger, endPoint: EndPoint<*>) {
+    fun close(logger: KLogger, endPoint: EndPoint<*>) {
         // make sure that we close on the CLOSE dispatcher if we run on the poll dispatcher!
         if (inDispatch()) {
             EventDispatcher.CLOSE.launch {
@@ -207,7 +207,7 @@ internal class EventPoller {
             return
         }
 
-        mutex.withLock {
+        lock.write {
             logger.debug { "Requesting close for the Network Event Poller..." }
 
             // ONLY if there are no more poll-events do we ACTUALLY shut down.
@@ -241,11 +241,11 @@ internal class EventPoller {
         }
     }
 
-    private suspend fun doClose(logger: KLogger) {
+    private fun doClose(logger: KLogger) {
         val wasRunning = running
 
         running = false
-        while (!shutdownLatch.await(200)) {
+        while (!shutdownLatch.await(100, TimeUnit.MILLISECONDS)) {
             logger.error { "Waiting for Network Event Poller to close. It should not take this long" }
         }
         configured = false

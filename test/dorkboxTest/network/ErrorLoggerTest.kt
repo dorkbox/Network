@@ -70,7 +70,7 @@ class ErrorLoggerTest : BaseTest() {
                 // can be any message, we just want the error-log to log something
                 send(TestObj())
 
-                delay(200)
+                pause(200)
                 stopEndPoints()
             }
 
