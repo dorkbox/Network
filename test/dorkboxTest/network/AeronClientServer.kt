@@ -123,6 +123,7 @@ class AeronClientServer {
     fun client(remoteAddress: String) {
         val configuration = ClientConfiguration()
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
+        configuration.appId = "aeron_test"
 
         configuration.enableIpc = false
 //            configuration.enableIPv4 = false
@@ -190,6 +191,7 @@ class AeronClientServer {
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.listenIpAddress = "*"
         configuration.maxClientCount = 50
+        configuration.appId = "aeron_test"
 
         configuration.enableIpc = false
 //            configuration.enableIPv4 = false

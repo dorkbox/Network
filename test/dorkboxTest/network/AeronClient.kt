@@ -31,10 +31,6 @@ import java.lang.reflect.Field
 import java.text.SimpleDateFormat
 import java.util.*
 
-/**
- *
- */
-@Suppress("UNUSED_ANONYMOUS_PARAMETER")
 object AeronClient {
 
     init {
