@@ -45,6 +45,7 @@ import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.*
@@ -88,10 +89,9 @@ class RmiDuplicateObjectTest : BaseTest() {
         }
     }
 
-    private val objs = mutableSetOf<Int>()
-
     fun rmi(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
-        val latch = CountDownLatch(2)
+        val objs = mutableSetOf<Int>()
+        val latch = dorkbox.util.sync.CountDownLatch(2)
 
         val server = run {
             val configuration = serverConfig()
@@ -109,16 +109,15 @@ class RmiDuplicateObjectTest : BaseTest() {
 
 
             server.onConnect {
+                logger.warn { "Starting to moo" }
                 // these are on separate threads (client.init) and this -- there can be race conditions, where the object doesn't exist yet!
-                server.forEachConnection {
-                    val testCow = it.rmi.get<TestCow>(4)
-                    testCow.moo()
+                val testCow = rmi.get<TestCow>(4)
+                testCow.moo()
 
-                    synchronized(objs) {
-                        objs.add(testCow.id())
-                    }
-                    latch.countDown()
+                synchronized(objs) {
+                    objs.add(testCow.id())
                 }
+                latch.countDown()
             }
 
             server
@@ -132,6 +131,7 @@ class RmiDuplicateObjectTest : BaseTest() {
             addEndPoint(client)
 
             client.onInit {
+                logger.warn { "Initializing moo 4" }
                 rmi.save(TestCowImpl(4), 4)
             }
 
@@ -147,7 +147,8 @@ class RmiDuplicateObjectTest : BaseTest() {
 
 
             client.onInit {
-                rmi.save(TestCowImpl(5), 4)
+                logger.warn { "Initializing moo 5" }
+                rmi.save(TestCowImpl(5), 4) // both are saved as ID 4 (but internally are 4 and 5)
             }
 
             client
@@ -158,8 +159,10 @@ class RmiDuplicateObjectTest : BaseTest() {
         doConnect(isIpv4, isIpv6, runIpv4Connect, client1)
         doConnect(isIpv4, isIpv6, runIpv4Connect, client2)
 
-        latch.await()
-        stopEndPointsBlocking()
+        runBlocking {
+            latch.await()
+            stopEndPoints()
+        }
 
         waitForThreads()
 
