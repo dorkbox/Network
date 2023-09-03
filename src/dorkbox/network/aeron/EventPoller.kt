@@ -37,11 +37,14 @@ import java.util.concurrent.*
  * this among ALL clients within the same JVM so that we can support multiple clients/servers
  */
 internal class EventPoller {
+
+    private class EventAction(val onAction: EventActionOperator, val onClose: EventCloseOperator)
+
     companion object {
         internal const val REMOVE = -1
+
         val eventLogger = KotlinLogging.logger(EventPoller::class.java.simpleName)
 
-        private class EventAction(val onAction: suspend EventPoller.()->Int, val onClose: suspend ()->Unit)
 
         private val pollDispatcher = Executors.newSingleThreadExecutor(
             NamedThreadFactory("Poll Dispatcher", Configuration.networkThreadGroup, true)
@@ -107,7 +110,7 @@ internal class EventPoller {
                             try {
                                 // check to see if we should remove this event (when a client/server closes, it is removed)
                                 // once ALL endpoint are closed, this is shutdown.
-                                val poll = it.onAction(this@EventPoller)
+                                val poll = it.onAction()
 
                                 // <0 means we remove the event from processing
                                 // 0 means we idle
@@ -163,21 +166,26 @@ internal class EventPoller {
     /**
      * Will cause the executing thread to wait until the event has been started
      */
-    suspend fun submit(action: suspend EventPoller.() -> Int, onShutdown: suspend () -> Unit) = mutex.withLock {
+    suspend fun submit(action: EventActionOperator, onClose: EventCloseOperator) = mutex.withLock {
         submitEvents.getAndIncrement()
 
         // this forces the current thread to WAIT until the network poll system has started
         val pollStartupLatch = CountDownLatch(1)
 
-        pollEvents.add(EventAction(action, onShutdown))
+        pollEvents.add(EventAction(action, onClose))
         pollEvents.add(EventAction(
-            {
-                pollStartupLatch.countDown()
+            object : EventActionOperator {
+                override fun invoke(): Int {
+                    pollStartupLatch.countDown()
 
-                // remove ourselves
-                REMOVE
-            },
-            {}
+                    // remove ourselves
+                    return REMOVE
+                }
+            }
+            , object : EventCloseOperator {
+                override suspend fun invoke() {
+                }
+            }
         ))
 
         pollStartupLatch.await()

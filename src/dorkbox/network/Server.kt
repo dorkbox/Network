@@ -16,9 +16,9 @@
 package dorkbox.network
 
 import dorkbox.hex.toHexString
-import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.*
 import dorkbox.network.aeron.AeronPoller
-import dorkbox.network.aeron.EventPoller
+import dorkbox.network.aeron.EventActionOperator
 import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.IpListenType
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
@@ -271,92 +271,99 @@ open class Server<CONNECTION : Connection>(
         logger.info { ipPoller.info }
 
         networkEventPoller.submit(
-        action = {
-            if (!shutdownEventPoller) {
-                // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
-                //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
+        action = object : EventActionOperator {
+            override fun invoke(): Int {
+                return if (!shutdownEventPoller) {
+                    // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
+                    //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
 
-                // this checks to see if there are NEW clients to handshake with
-                var pollCount = ipcPoller.poll() + ipPoller.poll()
+                    // this checks to see if there are NEW clients to handshake with
+                    var pollCount = ipcPoller.poll() + ipPoller.poll()
 
-                // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
-                // so we can modify this as we go
-                connections.forEach { connection ->
-                    if (!(connection.isClosed() || connection.isConnected()) ) {
-                        // Otherwise, poll the connection for messages
-                        pollCount += connection.poll()
-                    } else {
-                        // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                        logger.debug { "[${connection}] connection expired (cleanup)" }
+                    // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
+                    // so we can modify this as we go
+                    connections.forEach { connection ->
+                        if (!(connection.isClosed() || connection.isConnected()) ) {
+                            // Otherwise, poll the connection for messages
+                            pollCount += connection.poll()
+                        } else {
+                            // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
+                            logger.debug { "[${connection}] connection expired (cleanup)" }
 
-                        // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
-                        removeConnection(connection)
+                            // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
+                            removeConnection(connection)
 
-                        // we already removed the connection, we can call it again without side effects
-                        connection.close()
+                            runBlocking {
+                                // we already removed the connection, we can call it again without side effects
+                                connection.close()
+                            }
+                        }
                     }
-                }
 
-                pollCount
-            } else {
-                // remove ourselves from processing
-                EventPoller.REMOVE
+                    pollCount
+                } else {
+                    // remove ourselves from processing
+                    EventPoller.REMOVE
+                }
             }
         },
-        onShutdown = {
-            val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
-            logger.debug { "Server event dispatch closing..." }
+        onClose = object : EventCloseOperator {
+            override suspend fun invoke() {
+                val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
+                logger.debug { "Server event dispatch closing..." }
 
-            ipcPoller.close()
-            ipPoller.close()
+                ipcPoller.close()
+                ipPoller.close()
 
-            // clear all the handshake info
-            handshake.clear()
-
-
-            // we only need to run shutdown methods if there was a network outage or D/C
-            if (!shutdownInProgress.value) {
-                // this is because we restart automatically on driver errors
-                val standardClose = !mustRestartDriverOnError
-                this@Server.close(
-                    closeEverything = false,
-                    notifyDisconnect = standardClose,
-                    releaseWaitingThreads = standardClose
-                )
-            }
+                // clear all the handshake info
+                handshake.clear()
 
 
-            if (mustRestartDriverOnError) {
-                logger.error { "Critical driver error detected, restarting server." }
+                // we only need to run shutdown methods if there was a network outage or D/C
+                if (!shutdownInProgress.value) {
+                    // this is because we restart automatically on driver errors
+                    val standardClose = !mustRestartDriverOnError
+                    this@Server.close(
+                        closeEverything = false,
+                        notifyDisconnect = standardClose,
+                        releaseWaitingThreads = standardClose
+                    )
+                }
 
-                EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
-                    waitForEndpointShutdown()
 
-                    // also wait for everyone else to shutdown!!
-                    aeronDriver.internal.endPointUsages.forEach {
-                        it.waitForEndpointShutdown()
-                    }
+                if (mustRestartDriverOnError) {
+                    logger.error { "Critical driver error detected, restarting server." }
+
+                    EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
+                        waitForEndpointShutdown()
+
+                        // also wait for everyone else to shutdown!!
+                        aeronDriver.internal.endPointUsages.forEach {
+                            it.waitForEndpointShutdown()
+                        }
 
 
-                    // if we restart/reconnect too fast, errors from the previous run will still be present!
-                    aeronDriver.delayLingerTimeout()
+                        // if we restart/reconnect too fast, errors from the previous run will still be present!
+                        aeronDriver.delayLingerTimeout()
 
-                    val p1 = this@Server.port1
-                    val p2 = this@Server.port2
+                        val p1 = this@Server.port1
+                        val p2 = this@Server.port2
 
-                    if (p1 == 0 && p2 == 0) {
-                        bindIpc()
-                    } else {
-                        bind(p1, p2)
+                        if (p1 == 0 && p2 == 0) {
+                            bindIpc()
+                        } else {
+                            bind(p1, p2)
+                        }
                     }
                 }
+
+                // we can now call bind again
+                endpointIsRunning.lazySet(false)
+                pollerClosedLatch.countDown()
+
+                logger.debug { "Closed the Network Event Poller..." }
+
             }
-
-            // we can now call bind again
-            endpointIsRunning.lazySet(false)
-            pollerClosedLatch.countDown()
-
-            logger.debug { "Closed the Network Event Poller..." }
         })
     }
 

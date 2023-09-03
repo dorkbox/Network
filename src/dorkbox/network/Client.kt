@@ -22,6 +22,8 @@ import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.netUtil.dnsUtils.ResolvedAddressTypes
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.EventActionOperator
+import dorkbox.network.aeron.EventCloseOperator
 import dorkbox.network.aeron.EventPoller
 import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.formatCommonAddress
@@ -825,66 +827,72 @@ open class Client<CONNECTION : Connection>(
         // have to make a new thread to listen for incoming data!
         // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
         networkEventPoller.submit(
-        action = {
-            // if we initiate a disconnect manually, then there is no need to wait for aeron to verify it's closed
-            // we only want to wait for aeron to verify it's closed if we are SUPPOSED to be connected, but there's a network blip
-            if (!(shutdownEventPoller || newConnection.isClosed() || newConnection.isConnected())) {
-                newConnection.poll()
-            } else {
-                // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                logger.debug { "[${connection}] connection expired (cleanup)" }
+        action = object : EventActionOperator  {
+            override fun invoke(): Int {
+                // if we initiate a disconnect manually, then there is no need to wait for aeron to verify it's closed
+                // we only want to wait for aeron to verify it's closed if we are SUPPOSED to be connected, but there's a network blip
+                return if (!(shutdownEventPoller || newConnection.isClosed() || newConnection.isConnected())) {
+                    newConnection.poll()
+                } else {
+                    // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
+                    logger.debug { "[${connection}] connection expired (cleanup)" }
 
-                // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
-                removeConnection(newConnection)
+                    // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
+                    removeConnection(newConnection)
 
-                // we already removed the connection, we can call it again without side effects
-                newConnection.close()
-
-                // remove ourselves from processing
-                EventPoller.REMOVE
-            }
-        },
-        onShutdown = {
-            val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
-
-            // this can be closed when the connection is remotely closed in ADDITION to manually closing
-            logger.debug { "Client event dispatch closing..." }
-
-            // we only need to run shutdown methods if there was a network outage or D/C
-            if (!shutdownInProgress.value) {
-                // this is because we restart automatically on driver errors
-                val standardClose = !mustRestartDriverOnError
-                this@Client.close(
-                    closeEverything = false,
-                    notifyDisconnect = standardClose,
-                    releaseWaitingThreads = standardClose
-                )
-            }
-
-
-            // we can now call connect again
-            endpointIsRunning.lazySet(false)
-            pollerClosedLatch.countDown()
-
-
-            if (mustRestartDriverOnError) {
-                logger.error { "Critical driver error detected, reconnecting client" }
-
-                EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
-                    waitForEndpointShutdown()
-
-                    // also wait for everyone else to shutdown!!
-                    aeronDriver.internal.endPointUsages.forEach {
-                        it.waitForEndpointShutdown()
+                    runBlocking {
+                        // we already removed the connection, we can call it again without side effects
+                        newConnection.close()
                     }
 
-                    // if we restart/reconnect too fast, errors from the previous run will still be present!
-                    aeronDriver.delayLingerTimeout()
-
-                    reconnect()
+                    // remove ourselves from processing
+                    EventPoller.REMOVE
                 }
-            } else {
-                logger.debug { "Closed the Network Event Poller..." }
+            }
+        },
+        onClose = object : EventCloseOperator {
+            override suspend fun invoke() {
+                val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
+
+                // this can be closed when the connection is remotely closed in ADDITION to manually closing
+                logger.debug { "Client event dispatch closing..." }
+
+                // we only need to run shutdown methods if there was a network outage or D/C
+                if (!shutdownInProgress.value) {
+                    // this is because we restart automatically on driver errors
+                    val standardClose = !mustRestartDriverOnError
+                    this@Client.close(
+                        closeEverything = false,
+                        notifyDisconnect = standardClose,
+                        releaseWaitingThreads = standardClose
+                    )
+                }
+
+
+                // we can now call connect again
+                endpointIsRunning.lazySet(false)
+                pollerClosedLatch.countDown()
+
+
+                if (mustRestartDriverOnError) {
+                    logger.error { "Critical driver error detected, reconnecting client" }
+
+                    EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
+                        waitForEndpointShutdown()
+
+                        // also wait for everyone else to shutdown!!
+                        aeronDriver.internal.endPointUsages.forEach {
+                            it.waitForEndpointShutdown()
+                        }
+
+                        // if we restart/reconnect too fast, errors from the previous run will still be present!
+                        aeronDriver.delayLingerTimeout()
+
+                        reconnect()
+                    }
+                } else {
+                    logger.debug { "Closed the Network Event Poller..." }
+                }
             }
         })
 
