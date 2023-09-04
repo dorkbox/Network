@@ -37,7 +37,7 @@ object Extras {
     // set for the project
     const val description = "High-performance, event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "6.9.1"
+    const val version = "6.10"
 
     // set as project.ext
     const val name = "Network"
@@ -180,6 +180,9 @@ dependencies {
     api("com.dorkbox:Updates:1.1")
     api("com.dorkbox:Utilities:1.46")
 
+    // necessary for thread dispatch without polluting the heap
+    // https://github.com/conversant/disruptor
+    api("com.conversantmedia:disruptor:1.2.21")
 
     // how we bypass using reflection/jpms to access fields for java17+
     api("org.javassist:javassist:3.29.2-GA")
@@ -201,6 +204,7 @@ dependencies {
     api("com.esotericsoftware:kryo:5.5.0") {
         exclude("com.esotericsoftware", "minlog") // we use our own minlog, that logs to SLF4j instead
     }
+
 
     // https://github.com/lz4/lz4-java
     api("org.lz4:lz4-java:1.8.0")

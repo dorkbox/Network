@@ -26,6 +26,7 @@ import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import mu.KLogger
 import mu.KotlinLogging
+import org.agrona.concurrent.IdleStrategy
 import java.util.concurrent.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.write
@@ -48,13 +49,12 @@ internal class EventPoller {
 
         private val pollDispatcher = Executors.newSingleThreadExecutor(
             NamedThreadFactory("Poll Dispatcher", Configuration.networkThreadGroup, true)
-        ).asCoroutineDispatcher()
+        )
     }
 
     private var configured = false
-    private lateinit var dispatchScope: CoroutineScope
 
-    private lateinit var pollStrategy: CoroutineIdleStrategy
+    private lateinit var pollStrategy: IdleStrategy
 
     @Volatile
     private var running = false
@@ -81,7 +81,7 @@ internal class EventPoller {
         return threadId == Thread.currentThread().id
     }
 
-    fun configure(logger: KLogger, config: Configuration, endPoint: EndPoint<*>) = runBlocking {
+    fun configure(logger: KLogger, config: Configuration, endPoint: EndPoint<*>) {
         lock.write {
             logger.debug { "Initializing the Network Event Poller..." }
             configureEventsEndpoints.add(ByteArrayWrapper.wrap(endPoint.storage.publicKey))
@@ -93,12 +93,9 @@ internal class EventPoller {
                 running = true
                 configured = true
                 shutdownLatch = CountDownLatch(1)
-                pollStrategy = config.pollIdleStrategy.clone()
+                pollStrategy = config.pollIdleStrategy
 
-                dispatchScope = CoroutineScope(pollDispatcher + SupervisorJob())
-                require(pollDispatcher.isActive) { "Unable to start the event dispatch in the terminated state!" }
-
-                dispatchScope.launch {
+                pollDispatcher.submit(Runnable {
                     val pollIdleStrategy = pollStrategy
                     var pollCount = 0
                     threadId = Thread.currentThread().id
@@ -144,6 +141,7 @@ internal class EventPoller {
                         pollIdleStrategy.idle(pollCount)
                     }
 
+
                     // now we have to REMOVE all poll events -- so that their remove logic will run.
                     pollEvents.forEachRemovable {
                         // remove our event, it is no longer valid
@@ -152,7 +150,7 @@ internal class EventPoller {
                     }
 
                     shutdownLatch.countDown()
-                }
+                })
             } else {
                 // we don't want to use .equals, because that also compares STATE, which for us is going to be different because we are cloned!
                 // toString has the right info to compare types/config accurately
@@ -183,8 +181,7 @@ internal class EventPoller {
                 }
             }
             , object : EventCloseOperator {
-                override suspend fun invoke() {
-                }
+                override fun invoke() {}
             }
         ))
 
@@ -251,7 +248,7 @@ internal class EventPoller {
         configured = false
 
         if (wasRunning) {
-            dispatchScope.cancel("Closed Network Event Poller dispatch")
+            pollDispatcher.awaitTermination(200, TimeUnit.MILLISECONDS)
         }
         logger.error { "Closed Network Event Poller: wasRunning=$wasRunning" }
     }

@@ -19,8 +19,6 @@ package dorkbox.network
 
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
-import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
-import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.serialization.Serialization
@@ -31,11 +29,11 @@ import io.aeron.driver.Configuration
 import io.aeron.driver.ThreadingMode
 import io.aeron.driver.exceptions.InvalidChannelException
 import io.aeron.exceptions.DriverTimeoutException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.concurrent.AgentTerminationException
+import org.agrona.concurrent.BackoffIdleStrategy
 import org.agrona.concurrent.IdleStrategy
 import org.slf4j.helpers.NOPLogger
 import java.io.File
@@ -492,7 +490,7 @@ abstract class Configuration protected constructor() {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var pollIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy()
+    var pollIdleStrategy: IdleStrategy = BackoffIdleStrategy()
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -509,7 +507,7 @@ abstract class Configuration protected constructor() {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var sendIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy()
+    var sendIdleStrategy: IdleStrategy = BackoffIdleStrategy()
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -1040,8 +1038,8 @@ abstract class Configuration protected constructor() {
         config.settingsStore = settingsStore
         config.serialization = serialization
         config.maxStreamSizeInMemoryMB = maxStreamSizeInMemoryMB
-        config.pollIdleStrategy = pollIdleStrategy.clone()
-        config.sendIdleStrategy = sendIdleStrategy.clone()
+        config.pollIdleStrategy = pollIdleStrategy
+        config.sendIdleStrategy = sendIdleStrategy
         config.threadingMode = threadingMode
         config.aeronDirectory = aeronDirectory
         config.uniqueAeronDirectoryID = uniqueAeronDirectoryID

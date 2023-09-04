@@ -34,7 +34,6 @@ import dorkbox.network.handshake.ClientConnectionDriver
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.handshake.ClientHandshakeDriver
 import dorkbox.network.ping.Ping
-import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import java.net.Inet4Address
 import java.net.Inet6Address
@@ -130,11 +129,11 @@ open class Client<CONNECTION : Connection>(
          *
          * @return true if the media driver is STOPPED.
          */
-        fun ensureStopped(configuration: Configuration): Boolean = runBlocking {
+        fun ensureStopped(configuration: Configuration): Boolean {
             val timeout = TimeUnit.SECONDS.toMillis(configuration.connectionCloseTimeoutInSeconds.toLong() * 2)
 
             val logger = KotlinLogging.logger(Client::class.java.simpleName)
-            AeronDriver.ensureStopped(configuration.copy(), logger, timeout)
+            return AeronDriver.ensureStopped(configuration.copy(), logger, timeout)
         }
 
         /**
@@ -144,9 +143,9 @@ open class Client<CONNECTION : Connection>(
          *
          * @return true if the media driver is active and running
          */
-        fun isRunning(configuration: Configuration): Boolean = runBlocking {
+        fun isRunning(configuration: Configuration): Boolean {
             val logger = KotlinLogging.logger(Client::class.java.simpleName)
-            AeronDriver.isRunning(configuration.copy(), logger)
+            return AeronDriver.isRunning(configuration.copy(), logger)
         }
 
         init {
@@ -255,7 +254,7 @@ open class Client<CONNECTION : Connection>(
      *
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      */
-    fun connectIpc(connectionTimeoutSec: Int = 30) = runBlocking {
+    fun connectIpc(connectionTimeoutSec: Int = 30) {
         connect(remoteAddress = null, // required!
                 port1 = 0,
                 port2 = 0,
@@ -301,7 +300,7 @@ open class Client<CONNECTION : Connection>(
         port1: Int,
         port2: Int = port1+1,
         connectionTimeoutSec: Int = 30,
-        reliable: Boolean = true) = runBlocking {
+        reliable: Boolean = true) {
 
         val remoteAddressString = when (remoteAddress) {
             is Inet4Address -> IPv4.toString(remoteAddress)
@@ -357,7 +356,7 @@ open class Client<CONNECTION : Connection>(
         port2: Int = port1+1,
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true) {
-            fun connect(dnsResolveType: ResolvedAddressTypes) = runBlocking {
+            fun connect(dnsResolveType: ResolvedAddressTypes) {
                 val ipv4Requested = dnsResolveType == ResolvedAddressTypes.IPV4_ONLY || dnsResolveType == ResolvedAddressTypes.IPV4_PREFERRED
 
                 val inetAddress = formatCommonAddress(remoteAddress, ipv4Requested) {
@@ -388,7 +387,7 @@ open class Client<CONNECTION : Connection>(
 
             when {
                 // this is default IPC settings
-                remoteAddress.isEmpty() && config.enableIpc -> runBlocking {
+                remoteAddress.isEmpty() && config.enableIpc -> {
                     connect(remoteAddress = null, // required!
                             port1 = 0,
                             port2 = 0,
@@ -839,10 +838,8 @@ open class Client<CONNECTION : Connection>(
                     // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
                     removeConnection(newConnection)
 
-                    runBlocking {
-                        // we already removed the connection, we can call it again without side effects
-                        newConnection.close()
-                    }
+                    // we already removed the connection, we can call it again without side effects
+                    newConnection.close()
 
                     // remove ourselves from processing
                     EventPoller.REMOVE
@@ -850,7 +847,7 @@ open class Client<CONNECTION : Connection>(
             }
         },
         onClose = object : EventCloseOperator {
-            override suspend fun invoke() {
+            override fun invoke() {
                 val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
 
                 // this can be closed when the connection is remotely closed in ADDITION to manually closing
@@ -990,13 +987,11 @@ open class Client<CONNECTION : Connection>(
      * @param closeEverything if true, all parts of the client will be closed (listeners, driver, event polling, etc)
      */
     fun close(closeEverything: Boolean = true) {
-        runBlocking {
-            close(
-                closeEverything = closeEverything,
-                notifyDisconnect = true,
-                releaseWaitingThreads = true
-            )
-        }
+        close(
+            closeEverything = closeEverything,
+            notifyDisconnect = true,
+            releaseWaitingThreads = true
+        )
     }
 
     override fun toString(): String {

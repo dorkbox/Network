@@ -19,7 +19,6 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.rmi.messages.MethodRequest
 import kotlinx.coroutines.asContextElement
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import mu.KLogger
 import java.lang.reflect.InvocationHandler
@@ -354,10 +353,7 @@ internal class RmiClient(val isGlobal: Boolean,
                     }
                 })
         } else {
-            val any = runBlocking {
-                sendRequest(localAsync, invokeMethod, connection.logger)
-            }
-
+            val any = sendRequest(localAsync, invokeMethod, connection.logger)
             when (any) {
                 ResponseManager.TIMEOUT_EXCEPTION -> {
                     val fancyName = RmiUtils.makeFancyMethodName(method)

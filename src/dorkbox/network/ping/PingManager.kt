@@ -62,7 +62,7 @@ internal class PingManager<CONNECTION : Connection> {
         pingTimeoutSeconds: Int,
         responseManager: ResponseManager,
         logger: KLogger,
-        function: suspend Ping.() -> Unit
+        function: Ping.() -> Unit
     ): Boolean {
         val id = responseManager.prepWithCallback(logger, function)
 

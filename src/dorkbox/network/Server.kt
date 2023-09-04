@@ -28,7 +28,6 @@ import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.handshake.ServerHandshakePollers
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.rmi.RmiSupportServer
-import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import java.util.concurrent.*
 
@@ -128,11 +127,11 @@ open class Server<CONNECTION : Connection>(
          *
          * @return true if the media driver is STOPPED.
          */
-        fun ensureStopped(configuration: ServerConfiguration): Boolean = runBlocking {
+        fun ensureStopped(configuration: ServerConfiguration): Boolean {
             val timeout = TimeUnit.SECONDS.toMillis(configuration.connectionCloseTimeoutInSeconds.toLong() * 2)
 
             val logger = KotlinLogging.logger(Server::class.java.simpleName)
-            AeronDriver.ensureStopped(configuration.copy(), logger, timeout)
+            return AeronDriver.ensureStopped(configuration.copy(), logger, timeout)
         }
 
         /**
@@ -142,9 +141,9 @@ open class Server<CONNECTION : Connection>(
          *
          * @return true if the media driver is active and running
          */
-        fun isRunning(configuration: ServerConfiguration): Boolean = runBlocking {
+        fun isRunning(configuration: ServerConfiguration): Boolean {
             val logger = KotlinLogging.logger(Server::class.java.simpleName)
-            AeronDriver.isRunning(configuration.copy(), logger)
+            return AeronDriver.isRunning(configuration.copy(), logger)
         }
 
         init {
@@ -202,7 +201,7 @@ open class Server<CONNECTION : Connection>(
      *              can also be configured independently. This is required, and must be different from port1.
      */
     @Suppress("DuplicatedCode")
-    fun bind(port1: Int, port2: Int = port1+1) = runBlocking {
+    fun bind(port1: Int, port2: Int = port1+1) {
         if (config.enableIPv4 || config.enableIPv6) {
             require(port1 != port2) { "port1 cannot be the same as port2" }
             require(port1 > 0) { "port1 must be > 0" }
@@ -215,12 +214,12 @@ open class Server<CONNECTION : Connection>(
         // the lifecycle of a server is the ENDPOINT (measured via the network event poller)
         if (endpointIsRunning.value) {
             listenerManager.notifyError(ServerException("Unable to start, the server is already running!"))
-            return@runBlocking
+            return
         }
 
         if (!waitForEndpointShutdown()) {
             listenerManager.notifyError(ServerException("Unable to start the server!"))
-            return@runBlocking
+            return
         }
 
         try {
@@ -230,7 +229,7 @@ open class Server<CONNECTION : Connection>(
         catch (e: Exception) {
             resetOnError()
             listenerManager.notifyError(ServerException("Unable to start the server!", e))
-            return@runBlocking
+            return
         }
 
         this@Server.port1 = port1
@@ -238,7 +237,7 @@ open class Server<CONNECTION : Connection>(
 
         bind0()
     }
-    private suspend fun bind0() {
+    private fun bind0() {
         config as ServerConfiguration
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
@@ -288,10 +287,8 @@ open class Server<CONNECTION : Connection>(
                             // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
                             removeConnection(connection)
 
-                            runBlocking {
-                                // we already removed the connection, we can call it again without side effects
-                                connection.close()
-                            }
+                            // we already removed the connection, we can call it again without side effects
+                            connection.close()
                         }
                     }
 
@@ -303,7 +300,7 @@ open class Server<CONNECTION : Connection>(
             }
         },
         onClose = object : EventCloseOperator {
-            override suspend fun invoke() {
+            override fun invoke() {
                 val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
                 logger.debug { "Server event dispatch closing..." }
 
@@ -392,9 +389,7 @@ open class Server<CONNECTION : Connection>(
      * This function will be called for **only** network clients (IPC client are excluded)
      */
     fun filter(ipFilterRule: IpFilterRule) {
-        runBlocking {
-            listenerManager.filter(ipFilterRule)
-        }
+        listenerManager.filter(ipFilterRule)
     }
 
     /**
@@ -416,9 +411,7 @@ open class Server<CONNECTION : Connection>(
      * This function will be called for **only** network clients (IPC client are excluded)
      */
     fun filter(function: CONNECTION.() -> Boolean)  {
-        runBlocking {
-            listenerManager.filter(function)
-        }
+        listenerManager.filter(function)
     }
 
     /**
@@ -446,13 +439,11 @@ open class Server<CONNECTION : Connection>(
      * @param closeEverything if true, all parts of the server will be closed (listeners, driver, event polling, etc)
      */
     fun close(closeEverything: Boolean = true) {
-        runBlocking {
-            close(
-                closeEverything = closeEverything,
-                notifyDisconnect = true,
-                releaseWaitingThreads = true
-            )
-        }
+        close(
+            closeEverything = closeEverything,
+            notifyDisconnect = true,
+            releaseWaitingThreads = true
+        )
     }
 
     override fun toString(): String {

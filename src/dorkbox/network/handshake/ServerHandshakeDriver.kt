@@ -34,7 +34,7 @@ internal class ServerHandshakeDriver(
     private val logInfo: String)
 {
     companion object {
-        suspend fun build(
+        fun build(
             aeronDriver: AeronDriver,
             isIpc: Boolean,
             ipInfo: IpInfo,
@@ -62,7 +62,7 @@ internal class ServerHandshakeDriver(
         }
     }
 
-    suspend fun close() {
+    fun close() {
         aeronDriver.close(subscription, logInfo)
     }
 

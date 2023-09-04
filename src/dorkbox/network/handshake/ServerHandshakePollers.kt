@@ -40,7 +40,6 @@ import io.aeron.Image
 import io.aeron.Publication
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
-import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
@@ -52,7 +51,7 @@ internal object ServerHandshakePollers {
     fun disabled(serverInfo: String): AeronPoller {
         return object : AeronPoller {
             override fun poll(): Int { return 0 }
-            override suspend fun close() {}
+            override fun close() {}
             override val info = serverInfo
         }
     }
@@ -76,9 +75,7 @@ internal object ServerHandshakePollers {
             }
             .expirationPolicy(ExpirationPolicy.CREATED)
             .expirationListener<Long, Publication> { connectKey, publication ->
-                runBlocking {
-                    driver.close(publication, "Server IPC Handshake ($connectKey)")
-                }
+                driver.close(publication, "Server IPC Handshake ($connectKey)")
             }
             .build<Long, Publication>()
 
@@ -220,7 +217,7 @@ internal object ServerHandshakePollers {
             }
         }
 
-        suspend fun close() {
+        fun close() {
             publications.forEach { (connectKey, publication) ->
                 AeronDriver.sessionIdAllocator.free(publication.sessionId())
                 driver.close(publication, "Server Handshake ($connectKey)")
@@ -259,9 +256,7 @@ internal object ServerHandshakePollers {
             }
             .expirationPolicy(ExpirationPolicy.CREATED)
             .expirationListener<Long, Publication> { connectKey, publication ->
-                runBlocking {
-                    driver.close(publication, "Server UDP Handshake ($connectKey)")
-                }
+                driver.close(publication, "Server UDP Handshake ($connectKey)")
             }
             .build<Long, Publication>()
 
@@ -457,7 +452,7 @@ internal object ServerHandshakePollers {
             }
         }
 
-        suspend fun close() {
+        fun close() {
             publications.forEach { (connectKey, publication) ->
                 AeronDriver.sessionIdAllocator.free(publication.sessionId())
                 driver.close(publication, "Server Handshake ($connectKey)")
@@ -466,7 +461,7 @@ internal object ServerHandshakePollers {
         }
     }
 
-    suspend fun <CONNECTION : Connection> ipc(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
+    fun <CONNECTION : Connection> ipc(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
         val config = server.config as ServerConfiguration
@@ -496,7 +491,7 @@ internal object ServerHandshakePollers {
                     return subscription.poll(handler, 1)
                 }
 
-                override suspend fun close() {
+                override fun close() {
                     delegate.close()
                     handler.clear()
                     driver.close()
@@ -515,7 +510,7 @@ internal object ServerHandshakePollers {
 
 
 
-    suspend fun <CONNECTION : Connection> ip4(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
+    fun <CONNECTION : Connection> ip4(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
         val config = server.config
@@ -546,7 +541,7 @@ internal object ServerHandshakePollers {
                     return subscription.poll(handler, 1)
                 }
 
-                override suspend fun close() {
+                override fun close() {
                     delegate.close()
                     handler.clear()
                     driver.close()
@@ -563,7 +558,7 @@ internal object ServerHandshakePollers {
         return poller
     }
 
-    suspend fun <CONNECTION : Connection> ip6(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
+    fun <CONNECTION : Connection> ip6(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
         val config = server.config
@@ -594,7 +589,7 @@ internal object ServerHandshakePollers {
                     return subscription.poll(handler, 1)
                 }
 
-                override suspend fun close() {
+                override fun close() {
                     delegate.close()
                     handler.clear()
                     driver.close()
@@ -611,7 +606,7 @@ internal object ServerHandshakePollers {
         return poller
     }
 
-    suspend fun <CONNECTION : Connection> ip6Wildcard(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
+    fun <CONNECTION : Connection> ip6Wildcard(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
 
         val logger = server.logger
         val connectionFunc = server.connectionFunc
@@ -643,7 +638,7 @@ internal object ServerHandshakePollers {
                     return subscription.poll(handler, 1)
                 }
 
-                override suspend fun close() {
+                override fun close() {
                     delegate.close()
                     handler.clear()
                     driver.close()

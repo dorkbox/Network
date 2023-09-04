@@ -23,7 +23,6 @@ import dorkbox.bytes.OptimizeUtilsByteArray
 import dorkbox.bytes.OptimizeUtilsByteBuf
 import dorkbox.collections.LockFreeHashMap
 import dorkbox.network.Configuration
-import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
@@ -37,8 +36,6 @@ import dorkbox.network.serialization.KryoWriter
 import dorkbox.os.OS
 import dorkbox.util.Sys
 import io.aeron.Publication
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import mu.KLogger
 import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy

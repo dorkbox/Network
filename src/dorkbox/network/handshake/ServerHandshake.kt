@@ -25,9 +25,7 @@ import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerHandshakeException
 import dorkbox.network.exceptions.ServerTimedoutException
 import dorkbox.network.exceptions.TransmitException
-import dorkbox.util.sync.CountDownLatch
 import io.aeron.Publication
-import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
@@ -64,9 +62,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // this blocks until it fully runs (which is ok. this is fast)
             listenerManager.notifyError(ServerTimedoutException("[${clientConnectKey} Connection (${connection.id}) Timed out waiting for registration response from client"))
 
-            runBlocking {
-                connection.close()
-            }
+            connection.close()
         }
         .build<Long, CONNECTION>()
 
@@ -661,7 +657,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
      *
      * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
      */
-    suspend fun clear() {
+    fun clear() {
         val connections = pendingConnections
         val latch = CountDownLatch(connections.size)
 
@@ -672,7 +668,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             }
         }
 
-        latch.await(config.connectionCloseTimeoutInSeconds.toLong() * connections.size)
+        latch.await(config.connectionCloseTimeoutInSeconds.toLong() * connections.size, TimeUnit.MILLISECONDS)
         connections.clear()
     }
 }

@@ -97,7 +97,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
         internal val driverConfigurations = IntMap<AeronDriverInternal>(4)
 
         fun new(endPoint: EndPoint<*>): AeronDriver {
-            var driver: AeronDriver? = null
+            var driver: AeronDriver?
             lock.write {
                 driver = AeronDriver(endPoint.config, endPoint.logger, endPoint)
             }
@@ -123,7 +123,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
             }
 
             var stopped = false
-            withLock {
+            lock.write {
                 stopped = AeronDriver(configuration, logger, null).use {
                     it.ensureStopped(timeout, 500)
                 }
@@ -171,7 +171,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
         /**
          * @return true if all JVM tracked Aeron drivers are closed, false otherwise
          */
-        suspend fun areAllInstancesClosed(logger: Logger): Boolean {
+        fun areAllInstancesClosed(logger: Logger): Boolean {
             val logger1 = KotlinLogging.logger(logger)
             return areAllInstancesClosed(logger1)
         }
@@ -179,7 +179,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
         /**
          * @return true if all JVM tracked Aeron drivers are closed, false otherwise
          */
-        suspend fun areAllInstancesClosed(logger: KLogger = KotlinLogging.logger(AeronDriver::class.java.simpleName)): Boolean {
+        fun areAllInstancesClosed(logger: KLogger = KotlinLogging.logger(AeronDriver::class.java.simpleName)): Boolean {
             return lock.read {
                 val traceEnabled = logger.isTraceEnabled
 
@@ -924,7 +924,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
              *  val ADMIN_ACTION: Long = -3
              */
             if (result >= Publication.ADMIN_ACTION) {
-                // we should retry, BUT we want to suspend ANYONE ELSE trying to write at the same time!
+                // we should retry, BUT we want to block ANYONE ELSE trying to write at the same time!
                 sendIdleStrategy.idle()
                 continue
             }
@@ -1004,9 +1004,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                     // more critical error sending the message. we shouldn't retry or anything.
                     // this exception will be a ClientException or a ServerException
                     val exception = endPoint!!.newException(
-                        "[$logInfo] Error sending message. (Connection in non-connected state longer than linger timeout. ${
-                            AeronDriver.errorCodeName(result)
-                        })",
+                        "[$logInfo] Error sending message. (Connection in non-connected state longer than linger timeout. ${errorCodeName(result)})",
                         null
                     )
 
@@ -1041,16 +1039,14 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
 
                 val exception = endPoint!!.newException(
-                    "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${
-                        AeronDriver.errorCodeName(result)
-                    })"
+                    "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${errorCodeName(result)})"
                 )
                 listenerManager.notifyError(exception)
                 return false
             }
 
             // more critical error sending the message. we shouldn't retry or anything.
-            val errorMessage = "[${publication.sessionId()}] Error sending message. (${AeronDriver.errorCodeName(result)})"
+            val errorMessage = "[${publication.sessionId()}] Error sending message. (${errorCodeName(result)})"
 
             // either client or server. No other choices. We create an exception, because it's more useful!
             val exception = endPoint!!.newException(errorMessage)

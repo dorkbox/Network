@@ -18,6 +18,6 @@ package dorkbox.network.aeron
 
 internal interface AeronPoller {
     fun poll(): Int
-    suspend fun close()
+    fun close()
     val info: String
 }

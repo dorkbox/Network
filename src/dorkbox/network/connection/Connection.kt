@@ -26,8 +26,6 @@ import io.aeron.logbuffer.Header
 import io.aeron.protocol.DataHeaderFlyweight
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
 import javax.crypto.SecretKey
 
@@ -62,7 +60,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has its own logic on the remote endpoint,
      * and can have its own back-pressure.
      */
-    internal val sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
+    internal val sendIdleStrategy = endPoint.config.sendIdleStrategy
 
     /**
      * This is the client UUID. This is useful determine if the same client is connecting multiple times to a server (instead of only using IP address)

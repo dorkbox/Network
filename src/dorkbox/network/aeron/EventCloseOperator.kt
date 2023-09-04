@@ -17,5 +17,5 @@
 package dorkbox.network.aeron
 
 internal interface EventCloseOperator {
-    suspend operator fun invoke()
+    operator fun invoke()
 }

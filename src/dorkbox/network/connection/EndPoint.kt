@@ -23,7 +23,6 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
-import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.EventPoller
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
@@ -218,13 +217,11 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         // Only starts the media driver if we are NOT already running!
         // NOTE: in the event that we are IPC -- only ONE SERVER can be running IPC at a time for a single driver!
         if (type == Server::class.java && config.enableIpc) {
-            runBlocking {
-                val configuration = config.copy()
-                if (AeronDriver.isLoaded(configuration, logger)) {
-                    val e = ServerException("Only one server at a time can share a single aeron driver! Make the driver unique or change it's directory: ${configuration.aeronDirectory}")
-                    listenerManager.notifyError(e)
-                    throw e
-                }
+            val configuration = config.copy()
+            if (AeronDriver.isLoaded(configuration, logger)) {
+                val e = ServerException("Only one server at a time can share a single aeron driver! Make the driver unique or change it's directory: ${configuration.aeronDirectory}")
+                listenerManager.notifyError(e)
+                throw e
             }
         }
 
@@ -253,13 +250,11 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         }
 
         hook = Thread {
-            runBlocking {
                 close(
-                    closeEverything = true,
-                    notifyDisconnect = true,
-                    releaseWaitingThreads = true
-                )
-            }
+                closeEverything = true,
+                notifyDisconnect = true,
+                releaseWaitingThreads = true
+            )
         }
 
         Runtime.getRuntime().addShutdownHook(hook)
@@ -434,9 +429,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
     fun <Message : Any> onMessage(function: CONNECTION.(Message) -> Unit) {
-        runBlocking {
-            listenerManager.onMessage(function)
-        }
+        listenerManager.onMessage(function)
     }
 
     /**
@@ -444,7 +437,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the message was successfully sent by aeron
      */
-    internal fun ping(connection: Connection, pingTimeoutMs: Int, function: suspend Ping.() -> Unit): Boolean {
+    internal fun ping(connection: Connection, pingTimeoutMs: Int, function: Ping.() -> Unit): Boolean {
         return pingManager.ping(connection, pingTimeoutMs, responseManager, logger, function)
     }
 
@@ -669,7 +662,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the media driver is STOPPED.
      */
-    suspend fun ensureStopped(timeoutMS: Long = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong() * 2),
+    fun ensureStopped(timeoutMS: Long = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong() * 2),
                               intervalTimeoutMS: Long = 500): Boolean {
 
         return aeronDriver.ensureStopped(timeoutMS, intervalTimeoutMS)

@@ -22,7 +22,6 @@ import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import dorkbox.network.*
-import dorkbox.network.aeron.CoroutineNoOpIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.storage.Storage
 import dorkbox.util.Sys
@@ -304,8 +303,8 @@ class AeronRmiClientServer {
         // dedicate more **OOMPF** to the network
         config.threadingMode = ThreadingMode.SHARED_NETWORK
 //        config.threadingMode = ThreadingMode.DEDICATED
-        config.pollIdleStrategy = CoroutineNoOpIdleStrategy.INSTANCE
-        config.sendIdleStrategy = CoroutineNoOpIdleStrategy.INSTANCE
+        config.pollIdleStrategy = NoOpIdleStrategy.INSTANCE
+        config.sendIdleStrategy = NoOpIdleStrategy.INSTANCE
 
 
         // only if there are enough threads on the box!

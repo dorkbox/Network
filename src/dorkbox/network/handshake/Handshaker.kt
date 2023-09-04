@@ -18,7 +18,6 @@ package dorkbox.network.handshake
 
 import dorkbox.network.Configuration
 import dorkbox.network.aeron.AeronDriver
-import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
@@ -45,8 +44,6 @@ internal class Handshaker<CONNECTION : Connection>(
     private val handshakeWriteKryo: KryoWriter<CONNECTION>
     private val handshakeSendIdleStrategy: IdleStrategy
 
-    private val writeTimeoutNS = (aeronDriver.lingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
-
     init {
         val maxMessageSize = FrameDescriptor.computeMaxMessageLength(config.publicationTermBufferLength)
 
@@ -58,7 +55,7 @@ internal class Handshaker<CONNECTION : Connection>(
         serialization.newHandshakeKryo(handshakeReadKryo)
         serialization.newHandshakeKryo(handshakeWriteKryo)
 
-        handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
+        handshakeSendIdleStrategy = config.sendIdleStrategy
     }
 
     /**
