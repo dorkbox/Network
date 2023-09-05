@@ -146,37 +146,37 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 error.cause is BindException ||
                 error.cause is SocketException ||
                 error.cause is IOException) {
+
                 // this is bad! We must close this connection. THIS WILL BE CALLED AS FAST AS THE CPU CAN RUN (because of how aeron works).
                 if (!mustRestartDriverOnError) {
                     mustRestartDriverOnError = true
 
-                    logger.error { "Aeron Driver [$driverId]: Critical driver error!" }
-
-                    EventDispatcher.ERROR.launch {
-                        endPointUsages.forEach {
-                            it.close(closeEverything = false,
-                                     notifyDisconnect = false,
-                                     releaseWaitingThreads = false)
-                        }
-                    }
-
                     if (error.message?.startsWith("ERROR - channel error - Network is unreachable") == true) {
-                        val exception = AeronDriverException("Network is disconnected or unreachable.")
+                        val exception = AeronDriverException("Aeron Driver [$driverId]: Network is disconnected or unreachable.")
                         exception.cleanAllStackTrace()
                         notifyError(exception)
                     } else if (error.message?.startsWith("WARN - failed to send") == true) {
-                        val exception = AeronDriverException("Network socket error, can't send data.")
+                        val exception = AeronDriverException("Aeron Driver [$driverId]: Network socket error, can't send data.")
                         exception.cleanAllStackTrace()
                         notifyError(exception)
                     }
                     else if (error.message == "Can't assign requested address") {
-                        val exception = AeronDriverException("Network socket error, can't assign requested address.")
+                        val exception = AeronDriverException("Aeron Driver [$driverId]: Network socket error, can't assign requested address.")
                         exception.cleanAllStackTrace()
                         notifyError(exception)
                     } else {
                         error.cleanStackTrace()
                         // send this out to the listener-manager so we can be notified of global errors
-                        notifyError(AeronDriverException(error.cause!!))
+                        notifyError(AeronDriverException("Aeron Driver [$driverId]: Unexpected error!", error.cause!!))
+                    }
+
+                    // we must close all the connections on a DIFFERENT thread!
+                    EventDispatcher.CLOSE.launch {
+                        endPointUsages.forEach {
+                            it.close(closeEverything = false,
+                                     notifyDisconnect = false,
+                                     releaseWaitingThreads = false)
+                        }
                     }
                 }
             }
