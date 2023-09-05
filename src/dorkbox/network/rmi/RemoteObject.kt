@@ -60,6 +60,17 @@ interface RemoteObject<T> {
 
 
     /**
+     * Sets the ASYNC behavior when invoking remote methods, for whichever remote methods are in the unit function. THIS IS CONCURRENT/THREAD SAFE!
+     * The primary use-case for this, is when calling the RMI methods of a different type (sync/async) than is currently configured
+     * for this connection via the initial setting of `async` (default is false)
+     *
+     * For these methods, invoking thread WILL NOT wait for a response. The method will return immediately and the return value
+     *    should be ignored.
+     */
+    suspend fun asyncSuspend(action: suspend T.() -> Unit)
+
+
+    /**
      * Sets the SYNC behavior when invoking remote methods, for whichever remote methods are in the unit function. THIS IS CONCURRENT/THREAD SAFE!
      * The primary use-case for this, is when calling the RMI methods of a different type (sync/async) than is currently configured
      * for this connection via the initial setting of `async` (default is false)
@@ -69,6 +80,18 @@ interface RemoteObject<T> {
      * If the return value or an exception needs to be retrieved, then DO NOT set async=true, and change the response timeout to 0 instead
      */
     fun sync(action: T.() -> Unit)
+
+
+    /**
+     * Sets the SYNC behavior when invoking remote methods, for whichever remote methods are in the unit function. THIS IS CONCURRENT/THREAD SAFE!
+     * The primary use-case for this, is when calling the RMI methods of a different type (sync/async) than is currently configured
+     * for this connection via the initial setting of `async` (default is false)
+     *
+     * For these methods, the invoking thread WILL wait for a response or timeout.
+     *
+     * If the return value or an exception needs to be retrieved, then DO NOT set async=true, and change the response timeout to 0 instead
+     */
+    suspend fun syncSuspend(action: suspend T.() -> Unit)
 
 
     /**
