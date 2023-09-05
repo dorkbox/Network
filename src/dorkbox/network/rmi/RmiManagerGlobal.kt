@@ -16,12 +16,7 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
-import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
-import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
-import dorkbox.network.rmi.messages.ConnectionObjectDeleteResponse
-import dorkbox.network.rmi.messages.MethodRequest
-import dorkbox.network.rmi.messages.MethodResponse
+import dorkbox.network.rmi.messages.*
 import dorkbox.network.serialization.Serialization
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
@@ -198,9 +193,8 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
 
                             var insideResult: Any?
                             try {
-                                // args!! is safe to do here (even though it doesn't make sense)
                                 insideResult = cachedMethod.invoke(connection, implObject, args)
-                            } catch (ex: Exception) {
+                            } catch (ex: Throwable) {
                                 insideResult = ex.cause
                                 // added to prevent a stack overflow when references is false, (because 'cause' == "this").
                                 // See:
@@ -224,9 +218,9 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
                                 // kotlin suspend returns, that DO NOT have a return value, REALLY return kotlin.Unit. This means there is no
                                 // return value!
                                 suspendResult = null
-                            } else if (suspendResult is Exception) {
+                            } else if (suspendResult is Throwable) {
                                 RmiUtils.cleanStackTraceForImpl(suspendResult, true)
-                                logger.error("Connection ${connection.id}", suspendResult)
+                                logger.error(suspendResult) { "Connection ${connection.id}" }
                             }
 
                             if (sendResponse) {
