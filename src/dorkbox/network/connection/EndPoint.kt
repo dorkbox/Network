@@ -437,8 +437,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @return true if the message was successfully sent by aeron
      */
-    internal fun ping(connection: Connection, pingTimeoutMs: Int, function: Ping.() -> Unit): Boolean {
-        return pingManager.ping(connection, pingTimeoutMs, responseManager, logger, function)
+    internal fun ping(connection: Connection, function: Ping.() -> Unit): Boolean {
+        return connection.sendPing(function)
     }
 
     /**

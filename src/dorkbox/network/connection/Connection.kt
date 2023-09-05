@@ -217,8 +217,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @return true if the message was successfully sent by aeron
      */
-    fun ping(pingTimeoutSeconds: Int = endPoint.config.pingTimeoutSeconds, function: Ping.() -> Unit = {}): Boolean {
-        return endPoint.ping(this, pingTimeoutSeconds, function)
+    fun ping(function: Ping.() -> Unit = {}): Boolean {
+        return sendPing(function)
     }
 
     /**
@@ -416,5 +416,46 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         val other1 = other as Connection
         return id == other1.id
+    }
+
+    internal fun receivePing(ping: Ping) {
+        if (ping.pongTime == 0L) {
+            // this is on the "remote end".
+            ping.pongTime = System.currentTimeMillis()
+
+            if (!send(ping)) {
+                logger.error { "Error returning ping: $ping" }
+            }
+        } else {
+            // this is on the "local end" when the response comes back
+            ping.finishedTime = System.currentTimeMillis()
+
+            val rmiId = ping.packedId
+
+            // process the ping message so that our ping callback does something
+
+            // this will be null if the ping took longer than XXX seconds and was cancelled
+            val result = EndPoint.responseManager.removeWaiterCallback<Ping.() -> Unit>(rmiId, logger)
+            if (result != null) {
+                result(ping)
+            } else {
+                logger.error { "Unable to receive ping, there was no waiting response for $ping ($rmiId)" }
+            }
+        }
+    }
+
+    internal fun sendPing(function: Ping.() -> Unit): Boolean {
+        val id = EndPoint.responseManager.prepWithCallback(logger, function)
+
+        val ping = Ping()
+        ping.packedId = id
+        ping.pingTime = System.currentTimeMillis()
+
+        // if there is no ping response EVER, it means that the connection is in a critically BAD state!
+        // eventually, all the ping replies (or, in our case, the RMI replies that have timed out) will
+        // become recycled.
+        // Is it a memory-leak? No, because the memory will **EVENTUALLY** get freed.
+
+        return send(ping)
     }
 }
