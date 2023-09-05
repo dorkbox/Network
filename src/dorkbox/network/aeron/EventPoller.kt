@@ -76,7 +76,7 @@ internal class EventPoller {
     private var threadId = Thread.currentThread().id
 
 
-    fun inDispatch(): Boolean {
+    fun isDispatch(): Boolean {
         // this only works because we are a single thread dispatch
         return threadId == Thread.currentThread().id
     }
@@ -197,7 +197,7 @@ internal class EventPoller {
      */
     fun close(logger: KLogger, endPoint: EndPoint<*>) {
         // make sure that we close on the CLOSE dispatcher if we run on the poll dispatcher!
-        if (inDispatch()) {
+        if (isDispatch()) {
             EventDispatcher.CLOSE.launch {
                 close(logger, endPoint)
             }
@@ -242,7 +242,7 @@ internal class EventPoller {
         val wasRunning = running
 
         running = false
-        while (!shutdownLatch.await(100, TimeUnit.MILLISECONDS)) {
+        while (!shutdownLatch.await(500, TimeUnit.MILLISECONDS)) {
             logger.error { "Waiting for Network Event Poller to close. It should not take this long" }
         }
         configured = false
