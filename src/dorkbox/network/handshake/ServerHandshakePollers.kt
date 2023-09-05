@@ -48,6 +48,11 @@ import java.net.Inet4Address
 import java.util.concurrent.*
 
 internal object ServerHandshakePollers {
+    private val executor = Executors.newSingleThreadExecutor(
+        NamedThreadFactory("Handshake Dispatcher", Configuration.networkThreadGroup, Thread.NORM_PRIORITY, true)
+    )
+
+
     fun disabled(serverInfo: String): AeronPoller {
         return object : AeronPoller {
             override fun poll(): Int { return 0 }
@@ -115,10 +120,8 @@ internal object ServerHandshakePollers {
                 return
             }
 
-
-
             // we have read all the data, now dispatch it.
-            EventDispatcher.HANDSHAKE.launch {
+            executor.submit {
                 // HandshakeMessage.HELLO
                 // HandshakeMessage.DONE
                 val messageState = message.state
@@ -138,7 +141,7 @@ internal object ServerHandshakePollers {
                         driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
-                        return@launch
+                        return@submit
                     }
 
                     try {
@@ -152,7 +155,7 @@ internal object ServerHandshakePollers {
                         driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
-                        return@launch
+                        return@submit
                     }
 
 
@@ -192,7 +195,7 @@ internal object ServerHandshakePollers {
                         driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] No publication back to IPC"))
-                        return@launch
+                        return@submit
                     }
 
                     try {
@@ -339,7 +342,7 @@ internal object ServerHandshakePollers {
 
 
 
-            EventDispatcher.HANDSHAKE.launch {
+            executor.submit {
                 // HandshakeMessage.HELLO
                 // HandshakeMessage.DONE
                 val messageState = message.state
@@ -364,7 +367,7 @@ internal object ServerHandshakePollers {
                         driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
-                        return@launch
+                        return@submit
                     }
 
                     try {
@@ -378,7 +381,7 @@ internal object ServerHandshakePollers {
                         driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
-                        return@launch
+                        return@submit
                     }
 
                     try {
@@ -427,7 +430,7 @@ internal object ServerHandshakePollers {
                         driver.deleteLogFile(image)
 
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] No publication back to $clientAddressString"))
-                        return@launch
+                        return@submit
                     }
 
                     try {
