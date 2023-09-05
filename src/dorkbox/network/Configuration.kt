@@ -438,15 +438,6 @@ abstract class Configuration protected constructor() {
         }
 
     /**
-     * Changes the default ping timeout, used to test the liveliness of a connection, specifically it's round-trip performance
-     */
-    var pingTimeoutSeconds = 30
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
-
-    /**
      * Allows the user to change how endpoint settings and public key information are saved.
      *
      *  Note: This field is overridden for server configurations, so that the file used is different for client/server
@@ -1034,7 +1025,6 @@ abstract class Configuration protected constructor() {
         config.connectionCloseTimeoutInSeconds = connectionCloseTimeoutInSeconds
         config.connectionExpirationTimoutNanos = connectionExpirationTimoutNanos
         config.isReliable = isReliable
-        config.pingTimeoutSeconds = pingTimeoutSeconds
         config.settingsStore = settingsStore
         config.serialization = serialization
         config.maxStreamSizeInMemoryMB = maxStreamSizeInMemoryMB
@@ -1097,7 +1087,6 @@ abstract class Configuration protected constructor() {
         if (connectionExpirationTimoutNanos != other.connectionExpirationTimoutNanos) return false
 
         if (isReliable != other.isReliable) return false
-        if (pingTimeoutSeconds != other.pingTimeoutSeconds) return false
         if (settingsStore != other.settingsStore) return false
         if (serialization != other.serialization) return false
         if (maxStreamSizeInMemoryMB != other.maxStreamSizeInMemoryMB) return false
@@ -1124,7 +1113,6 @@ abstract class Configuration protected constructor() {
         result = 31 * result + enableRemoteSignatureValidation.hashCode()
         result = 31 * result + ipcId
         result = 31 * result + udpId
-        result = 31 * result + pingTimeoutSeconds
         result = 31 * result + connectionCloseTimeoutInSeconds
         result = 31 * result + connectionExpirationTimoutNanos.hashCode()
         result = 31 * result + isReliable.hashCode()

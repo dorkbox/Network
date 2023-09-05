@@ -950,11 +950,11 @@ open class Client<CONNECTION : Connection>(
      *
      * @return true if the ping was successfully sent to the client
      */
-    fun ping(pingTimeoutSeconds: Int = config.pingTimeoutSeconds, function: Ping.() -> Unit): Boolean {
+    fun ping(function: Ping.() -> Unit): Boolean {
         val c = connection0
 
         if (c != null) {
-            return super.ping(c, pingTimeoutSeconds, function)
+            return super.ping(c, function)
         } else {
             val exception = TransmitException("Cannot send a ping when there is no connection!")
             listenerManager.notifyError(exception)
