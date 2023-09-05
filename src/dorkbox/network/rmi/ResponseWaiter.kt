@@ -15,56 +15,57 @@
  */
 package dorkbox.network.rmi
 
-import kotlinx.coroutines.channels.Channel
+import kotlinx.atomicfu.locks.withLock
+import java.util.concurrent.*
+import java.util.concurrent.locks.ReentrantLock
 
 data class ResponseWaiter(val id: Int) {
-    // this is bi-directional waiting. The method names to not reflect this, however there is no possibility of race conditions w.r.t. waiting
-    // https://stackoverflow.com/questions/55421710/how-to-suspend-kotlin-coroutine-until-notified
-    // https://kotlinlang.org/docs/reference/coroutines/channels.html
-
-    // "receive' suspends until another coroutine invokes "send"
-    // and
-    // "send" suspends until another coroutine invokes "receive".
-    //
-    // these are wrapped in a try/catch, because cancel will cause exceptions to be thrown (which we DO NOT want)
-    @Volatile
-    var channel: Channel<Unit> = Channel(Channel.RENDEZVOUS)
-
-    @Volatile
-    var isCancelled = false
+    private val lock = ReentrantLock()
+    private val condition = lock.newCondition()
 
     // holds the RMI result or callback. This is ALWAYS accessed from within a lock (so no synchronize/volatile/etc necessary)!
     @Volatile
     var result: Any? = null
 
     /**
-     * this will replace the waiter if it was cancelled (waiters are not valid if cancelled)
+     * this will set the result to null
      */
     fun prep() {
-        if (isCancelled) {
-            isCancelled = false
-            channel = Channel(0)
-        }
+        result = null
     }
 
-    suspend fun doNotify() {
+    /**
+     * Waits until another thread invokes "doWait"
+     */
+    fun doNotify() {
         try {
-            channel.send(Unit)
+            lock.withLock {
+                condition.signal()
+            }
         } catch (ignored: Throwable) {
         }
     }
 
-    suspend fun doWait() {
+    /**
+     * Waits a specific amount of time until another thread invokes "doNotify"
+     */
+    fun doWait() {
         try {
-            channel.receive()
+            lock.withLock {
+                condition.await()
+            }
         } catch (ignored: Throwable) {
         }
     }
 
-    fun cancel() {
+    /**
+     * Waits a specific amount of time until another thread invokes "doNotify"
+     */
+    fun doWait(timeout: Long) {
         try {
-            isCancelled = true
-            channel.cancel()
+            lock.withLock {
+                condition.await(timeout, TimeUnit.MILLISECONDS)
+            }
         } catch (ignored: Throwable) {
         }
     }
