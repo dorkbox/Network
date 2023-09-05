@@ -18,12 +18,13 @@ package dorkbox.network.connection
 import dorkbox.classUtil.ClassHelper
 import dorkbox.classUtil.ClassHierarchy
 import dorkbox.collections.IdentityMap
+import dorkbox.network.Configuration
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.os.OS
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import dorkbox.util.NamedThreadFactory
 import mu.KLogger
 import net.jodah.typetools.TypeResolver
+import java.util.concurrent.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.write
 
@@ -36,6 +37,11 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
          */
         val LOAD_FACTOR = OS.getFloat(ListenerManager::class.qualifiedName + "LOAD_FACTOR", 0.8f)
+
+        internal val executor = Executors.newSingleThreadExecutor(
+            NamedThreadFactory("Error Dispatcher", Configuration.networkThreadGroup, Thread.NORM_PRIORITY, true)
+        )
+
 
         /**
          * Remove from the stacktrace kotlin coroutine info + dorkbox network call stack. This is NOT used by RMI
@@ -460,7 +466,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     fun notifyError(connection: CONNECTION, exception: Throwable) {
         val list = onErrorList
         if (list.isNotEmpty()) {
-            EventDispatcher.ERROR.launch {
+            executor.submit {
                 list.forEach {
                     try {
                         it(connection, exception)
@@ -484,7 +490,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     fun notifyError(exception: Throwable) {
         val list = onErrorGlobalList
         if (list.isNotEmpty()) {
-            EventDispatcher.ERROR.launch {
+            executor.submit {
                 list.forEach {
                     try {
                         it(exception)
