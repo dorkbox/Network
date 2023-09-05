@@ -495,7 +495,7 @@ object RmiUtils {
      *
      * We do this because these stack frames are not useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
      */
-    fun cleanStackTraceForProxy(localException: Exception, remoteException: Exception? = null) {
+    fun cleanStackTraceForProxy(localException: Throwable, remoteException: Throwable? = null) {
         val myClassName = RmiClient::class.java.name
         val stackTrace = localException.stackTrace
         var newStartIndex = 0
@@ -553,7 +553,7 @@ object RmiUtils {
      *
      * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
      */
-    fun cleanStackTraceForImpl(exception: Exception, isSuspendFunction: Boolean) {
+    fun cleanStackTraceForImpl(exception: Throwable, isSuspendFunction: Boolean) {
         val packageName = RmiUtils::class.java.packageName
 
         val stackTrace = exception.stackTrace
