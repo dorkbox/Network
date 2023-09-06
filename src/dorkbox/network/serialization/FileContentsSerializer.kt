@@ -44,7 +44,7 @@ internal class FileContentsSerializer<CONNECTION : Connection> : Serializer<File
         // NOTE: the stream session ID is a combination of the connection ID + random ID (on the receiving side)
         val streamSessionId = CryptoManagement.secureRandom.nextInt()
 
-        // use the streaming manager to send the file in blocks to the remove endpoint
+        // use the streaming manager to send the file in blocks to the remote endpoint
         val kryo = endPoint.serialization.take()
         try {
             streamingManager.sendFile(
