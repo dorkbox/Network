@@ -47,7 +47,7 @@ internal class EventPoller {
         val eventLogger = KotlinLogging.logger(EventPoller::class.java.simpleName)
 
 
-        private val pollDispatcher = Executors.newSingleThreadExecutor(
+        private val pollExecutor = Executors.newSingleThreadExecutor(
             NamedThreadFactory("Poll Dispatcher", Configuration.networkThreadGroup, true)
         )
     }
@@ -95,10 +95,10 @@ internal class EventPoller {
                 shutdownLatch = CountDownLatch(1)
                 pollStrategy = config.pollIdleStrategy
 
-                pollDispatcher.submit(Runnable {
+                pollExecutor.submit {
                     val pollIdleStrategy = pollStrategy
                     var pollCount = 0
-                    threadId = Thread.currentThread().id
+                    threadId = Thread.currentThread().id // only ever 1 thread!!!
 
                     pollIdleStrategy.reset()
 
@@ -150,7 +150,7 @@ internal class EventPoller {
                     }
 
                     shutdownLatch.countDown()
-                })
+                }
             } else {
                 // we don't want to use .equals, because that also compares STATE, which for us is going to be different because we are cloned!
                 // toString has the right info to compare types/config accurately
@@ -248,7 +248,7 @@ internal class EventPoller {
         configured = false
 
         if (wasRunning) {
-            pollDispatcher.awaitTermination(200, TimeUnit.MILLISECONDS)
+            pollExecutor.awaitTermination(200, TimeUnit.MILLISECONDS)
         }
         logger.error { "Closed Network Event Poller: wasRunning=$wasRunning" }
     }

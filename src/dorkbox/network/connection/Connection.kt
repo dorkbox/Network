@@ -196,15 +196,16 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *  @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
     internal fun send(message: Any, abortEarly: Boolean): Boolean {
-        // The handshake sessionId IS NOT globally unique
-        logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
+        if (logger.isTraceEnabled) {
+            // The handshake sessionId IS NOT globally unique
+            // don't automatically create the lambda when trace is disabled! Because this uses 'outside' scoped info, it's a new lambda each time!
+            logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
+        }
         return endPoint.write(message, publication, sendIdleStrategy, this@Connection, maxMessageSize, abortEarly)
     }
 
     /**
      * Safely sends objects to a destination.
-     *
-     * NOTE: this is dispatched to the IO context!! (since network calls are IO/blocking calls)
      *
      * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
