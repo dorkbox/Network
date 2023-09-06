@@ -29,7 +29,6 @@ import java.io.File
 internal class FileContentsSerializer<CONNECTION : Connection> : Serializer<File>() {
     lateinit var streamingManager: StreamingManager<CONNECTION>
 
-
     init {
         isImmutable = true
     }
@@ -46,16 +45,19 @@ internal class FileContentsSerializer<CONNECTION : Connection> : Serializer<File
         val streamSessionId = CryptoManagement.secureRandom.nextInt()
 
         // use the streaming manager to send the file in blocks to the remove endpoint
-        endPoint.serialization.withKryo {
+        val kryo = endPoint.serialization.take()
+        try {
             streamingManager.sendFile(
                 file = file,
                 publication = publication,
                 endPoint = endPoint,
-                kryo = this,
+                kryo = kryo,
                 sendIdleStrategy = sendIdleStrategy,
                 connection = connection,
                 streamSessionId = streamSessionId
             )
+        } finally {
+            endPoint.serialization.put(kryo)
         }
 
 //        output.writeString(file.path)
