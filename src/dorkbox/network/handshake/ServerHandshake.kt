@@ -61,7 +61,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
         .expirationListener<Long, CONNECTION> { clientConnectKey, connection ->
             // this blocks until it fully runs (which is ok. this is fast)
             listenerManager.notifyError(ServerTimedoutException("[${clientConnectKey} Connection (${connection.id}) Timed out waiting for registration response from client"))
-
             connection.close()
         }
         .build<Long, CONNECTION>()
