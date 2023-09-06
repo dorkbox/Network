@@ -79,8 +79,10 @@ object TestClient {
             logger.error("Starting test for: Client -> Server")
 
             rmi.getGlobal<TestCow>(12123).apply {
-                RmiCommonTest.runTests(this@onConnect, this, 12123)
-                logger.error("DONE")
+                runBlocking {
+                    RmiCommonTest.runTests(this@onConnect, this@apply, 12123)
+                    logger.error("DONE")
+                }
 
                 // now send this remote object ACROSS the wire to the server (on the server, this is where the IMPLEMENTATION lives)
                 send(this)
@@ -103,9 +105,6 @@ object TestClient {
         }
 
         client.connect(BaseTest.LOCALHOST, 2000)
-
-        runBlocking {
-            client.waitForClose()
-        }
+        client.waitForClose()
     }
 }

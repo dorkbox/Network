@@ -67,7 +67,8 @@ class ConnectionFilterTest : BaseTest() {
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
+            waitForThreads()
             throw e
         }
 
@@ -117,7 +118,8 @@ class ConnectionFilterTest : BaseTest() {
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
+            waitForThreads()
             throw e
         }
 
@@ -169,7 +171,8 @@ class ConnectionFilterTest : BaseTest() {
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
+            waitForThreads()
             throw e
         }
 
@@ -221,7 +224,8 @@ class ConnectionFilterTest : BaseTest() {
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
+            waitForThreads()
             throw e
         }
 
@@ -258,6 +262,7 @@ class ConnectionFilterTest : BaseTest() {
             client.onDisconnect {
                 stopEndPoints()
             }
+
             client
         }
 
@@ -265,7 +270,8 @@ class ConnectionFilterTest : BaseTest() {
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
+            waitForThreads()
             throw e
         }
 
@@ -321,7 +327,7 @@ class ConnectionFilterTest : BaseTest() {
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
             // this is expected.
         }
 
@@ -352,20 +358,19 @@ class ConnectionFilterTest : BaseTest() {
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
 
-
             client.onDisconnect {
                 stopEndPoints()
             }
 
             client
-
         }
 
         server.bind(2000)
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
+            waitForThreads()
             throw e
         }
 
@@ -415,7 +420,8 @@ class ConnectionFilterTest : BaseTest() {
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
+            waitForThreads()
             throw e
         }
 
@@ -464,7 +470,8 @@ class ConnectionFilterTest : BaseTest() {
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
+            waitForThreads()
             throw e
         }
 
@@ -510,7 +517,8 @@ class ConnectionFilterTest : BaseTest() {
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
+            waitForThreads()
             throw e
         }
 
@@ -540,7 +548,6 @@ class ConnectionFilterTest : BaseTest() {
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
 
-
             client.onDisconnect {
                 stopEndPoints()
             }
@@ -552,7 +559,8 @@ class ConnectionFilterTest : BaseTest() {
         try {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
-            stopEndPointsBlocking()
+            stopEndPoints()
+            waitForThreads()
             throw e
         }
 

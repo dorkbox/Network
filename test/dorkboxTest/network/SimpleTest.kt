@@ -181,7 +181,6 @@ class SimpleTest : BaseTest() {
                 received.set(true)
                 logger.error("Done, stopping endpoints")
 
-                // this must NOT be on the disconnect thread, because we cancel it!
                 stopEndPoints()
             }
 

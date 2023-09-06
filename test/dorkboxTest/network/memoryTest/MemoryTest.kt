@@ -35,44 +35,42 @@ class MemoryTest : BaseTest() {
 
     @Test
     fun runForeverIpcAsyncNormal() {
-        runBlocking {
-            val counter = AtomicLong(0)
-            val RMI_ID = 12251
+        val counter = AtomicLong(0)
+        val RMI_ID = 12251
 
-            run {
-                val configuration = serverConfig()
-                configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
+        run {
+            val configuration = serverConfig()
+            configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
-                val server = Server<Connection>(configuration)
-                server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
-                server.bindIpc()
-            }
+            val server = Server<Connection>(configuration)
+            server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
+            server.bindIpc()
+        }
 
 
-            run {
-                val client = Client<Connection>(clientConfig())
-                client.onConnect {
-                    val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
-                    val obj = RemoteObject.cast(remoteObject)
-                    obj.async = true
+        run {
+            val client = Client<Connection>(clientConfig())
+            client.onConnect {
+                val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
+                val obj = RemoteObject.cast(remoteObject)
+                obj.async = true
 
-                    var i = 0L
-                    while (true) {
-                        i++
-                        try {
-                            remoteObject.setOther(i)
-                        } catch (e: Exception) {
-                            logger.error("Timeout when calling RMI method")
-                            e.printStackTrace()
-                        }
+                var i = 0L
+                while (true) {
+                    i++
+                    try {
+                        remoteObject.setOther(i)
+                    } catch (e: Exception) {
+                        logger.error("Timeout when calling RMI method")
+                        e.printStackTrace()
                     }
                 }
-
-                client.connectIpc()
             }
 
-            Thread.sleep(Long.MAX_VALUE)
+            client.connectIpc()
         }
+
+        Thread.sleep(Long.MAX_VALUE)
     }
 
     @Test
@@ -80,80 +78,76 @@ class MemoryTest : BaseTest() {
         val counter = AtomicLong(0)
         val RMI_ID = 12251
 
-        runBlocking {
-            run {
-                val configuration = serverConfig()
-                configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
+        run {
+            val configuration = serverConfig()
+            configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
-                val server = Server<Connection>(configuration)
-                server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
-                server.bindIpc()
-            }
+            val server = Server<Connection>(configuration)
+            server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
+            server.bindIpc()
+        }
 
 
-            run {
-                val client = Client<Connection>(clientConfig())
-                client.onConnect {
-                    val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
-                    val obj = RemoteObject.cast(remoteObject)
-                    obj.async = true
+        run {
+            val client = Client<Connection>(clientConfig())
+            client.onConnect {
+                val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
+                val obj = RemoteObject.cast(remoteObject)
+                obj.async = true
 
-                    var i = 0L
-                    while (true) {
-                        i++
-                        try {
-                            runBlocking {
-                                remoteObject.setOtherSus(i)
-                            }
-                        } catch (e: Exception) {
-                            logger.error("Timeout when calling RMI method")
-                            e.printStackTrace()
+                var i = 0L
+                while (true) {
+                    i++
+                    try {
+                        runBlocking {
+                            remoteObject.setOtherSus(i)
                         }
+                    } catch (e: Exception) {
+                        logger.error("Timeout when calling RMI method")
+                        e.printStackTrace()
                     }
                 }
-
-                client.connectIpc()
             }
 
-            Thread.sleep(Long.MAX_VALUE)
+            client.connectIpc()
         }
+
+        Thread.sleep(Long.MAX_VALUE)
     }
 
     @Test
     fun runForeverIpc() {
-        runBlocking {
-            val server = run {
-                val configuration = serverConfig()
+        val server = run {
+            val configuration = serverConfig()
 
-                val server = Server<Connection>(configuration)
+            val server = Server<Connection>(configuration)
 
-                server.onMessage<Long> { testObject ->
-                    send(testObject+1)
-                }
-
-                server
+            server.onMessage<Long> { testObject ->
+                send(testObject+1)
             }
 
-
-            val client = run {
-                val client = Client<Connection>(clientConfig())
-
-                client.onMessage<Long> { testObject ->
-                    send(testObject+1)
-                }
-
-                client.onConnect {
-                    send(0L)
-                }
-
-                client
-            }
-
-            server.bindIpc()
-            client.connectIpc()
-
-            Thread.sleep(Long.MAX_VALUE)
+            server
         }
+
+
+        val client = run {
+            val client = Client<Connection>(clientConfig())
+
+            client.onMessage<Long> { testObject ->
+                send(testObject+1)
+            }
+
+            client.onConnect {
+                send(0L)
+            }
+
+            client
+        }
+
+        server.bindIpc()
+        client.connectIpc()
+
+        Thread.sleep(Long.MAX_VALUE)
     }
 
     private interface TestObject {

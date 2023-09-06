@@ -39,6 +39,7 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.EventDispatcher
 import dorkbox.util.exceptions.InitializationException
 import dorkbox.util.exceptions.SecurityException
 import kotlinx.atomicfu.atomic
@@ -78,7 +79,8 @@ class ListenerTest : BaseTest() {
             TestConnectionA(it)
         }
         addEndPoint(server)
-// has session/stream count errors!
+
+        // has session/stream count errors!
         // standard listener
         server.onMessage<String> { message ->
             logger.error ("server string message")

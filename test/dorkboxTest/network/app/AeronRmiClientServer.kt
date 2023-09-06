@@ -117,6 +117,67 @@ class AeronRmiClientServer {
                 .cliArguments(cliArgs)
                 .process()
 
+            fun client(acs: AeronRmiClientServer): Client<Connection> {
+                val client = acs.client(0)
+
+                client.onDisconnect {
+                    logger.error { "Disconnect -> Reconnect..." }
+                    client.reconnect()
+                }
+
+                client.onConnect {
+                    logger.error { "Starting test..." }
+                    val secureRandom = SecureRandom()
+                    val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 32
+
+                    // don't want to time allocating the mem, just time "serializing and sending"
+                    val hugeData = ByteArray(sizeToTest)
+                    secureRandom.nextBytes(hugeData) // REALLY slow!!!
+
+                    var count = 0
+                    var timed = 0L
+
+                    client.logger.error { "Initializing test." }
+
+                    // just to start it up.
+                    repeat(15) {
+                        if (!client.send(hugeData)) {
+                            client.logger.error { "Unable to send data!" }
+                            return@onConnect
+                        }
+                    }
+
+                    client.logger.error { "Starting test." }
+
+
+                    val allStopwatch = Stopwatch.createStarted()
+                    while (TimeUnit.NANOSECONDS.toSeconds(timed) < 5) {
+//                        client.logger.error { "Starting round: $count" }
+
+                        val roundStopwatch = Stopwatch.createStarted()
+                        client.send(hugeData)
+                        timed += roundStopwatch.elapsedNanos()
+//                        client.logger.error { "Finished round $count in: $roundStopwatch" }
+                        count++
+                    }
+
+
+                    val amountInMB = (count.toLong()*sizeToTest)/Sys.MEGABYTE
+                    val amountInmb = (count.toLong()*sizeToTest*8)/Sys.MEGABYTE
+                    val fullElapsed = allStopwatch.elapsedNanos()
+
+                    client.logger.error { "Finished $count rounds in: ${Sys.getTimePrettyFull(fullElapsed)}" }
+                    client.logger.error { "Sending data portion took: ${Sys.getTimePrettyFull(timed)} for $amountInMB MB" }
+
+                    val timedInSeconds = TimeUnit.NANOSECONDS.toSeconds(timed)
+                    client.logger.error { "Rate is: ${amountInMB/timedInSeconds} MB/s" }
+                    client.logger.error { "Rate is: ${amountInmb/timedInSeconds} mb/s" }
+                }
+
+                return client
+            }
+
+
             val acs = AeronRmiClientServer()
             try {
                 if (config.server) {
@@ -126,75 +187,29 @@ class AeronRmiClientServer {
                         logger.error { "Received Byte array!" }
                     }
 
-                    runBlocking {
-                        server.waitForClose()
-                    }
+                    server.bind(2000, 2001)
+                    server.waitForClose()
                 }
 
                 else if (config.client) {
-                    val server = acs.server()
-
-                    val client = acs.client(0)
-
-                    client.onDisconnect {
-                        logger.error { "Disconnect -> Reconnect..." }
-                        client.reconnect()
-                    }
-
-                    client.onConnect {
-                        logger.error { "Starting test..." }
-                        val secureRandom = SecureRandom()
-                        val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 32
-
-                        // don't want to time allocating the mem, just time "serializing and sending"
-                        val hugeData = ByteArray(sizeToTest)
-                        secureRandom.nextBytes(hugeData) // REALLY slow!!!
-
-                        var count = 0
-                        var timed = 0L
-
-                        client.logger.error { "Initializing test." }
-
-                        // just to start it up.
-                        repeat(5) {
-                            if (!client.send(hugeData)) {
-                                client.logger.error { "Unable to send data!" }
-                                return@onConnect
-                            }
-                        }
-
-                        client.logger.error { "Starting test." }
-
-
-                        val allStopwatch = Stopwatch.createStarted()
-                        while(TimeUnit.NANOSECONDS.toSeconds(timed) < 5) {
-                            client.logger.error { "Starting round: $count" }
-
-                            val roundStopwatch = Stopwatch.createStarted()
-                            client.send(hugeData)
-                            timed += roundStopwatch.elapsedNanos()
-                            client.logger.error { "Finished round $count in: $roundStopwatch" }
-                            count++
-                        }
-
-
-                        val amountInMB = (count.toLong()*sizeToTest)/Sys.MEGABYTE
-                        val amountInmb = (count.toLong()*sizeToTest*8)/Sys.MEGABYTE
-                        val fullElapsed = allStopwatch.elapsedNanos()
-
-                        client.logger.error { "Finished $count rounds in: ${Sys.getTimePrettyFull(fullElapsed)}" }
-                        client.logger.error { "Sending data portion took: ${Sys.getTimePrettyFull(timed)} for $amountInMB MB" }
-
-                        val timedInSeconds = TimeUnit.NANOSECONDS.toSeconds(timed)
-                        client.logger.error { "Rate is: ${amountInMB/timedInSeconds} MB/s" }
-                        client.logger.error { "Rate is: ${amountInmb/timedInSeconds} mb/s" }
-                    }
-
+                    val client = client(acs)
                     client.connect(config.ip, 2000, 2001, 0) // UDP connection via loopback
-                    runBlocking {
-                        client.waitForClose()
-                        client.logger.error { "DONE WAITING" }
+
+                    client.waitForClose()
+                    client.logger.error { "DONE WAITING" }
+                } else {
+                    val server = acs.server()
+                    server.onMessage<ByteArray> {
+                        // let the client send us data
                     }
+
+                    val client = client(acs)
+
+                    server.bindIpc()
+                    client.connectIpc()
+
+                    client.waitForClose()
+                    client.logger.error { "DONE WAITING" }
                 }
 
             } catch (e: Exception) {
@@ -205,7 +220,6 @@ class AeronRmiClientServer {
     }
 
 
-    @OptIn(DelicateCoroutinesApi::class)
     fun client(index: Int): Client<Connection> {
         val configuration = ClientConfiguration()
         config(configuration)
@@ -346,10 +360,8 @@ class AeronRmiClientServer {
 //        server.rmiGlobal.save(TestCowImpl(44), 44)
 
         // we must always make sure that aeron is shut-down before starting again.
-        runBlocking {
-            if (!server.ensureStopped()) {
-                throw IllegalStateException("Aeron was unable to shut down in a timely manner.")
-            }
+        if (!server.ensureStopped()) {
+            throw IllegalStateException("Aeron was unable to shut down in a timely manner.")
         }
 
         server.onInit {
@@ -375,14 +387,9 @@ class AeronRmiClientServer {
             throwable.printStackTrace()
         }
 
-        server.bind(2000)
-
-
         SigInt.register {
             server.logger.info { "Shutting down via sig-int command" }
-            runBlocking {
-                server.close()
-            }
+            server.close()
         }
 
 

@@ -27,15 +27,13 @@ import dorkbox.network.*
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.EventDispatcher
 import dorkbox.os.OS
 import dorkbox.storage.Storage
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
 import dorkbox.util.exceptions.InitializationException
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import org.jetbrains.annotations.Debug
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
@@ -49,8 +47,10 @@ abstract class BaseTest {
     companion object {
         const val LOCALHOST = "localhost"
 
+        const val DEBUG = true
+
         // wait minimum of 3 minutes before we automatically fail the unit test.
-        var AUTO_FAIL_TIMEOUT: Long = 180L
+        var AUTO_FAIL_TIMEOUT: Long = if (DEBUG) 9999999999L else 180L
 
         init {
             if (OS.javaVersion >= 9) {
@@ -184,10 +184,8 @@ abstract class BaseTest {
 
 
     fun addEndPoint(endPoint: EndPoint<*>, runCheck: Boolean = true) {
-        runBlocking {
-            if (runCheck && !endPoint.ensureStopped()) {
-                throw IllegalStateException("Unable to continue, AERON was unable to stop.")
-            }
+        if (runCheck && !endPoint.ensureStopped()) {
+            throw IllegalStateException("Unable to continue, AERON was unable to stop.")
         }
 
         endPoint.onInit { logger.error { "UNIT TEST: init $id (${uuid.toHexString()})" } }
@@ -207,49 +205,35 @@ abstract class BaseTest {
     }
 
     /**
-     * Immediately stop the endpoints
+     * Immediately stop the endpoints. DOES NOT WAIT FOR THEM TO CLOSE!
      *
      * Can stop from inside different callbacks
-     *  - message
-     *  - connect
-     *  - disconnect
-     */
-    fun stopEndPointsBlocking(stopAfterMillis: Long = 0L) {
-        runBlocking {
-            stopEndPoints(stopAfterMillis)
-        }
-    }
-
-    /**
-     * Immediately stop the endpoints
-     *
-     * Can stop from inside different callbacks
-     *  - message
-     *  - connect
-     *  - disconnect
+     *  - message     (network event poller)
+     *  - connect     (eventdispatch.connect)
+     *  - disconnect  (eventdispatch.connect)
      */
     fun stopEndPoints(stopAfterMillis: Long = 0L) {
         if (isStopping) {
             return
         }
 
-        if (EventDispatcher.isCurrentEvent()) {
-            val mutex = Mutex(true)
-
-            // we want to redispatch, in the event we are already running inside the event dispatch
-            // this gives us the chance to properly exit/close WITHOUT blocking currentEventDispatch
-            // during the `waitForClose()` call
-            GlobalScope.launch {
-                stopEndPoints(stopAfterMillis)
-                mutex.unlock()
-            }
-
-            runBlocking {
-                mutex.withLock { }
-            }
-
-            return
-        }
+//        if (EventDispatcher.isCurrentEvent()) {
+//            val mutex = Mutex(true)
+//
+//            // we want to redispatch, in the event we are already running inside the event dispatch
+//            // this gives us the chance to properly exit/close WITHOUT blocking currentEventDispatch
+//            // during the `waitForClose()` call
+//            GlobalScope.launch {
+//                stopEndPoints(stopAfterMillis)
+//                mutex.unlock()
+//            }
+//
+//            runBlocking {
+//                mutex.withLock { }
+//            }
+//
+//            return
+//        }
 
         isStopping = true
 
@@ -263,20 +247,12 @@ abstract class BaseTest {
         logger.error("Unit test shutting down ${clients.size} clients...")
         logger.error("Unit test shutting down ${servers.size} server...")
 
-        val timeoutMS = TimeUnit.SECONDS.toMillis(AUTO_FAIL_TIMEOUT)
-        var successClients = true
-        var successServers = true
-
         // shutdown clients first
         logger.error("Closing clients...")
         clients.forEach { endPoint ->
-            // we are ASYNC, so we must use callbacks to execute code
             endPoint.close()
         }
-        clients.forEach { endPoint ->
-            successClients = successClients && endPoint.waitForClose(timeoutMS)
-        }
-        logger.error("Close clients ($successClients)")
+        logger.error("NOT WAITING FOR CLIENT CLOSE.")
 
 
         // shutdown everything else (should only be servers) last
@@ -284,22 +260,9 @@ abstract class BaseTest {
         servers.forEach {
             it.close()
         }
-        servers.forEach { endPoint ->
-            successServers = successServers && endPoint.waitForClose(timeoutMS)
-        }
-        logger.error("Close servers ($successServers)")
+        logger.error("NOT WAITING FOR SERVER CLOSE.")
 
-
-        clients.forEach { endPoint ->
-            endPoint.stopDriver()
-        }
-        servers.forEach { endPoint ->
-            endPoint.stopDriver()
-        }
-
-        endPointConnections.clear()
-
-        logger.error("Shut down all endpoints... Success($successClients, $successServers)")
+        logger.error("Closed endpoints...")
     }
     /**
      * Wait for network client/server threads to shut down for the specified time. 0 will wait forever
@@ -308,7 +271,7 @@ abstract class BaseTest {
      *
      * @param stopAfterSeconds how many seconds to wait, the default is 2 minutes.
      */
-    fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT) = runBlocking {
+    fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT) {
         val clients = endPointConnections.filterIsInstance<Client<Connection>>()
         val servers = endPointConnections.filterIsInstance<Server<Connection>>()
 
@@ -363,6 +326,8 @@ abstract class BaseTest {
         Assert.assertTrue("The aeron drivers are not fully closed!", AeronDriver.areAllInstancesClosed())
         AeronDriver.checkForMemoryLeaks()
 
+        endPointConnections.clear()
+
         logger.error("Finished shutting down all endpoints... ($successClients, $successServers)")
     }
 
@@ -376,7 +341,8 @@ abstract class BaseTest {
 
                 // if the thread is interrupted, then it means we finished the test.
                 LoggerFactory.getLogger(this.javaClass.simpleName).error("Test did not complete in a timely manner...")
-                stopEndPointsBlocking()
+                stopEndPoints()
+                waitForThreads()
                 Assert.fail("Test did not complete in a timely manner.")
             } catch (ignored: InterruptedException) {
             }

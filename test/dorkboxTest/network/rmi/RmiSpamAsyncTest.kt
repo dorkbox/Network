@@ -110,8 +110,7 @@ class RmiSpamAsyncTest : BaseTest() {
         client.connect(LOCALHOST, 2000)
 
         latch.await()
-        stopEndPointsBlocking()
-
+        stopEndPoints()
         waitForThreads()
     }
 

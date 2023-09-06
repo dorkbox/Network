@@ -44,6 +44,7 @@ import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 
@@ -192,7 +193,9 @@ class RmiSimpleTest : BaseTest() {
                 // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
 
                 server.logger.error("Running test for: Server -> Client")
-                RmiCommonTest.runTests(this@onMessage, rmi.get(4), 4)
+                runBlocking {
+                    RmiCommonTest.runTests(this@onMessage, rmi.get(4), 4)
+                }
                 server.logger.error("Done with test for: Server -> Client")
             }
 
@@ -210,11 +213,13 @@ class RmiSimpleTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect {
-                rmi.save(TestCowImpl(4), 4)
+                runBlocking {
+                    rmi.save(TestCowImpl(4), 4)
 
-                client.logger.error("Running test for: Client -> Server")
-                RmiCommonTest.runTests(this, rmi.getGlobal(44), 44)
-                client.logger.error("Done with test for: Client -> Server")
+                    client.logger.error("Running test for: Client -> Server")
+                    RmiCommonTest.runTests(this@onConnect, rmi.getGlobal(44), 44)
+                    client.logger.error("Done with test for: Client -> Server")
+                }
             }
 
             client.onMessage<MessageWithTestCow> { m ->
@@ -276,9 +281,11 @@ class RmiSimpleTest : BaseTest() {
                 server.logger.error("Starting test for: Server -> Client")
                 // NOTE: THIS IS BI-DIRECTIONAL!
                 rmi.create<TestCow>(123) {
-                    server.logger.error("Running test for: Server -> Client")
-                    RmiCommonTest.runTests(this@onMessage, this, 123)
-                    server.logger.error("Done with test for: Server -> Client")
+                    runBlocking {
+                        server.logger.error("Running test for: Server -> Client")
+                        RmiCommonTest.runTests(this@onMessage, this@create, 123)
+                        server.logger.error("Done with test for: Server -> Client")
+                    }
                 }
             }
             server
@@ -296,9 +303,11 @@ class RmiSimpleTest : BaseTest() {
 
             client.onConnect {
                 rmi.create<TestCow>(23) {
-                    client.logger.error("Running test for: Client -> Server")
-                    RmiCommonTest.runTests(this@onConnect, this, 23)
-                    client.logger.error("Done with test for: Client -> Server")
+                    runBlocking {
+                        client.logger.error("Running test for: Client -> Server")
+                        RmiCommonTest.runTests(this@onConnect, this@create, 23)
+                        client.logger.error("Done with test for: Client -> Server")
+                    }
                 }
             }
 

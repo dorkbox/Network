@@ -22,8 +22,6 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
@@ -78,7 +76,7 @@ class DisconnectReconnectTest : BaseTest() {
         client.connect(LOCALHOST, 2000)
 
         latch.await()
-        stopEndPointsBlocking()
+        stopEndPoints()
         waitForThreads()
 
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
@@ -134,7 +132,7 @@ class DisconnectReconnectTest : BaseTest() {
         client.connect(LOCALHOST, 2000)
 
         latch.await()
-        stopEndPointsBlocking()
+        stopEndPoints()
         waitForThreads()
 
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
@@ -151,9 +149,7 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
         fun close(connection: Connection) {
-            runBlocking {
-                connection.close()
-            }
+            connection.close()
         }
     }
 
@@ -219,7 +215,7 @@ class DisconnectReconnectTest : BaseTest() {
         client.connect(LOCALHOST, 2000)
 
         latch.await()
-        stopEndPointsBlocking()
+        stopEndPoints()
         waitForThreads()
 
         //System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
@@ -233,11 +229,8 @@ class DisconnectReconnectTest : BaseTest() {
 
         val log = KotlinLogging.logger("DCUnitTest")
         // NOTE: once a config is assigned to a driver, the config cannot be changed
-        val aeronDriver = runBlocking {
-            val driver = AeronDriver(serverConfig(), log, null)
-            driver.start()
-            driver
-        }
+        val aeronDriver = AeronDriver(serverConfig(), log, null)
+        aeronDriver.start()
 
         val server = run {
             val serverConfiguration = serverConfig()
@@ -280,12 +273,10 @@ class DisconnectReconnectTest : BaseTest() {
         client.connect(LOCALHOST, 2000)
 
         latch.await()
-        stopEndPointsBlocking()
+        stopEndPoints()
         waitForThreads()
 
-        runBlocking {
-            aeronDriver.close()
-        }
+        aeronDriver.close()
 
         //System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(reconnects+1, reconnectCount.value)
@@ -341,7 +332,7 @@ class DisconnectReconnectTest : BaseTest() {
         client.connect(LOCALHOST, 2000)
 
         latch.await()
-        stopEndPointsBlocking()
+        stopEndPoints()
         waitForThreads()
 
         //System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
@@ -387,10 +378,8 @@ class DisconnectReconnectTest : BaseTest() {
         client.connect(LOCALHOST, 2000)
 
         server.close()
-        runBlocking {
-            client.waitForClose()
-            server.waitForClose()
-        }
+        client.waitForClose()
+        server.waitForClose()
 
         waitForThreads()
     }

@@ -21,7 +21,6 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.BaseTest
-import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import java.util.concurrent.*
 import java.util.concurrent.atomic.*
@@ -90,15 +89,13 @@ class RmiDelayedInvocationTest : BaseTest() {
                     // this will also count-down the latch
                     remoteObject.setOther(i.toFloat())
 
-                    runBlocking {
-                        try {
-                            // it should be instant!!
-                            countDownLatch.await(10, TimeUnit.SECONDS)
-                        } catch (e: InterruptedException) {
-                            logger.error("Failed after: $i")
-                            e.printStackTrace()
-                            abort = true
-                        }
+                    try {
+                        // it should be instant!!
+                        countDownLatch.await(10, TimeUnit.SECONDS)
+                    } catch (e: InterruptedException) {
+                        logger.error("Failed after: $i")
+                        e.printStackTrace()
+                        abort = true
                     }
                 }
                 logger.error("Done with delay invocation test")

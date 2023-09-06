@@ -19,13 +19,14 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.atomic.*
 
 
 
-class RmiNestedTest : BaseTest() {
+class RmiNestedSuspendTest : BaseTest() {
     companion object {
         private val idCounter = AtomicInteger()
     }
@@ -90,29 +91,30 @@ class RmiNestedTest : BaseTest() {
 
                 rmi.create<TestObject> {
                     logger.error("Starting test")
-                    setValue(43.21f)
+                    runBlocking {
+                        setValue(43.21f)
 
-                    // Normal remote method call.
-                    Assert.assertEquals(43.21f, other(), .0001f)
+                        // Normal remote method call.
+                        Assert.assertEquals(43.21f, other(), .0001f)
 
-                    // Make a remote method call that returns another remote proxy object.
-                    // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
-                    //  here we have a proxy to both of them.
-                    val otherObject: OtherObject = getOtherObject()
+                        // Make a remote method call that returns another remote proxy object.
+                        // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
+                        //  here we have a proxy to both of them.
+                        val otherObject: OtherObject = getOtherObject()
 
-                    // Normal remote method call on the second object.
-                    otherObject.setValue(12.34f)
-                    val value = otherObject.value()
-                    Assert.assertEquals(12.34f, value, .0001f)
-
-
-                    // make sure the "local" object and the "remote" object have the same values
-                    Assert.assertEquals(12.34f, getOtherValue(), .0001f)
+                        // Normal remote method call on the second object.
+                        otherObject.setValue(12.34f)
+                        val value = otherObject.value()
+                        Assert.assertEquals(12.34f, value, .0001f)
 
 
-                    // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
-                    // that is where that object actually exists.
-                    send(otherObject)
+                        // make sure the "local" object and the "remote" object have the same values
+                        Assert.assertEquals(12.34f, getOtherValue(), .0001f)
+
+                        // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
+                        // that is where that object actually exists.
+                        send(otherObject)
+                    }
                 }
             }
 
@@ -159,29 +161,30 @@ class RmiNestedTest : BaseTest() {
                 logger.error("Connected")
                 rmi.create<TestObject> {
                     logger.error("Starting test")
-                    setValue(43.21f)
+                    runBlocking {
+                        setValue(43.21f)
 
-                    // Normal remote method call.
-                    Assert.assertEquals(43.21f, other(), .0001f)
+                        // Normal remote method call.
+                        Assert.assertEquals(43.21f, other(), .0001f)
 
-                    // Make a remote method call that returns another remote proxy object.
-                    // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
-                    //  here we have a proxy to both of them.
-                    val otherObject: OtherObject = getOtherObject()
+                        // Make a remote method call that returns another remote proxy object.
+                        // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
+                        //  here we have a proxy to both of them.
+                        val otherObject: OtherObject = getOtherObject()
 
-                    // Normal remote method call on the second object.
-                    otherObject.setValue(12.34f)
-                    val value = otherObject.value()
-                    Assert.assertEquals(12.34f, value, .0001f)
-
-
-                    // make sure the "local" object and the "remote" object have the same values
-                    Assert.assertEquals(12.34f, getOtherValue(), .0001f)
+                        // Normal remote method call on the second object.
+                        otherObject.setValue(12.34f)
+                        val value = otherObject.value()
+                        Assert.assertEquals(12.34f, value, .0001f)
 
 
-                    // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
-                    // that is where that object actually exists.
-                    send(otherObject)
+                        // make sure the "local" object and the "remote" object have the same values
+                        Assert.assertEquals(12.34f, getOtherValue(), .0001f)
+
+                        // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
+                        // that is where that object actually exists.
+                        send(otherObject)
+                    }
                 }
             }
 
@@ -228,10 +231,12 @@ class RmiNestedTest : BaseTest() {
 
                 rmi.create<TestObject> {
                     logger.error("Starting test")
-                    setOtherValue(43.21f)
+                    runBlocking {
+                        setOtherValue(43.21f)
 
-                    // Normal remote method call.
-                    Assert.assertEquals(43.21f, getOtherValue(), .0001f)
+                        // Normal remote method call.
+                        Assert.assertEquals(43.21f, getOtherValue(), .0001f)
+                    }
 
                     // real object
                     val otherObject: OtherObject = getOtherObject()
@@ -271,10 +276,12 @@ class RmiNestedTest : BaseTest() {
 
                 rmi.create<TestObject> {
                     logger.error("Starting test")
-                    setOtherValue(43.21f)
+                    runBlocking {
+                        setOtherValue(43.21f)
 
-                    // Normal remote method call.
-                    Assert.assertEquals(43.21f, getOtherValue(), .0001f)
+                        // Normal remote method call.
+                        Assert.assertEquals(43.21f, getOtherValue(), .0001f)
+                    }
 
                     // real object
                     val otherObject: OtherObject = getOtherObject()
@@ -325,9 +332,9 @@ class RmiNestedTest : BaseTest() {
 
 
     private interface TestObject {
-        fun setValue(aFloat: Float)
-        fun setOtherValue(aFloat: Float)
-        fun getOtherValue(): Float
+        suspend fun setValue(aFloat: Float)
+        suspend fun setOtherValue(aFloat: Float)
+        suspend fun getOtherValue(): Float
         fun other(): Float
         fun getOtherObject(): OtherObject
     }
@@ -344,20 +351,20 @@ class RmiNestedTest : BaseTest() {
         private val otherObject: OtherObject = OtherObjectImpl()
 
         private var aFloat = 0f
-        override fun setValue(aFloat: Float) {
+        override suspend fun setValue(aFloat: Float) {
             throw RuntimeException("Whoops!")
         }
 
-        fun setValue(connection: Connection, aFloat: Float) {
+        suspend fun setValue(connection: Connection, aFloat: Float) {
             connection.logger.error("receiving")
             this.aFloat = aFloat
         }
 
-        override fun setOtherValue(aFloat: Float) {
+        override suspend fun setOtherValue(aFloat: Float) {
             otherObject.setValue(aFloat)
         }
 
-        override fun getOtherValue(): Float {
+        override suspend fun getOtherValue(): Float {
             return otherObject.value()
         }
 
@@ -386,20 +393,20 @@ class RmiNestedTest : BaseTest() {
         private val otherObject: OtherObject = OtherObjectImpl()
 
         private var aFloat = 0f
-        override fun setValue(aFloat: Float) {
-            throw RuntimeException("Whoops!") // the connection param version should be called.
+        override suspend fun setValue(aFloat: Float) {
+            throw RuntimeException("Whoops!")
         }
 
-        fun setValue(connection: Connection, aFloat: Float) {
+        suspend fun setValue(connection: Connection, aFloat: Float) {
             connection.logger.error("receiving")
             this.aFloat = aFloat
         }
 
-        override fun setOtherValue(aFloat: Float) {
+        override suspend fun setOtherValue(aFloat: Float) {
             otherObject.setValue(aFloat)
         }
 
-        override fun getOtherValue(): Float {
+        override suspend fun getOtherValue(): Float {
             return otherObject.value()
         }
 

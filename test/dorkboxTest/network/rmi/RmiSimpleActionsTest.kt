@@ -25,6 +25,7 @@ import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 
@@ -63,7 +64,8 @@ class RmiSimpleActionsTest : BaseTest() {
         Assert.assertFalse(server.rmiGlobal.delete(testCowImpl))
         Assert.assertFalse(server.rmiGlobal.delete(newId2))
 
-        stopEndPointsBlocking()
+        stopEndPoints()
+        waitForThreads()
     }
 
     @Test
@@ -128,7 +130,9 @@ class RmiSimpleActionsTest : BaseTest() {
             client.onConnect {
                 rmi.create<TestCow>(23) {
                     client.logger.error("Running test for: Client -> Server")
-                    RmiCommonTest.runTests(this@onConnect, this, 23)
+                    runBlocking {
+                        RmiCommonTest.runTests(this@onConnect, this@create, 23)
+                    }
                     client.logger.error("Done with test for: Client -> Server")
                 }
             }

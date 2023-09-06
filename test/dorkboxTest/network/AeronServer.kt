@@ -25,7 +25,6 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.Connection
 import dorkbox.storage.Storage
-import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
@@ -102,10 +101,8 @@ object AeronServer {
         val server: Server<*> = Server<Connection>(configuration)
 
         // we must always make sure that aeron is shut-down before starting again.
-        runBlocking {
-            if (!server.ensureStopped()) {
-                throw IllegalStateException("Aeron was unable to shut down in a timely manner.")
-            }
+        if (!server.ensureStopped()) {
+            throw IllegalStateException("Aeron was unable to shut down in a timely manner.")
         }
 
         server.filter {
@@ -142,8 +139,6 @@ object AeronServer {
 
         server.bind(2000)
 
-        runBlocking {
-            server.waitForClose()
-        }
+        server.waitForClose()
     }
 }

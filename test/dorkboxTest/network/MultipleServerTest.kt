@@ -41,7 +41,6 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.exceptions.ServerException
 import dorkbox.util.exceptions.SecurityException
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -146,11 +145,9 @@ class MultipleServerTest : BaseTest() {
                 servers.add(Server(configuration, "server_$count"))
             }
         } catch (e: Exception) {
-            runBlocking {
-                servers.forEach {
-                    it.close()
-                    it.waitForClose()
-                }
+            servers.forEach {
+                it.close()
+                it.waitForClose()
             }
             throw e
         }

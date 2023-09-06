@@ -92,27 +92,24 @@ class MultiClientTest : BaseTest() {
         server.bind(2000, 2001)
 
         // start up the drivers first
-        runBlocking {
-            clients.forEach {
-                it.startDriver()
-            }
+        clients.forEach {
+            it.startDriver()
         }
 
         // if we are on the same JVM, the defaultScope for coroutines is SHARED, and limited!
         val differentThreadLaunchers = Executors.newFixedThreadPool(8,
             NamedThreadFactory("Unit Test Client", Configuration.networkThreadGroup, true)
-        ).asCoroutineDispatcher()
+        )
 
-        runBlocking {
-            clients.forEachIndexed { count, client ->
-                launch(differentThreadLaunchers) {
-                    client.connect(LOCALHOST, 2000, 2001, 30)
-                }
+        clients.forEachIndexed { count, client ->
+            differentThreadLaunchers.submit {
+                client.connect(LOCALHOST, 2000, 2001, 30)
             }
         }
 
         shutdownLatch.await()
-        stopEndPointsBlocking()
+        stopEndPoints()
+        waitForThreads()
 
         Assert.assertEquals(totalCount, clientConnectCount.value)
         Assert.assertEquals(totalCount, serverConnectCount.value)

@@ -19,11 +19,10 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 
 object RmiCommonTest {
-    fun runTests(connection: Connection, test: TestCow, remoteObjectID: Int) {
+    suspend fun runTests(connection: Connection, test: TestCow, remoteObjectID: Int) {
         val remoteObject = RemoteObject.cast<TestCow>(test)
 
         // Default behavior. RMI is transparent, method calls behave like normal
@@ -31,11 +30,9 @@ object RmiCommonTest {
         connection.logger.error("hashCode: " + test.hashCode())
         connection.logger.error("toString: $test")
 
-        runBlocking {
-            test.withSuspend("test", 32)
-            val s1 = test.withSuspendAndReturn("test", 32)
-            Assert.assertEquals(s1, 32)
-        }
+        test.withSuspend("test", 32)
+        val s1 = test.withSuspendAndReturn("test", 32)
+        Assert.assertEquals(s1, 32)
 
 
         // see what the "remote" toString() method is
@@ -49,9 +46,7 @@ object RmiCommonTest {
 
         // Test that RMI correctly waits for the remotely invoked method to exit
         remoteObject.responseTimeout = 5000
-        runBlocking {
-            test.moo("You should see this two seconds before...", 2000)
-        }
+        test.moo("You should see this two seconds before...", 2000)
         connection.logger.error("...This")
         remoteObject.responseTimeout = 3000
 
@@ -64,9 +59,7 @@ object RmiCommonTest {
         }
 
         try {
-            runBlocking {
-                test.throwSuspendException()
-            }
+            test.throwSuspendException()
             Assert.fail("sync should be throwing an exception!")
         } catch (e: UnsupportedOperationException) {
             connection.logger.error("\tExpected exception (exception log should also be on the object impl side).", e)
@@ -77,10 +70,8 @@ object RmiCommonTest {
             moo("Bzzzzzz")
         }
 
-        remoteObject.sync {
-            runBlocking {
-                moo("Bzzzzzz----MOOO", 22)
-            }
+        remoteObject.syncSuspend {
+            moo("Bzzzzzz----MOOO", 22)
         }
 
 
@@ -91,13 +82,12 @@ object RmiCommonTest {
 
 
 
-        remoteObject.async {
-            runBlocking {
-                // calls that ignore the return value
-                moo("Bark", 4)
-                // Non-blocking call that ignores the return value
-                Assert.assertEquals(0, test.id().toLong())
-            }
+        remoteObject.asyncSuspend {
+            // calls that ignore the return value
+            moo("Bark. should wait 4 seconds", 4000) // this should not timeout (because it's async!)
+
+            // Non-blocking call that ignores the return value
+            Assert.assertEquals(0, test.id().toLong())
         }
 
 
@@ -121,9 +111,7 @@ object RmiCommonTest {
         }
 
         try {
-            runBlocking {
-                test.throwSuspendException()
-            }
+            test.throwSuspendException()
         } catch (e: IllegalStateException) {
             // exceptions are not caught when async = true!
             Assert.fail("Async should not be throwing an exception!")
@@ -133,20 +121,17 @@ object RmiCommonTest {
 
 
         // Call will time out if non-blocking isn't working properly
-        runBlocking {
-            test.moo("Mooooooooo", 4000)
-        }
+        test.moo("Mooooooooo", 4000)
 
 
         // should wait for a small amount of time
         remoteObject.async = false
         remoteObject.responseTimeout = 6000
         connection.logger.error("You should see this 2 seconds before")
-        runBlocking {
-            val slow = test.slow()
-            connection.logger.error("...This")
-            Assert.assertEquals(slow.toDouble(), 123.0, 0.0001)
-        }
+
+        val slow = test.slow()
+        connection.logger.error("...This")
+        Assert.assertEquals(slow.toDouble(), 123.0, 0.0001)
 
 
         // Test sending a reference to a remote object.

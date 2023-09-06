@@ -45,7 +45,6 @@ import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.*
@@ -91,7 +90,7 @@ class RmiDuplicateObjectTest : BaseTest() {
 
     fun rmi(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
         val objs = mutableSetOf<Int>()
-        val latch = dorkbox.util.sync.CountDownLatch(2)
+        val latch = CountDownLatch(2)
 
         val server = run {
             val configuration = serverConfig()
@@ -159,11 +158,8 @@ class RmiDuplicateObjectTest : BaseTest() {
         doConnect(isIpv4, isIpv6, runIpv4Connect, client1)
         doConnect(isIpv4, isIpv6, runIpv4Connect, client2)
 
-        runBlocking {
-            latch.await()
-            stopEndPoints()
-        }
-
+        latch.await()
+        stopEndPoints()
         waitForThreads()
 
         val actual = synchronized(objs) {

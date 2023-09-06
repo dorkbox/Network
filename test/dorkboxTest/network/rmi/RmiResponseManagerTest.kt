@@ -64,7 +64,7 @@ class RmiResponseManagerTest: BaseTest() {
                 val actor = actor<Deferred<Int>>(Dispatchers.Default, 0) {
                     for (e in this) {
                         val await = e.await()
-                        val waiterCallback = responseManager.getWaiterCallback<() -> Unit>(await, logger)
+                        val waiterCallback = responseManager.removeWaiterCallback<() -> Unit>(await, logger)
                         Assert.assertTrue(waiterCallback != null)
 
                         waiterCallback!!.invoke()
