@@ -4,7 +4,6 @@ module dorkbox.network {
     exports dorkbox.network.connection;
     exports dorkbox.network.connection.streaming;
     exports dorkbox.network.connectionType;
-    exports dorkbox.network.coroutines;
     exports dorkbox.network.exceptions;
     exports dorkbox.network.handshake;
     exports dorkbox.network.ipFilter;
