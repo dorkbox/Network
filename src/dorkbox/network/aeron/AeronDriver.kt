@@ -937,9 +937,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
 
                 val exception = endPoint!!.newException(
-                    "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${
-                        AeronDriver.errorCodeName(result)
-                    })"
+                    "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${errorCodeName(result)})"
                 )
                 listenerManager.notifyError(exception)
                 return false

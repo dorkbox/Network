@@ -31,7 +31,6 @@ import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.exceptions.StreamingException
 import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
-import dorkbox.network.serialization.KryoReader
 import dorkbox.network.serialization.KryoWriter
 import dorkbox.os.OS
 import dorkbox.util.Sys
@@ -126,7 +125,6 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
     */
     fun processControlMessage(
         message: StreamingControl,
-        kryo: KryoReader<CONNECTION>,
         endPoint: EndPoint<CONNECTION>,
         connection: CONNECTION
     ) {
@@ -203,6 +201,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 }
 
                 val streamedMessage = if (input != null) {
+                        val kryo = endPoint.serialization.takeRead()
                         try {
                             kryo.read(input)
                         } catch (e: Exception) {
@@ -213,6 +212,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                             // either client or server. No other choices. We create an exception, because it's more useful!
                             throw endPoint.newException(errorMessage, e)
                         } finally {
+                            endPoint.serialization.putRead(kryo)
                             if (output is FileWriter) {
                                 val fileName = "${config.appId}_${streamId}_${connection.id}.tmp"
                                 val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
