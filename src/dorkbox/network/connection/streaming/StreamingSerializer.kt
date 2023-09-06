@@ -31,7 +31,7 @@ class StreamingControlSerializer: Serializer<StreamingControl>() {
     override fun read(kryo: Kryo, input: Input, type: Class<out StreamingControl>): StreamingControl {
         val stateOrdinal = input.readByte().toInt()
         val isFile = input.readBoolean()
-        val state = StreamingState.values().first { it.ordinal == stateOrdinal }
+        val state = StreamingState.entries.first { it.ordinal == stateOrdinal }
         val streamId = input.readVarInt(true)
         val totalSize = input.readVarLong(true)
 
@@ -49,8 +49,10 @@ class StreamingDataSerializer: Serializer<StreamingData>() {
         val streamId = input.readVarInt(true)
         val streamingData = StreamingData(streamId)
 
-        // we want to read out the payload. It is not written by the serializer, but by the streaming manager
+        // we want to read out the start-position AND payload. It is not written by the serializer, but by the streaming manager
+        val startPosition = input.readVarInt(true)
         val payloadSize = input.readVarInt(true)
+        streamingData.startPosition = startPosition
         streamingData.payload = input.readBytes(payloadSize)
         return streamingData
     }

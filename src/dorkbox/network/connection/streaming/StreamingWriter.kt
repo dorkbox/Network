@@ -17,5 +17,6 @@
 package dorkbox.network.connection.streaming
 
 interface StreamingWriter {
-    fun writeBytes(bytes: ByteArray)
+    fun writeBytes(startPosition: Int, bytes: ByteArray)
+    fun isFinished(): Boolean
 }

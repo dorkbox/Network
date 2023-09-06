@@ -16,11 +16,47 @@
 
 package dorkbox.network.connection.streaming
 
+import kotlinx.atomicfu.atomic
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 
-class FileWriter(val file: File) : StreamingWriter, FileOutputStream(file) {
-    override fun writeBytes(bytes: ByteArray) {
+class FileWriter(val size: Int, val file: File) : StreamingWriter, RandomAccessFile(file, "rw") {
+
+    private val written = atomic(0)
+
+    init {
+        // reserve space on disk!
+        val saveSize = size.coerceAtMost(4096)
+        var bytes = ByteArray(saveSize)
+        this.write(bytes)
+
+        if (saveSize < size) {
+            var remainingBytes = size - saveSize
+
+            while (remainingBytes > 0) {
+                if (saveSize > remainingBytes) {
+                    bytes = ByteArray(remainingBytes)
+                }
+                this.write(bytes)
+                remainingBytes = (remainingBytes - saveSize).coerceAtLeast(0)
+            }
+        }
+    }
+
+    override fun writeBytes(startPosition: Int, bytes: ByteArray) {
+        // the OS will synchronize writes to disk
+        this.seek(startPosition.toLong())
         write(bytes)
+        written.addAndGet(bytes.size)
+    }
+
+    override fun isFinished(): Boolean {
+        return written.value == size
+    }
+
+    fun finishAndClose() {
+        fd.sync()
+        close()
     }
 }

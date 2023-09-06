@@ -17,5 +17,18 @@
 package dorkbox.network.connection.streaming
 
 import dorkbox.network.serialization.AeronOutput
+import kotlinx.atomicfu.atomic
 
-class AeronWriter(size: Int): StreamingWriter, AeronOutput(size)
+class AeronWriter(val size: Int): StreamingWriter, AeronOutput(size) {
+    private val written = atomic(0)
+
+    override fun writeBytes(startPosition: Int, bytes: ByteArray) {
+        position = startPosition
+        writeBytes(bytes)
+        written.getAndAdd(bytes.size)
+    }
+
+    override fun isFinished(): Boolean {
+        return written.value == size
+    }
+}

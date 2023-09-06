@@ -21,6 +21,7 @@ import dorkbox.bytes.xxHash32
 class StreamingData(val streamId: Int) : StreamingMessage {
 
     var payload: ByteArray? = null
+    var startPosition: Int = 0
     
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -34,16 +35,19 @@ class StreamingData(val streamId: Int) : StreamingMessage {
             if (!payload.contentEquals(other.payload)) return false
         } else if (other.payload != null) return false
 
+        if (startPosition != other.startPosition) return false
+
         return true
     }
 
     override fun hashCode(): Int {
         var result = streamId.hashCode()
         result = 31 * result + (payload?.contentHashCode() ?: 0)
+        result = 31 * result + (startPosition)
         return result
     }
 
     override fun toString(): String {
-        return "StreamingData(streamId=$streamId xxHash=${payload?.xxHash32()})"
+        return "StreamingData(streamId=$streamId position=${startPosition}, xxHash=${payload?.xxHash32()})"
     }
 }
