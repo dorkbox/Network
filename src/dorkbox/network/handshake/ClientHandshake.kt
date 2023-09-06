@@ -26,7 +26,6 @@ import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
-import kotlinx.coroutines.delay
 import mu.KLogger
 import org.agrona.DirectBuffer
 
