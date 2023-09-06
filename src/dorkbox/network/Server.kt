@@ -190,7 +190,7 @@ open class Server<CONNECTION : Connection>(
         if (config.enableIPv4) { logger.warn { "IPv4 is enabled, but only IPC will be used." }}
         if (config.enableIPv6) { logger.warn { "IPv6 is enabled, but only IPC will be used." }}
 
-        bind(0,0)
+        bind(0, 0, true)
     }
 
     /**
@@ -210,7 +210,11 @@ open class Server<CONNECTION : Connection>(
             require(port2 < 65535) { "port2 must be < 65535" }
         }
 
+        bind(port1, port2, false)
+    }
 
+    @Suppress("DuplicatedCode")
+    private fun bind(port1: Int, port2: Int, onlyBindIpc: Boolean) {
         // the lifecycle of a server is the ENDPOINT (measured via the network event poller)
         if (endpointIsRunning.value) {
             listenerManager.notifyError(ServerException("Unable to start, the server is already running!"))
@@ -235,9 +239,6 @@ open class Server<CONNECTION : Connection>(
         this@Server.port1 = port1
         this@Server.port2 = port2
 
-        bind0()
-    }
-    private fun bind0() {
         config as ServerConfiguration
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
@@ -245,21 +246,27 @@ open class Server<CONNECTION : Connection>(
         val server = this@Server
         handshake = ServerHandshake(config, listenerManager, aeronDriver)
 
-        val ipcPoller: AeronPoller = if (config.enableIpc) {
+        val ipcPoller: AeronPoller = if (config.enableIpc || onlyBindIpc) {
             ServerHandshakePollers.ipc(server, handshake)
         } else {
             ServerHandshakePollers.disabled("IPC Disabled")
         }
 
-        val ipPoller = when (ipInfo.ipType) {
-            // IPv6 will bind to IPv4 wildcard as well, so don't bind both!
-            IpListenType.IPWildcard   -> ServerHandshakePollers.ip6Wildcard(server, handshake)
-            IpListenType.IPv4Wildcard -> ServerHandshakePollers.ip4(server, handshake)
-            IpListenType.IPv6Wildcard -> ServerHandshakePollers.ip6(server, handshake)
-            IpListenType.IPv4 -> ServerHandshakePollers.ip4(server, handshake)
-            IpListenType.IPv6 -> ServerHandshakePollers.ip6(server, handshake)
-            IpListenType.IPC  -> ServerHandshakePollers.disabled("IPv4/6 Disabled")
+
+        val ipPoller = if (onlyBindIpc) {
+            ServerHandshakePollers.disabled("IPv4/6 Disabled")
+        } else {
+            when (ipInfo.ipType) {
+                // IPv6 will bind to IPv4 wildcard as well, so don't bind both!
+                IpListenType.IPWildcard   -> ServerHandshakePollers.ip6Wildcard(server, handshake)
+                IpListenType.IPv4Wildcard -> ServerHandshakePollers.ip4(server, handshake)
+                IpListenType.IPv6Wildcard -> ServerHandshakePollers.ip6(server, handshake)
+                IpListenType.IPv4 -> ServerHandshakePollers.ip4(server, handshake)
+                IpListenType.IPv6 -> ServerHandshakePollers.ip6(server, handshake)
+                IpListenType.IPC  -> ServerHandshakePollers.disabled("IPv4/6 Disabled")
+            }
         }
+
 
         logger.info { ipcPoller.info }
         logger.info { ipPoller.info }
@@ -450,9 +457,6 @@ open class Server<CONNECTION : Connection>(
        return string0
     }
 
-    /**
-     * Enable
-     */
     fun <R> use(block: (Server<CONNECTION>) -> R): R {
         return try {
             block(this)

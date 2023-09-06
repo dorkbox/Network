@@ -519,8 +519,8 @@ open class Client<CONNECTION : Connection>(
             startDriver()
             initializeState()
         } catch (e: Exception) {
-            resetOnError()
             listenerManager.notifyError(ClientException("Unable to start the client!", e))
+            resetOnError()
             return
         }
 

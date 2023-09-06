@@ -18,10 +18,8 @@ package dorkbox.network.connection
 import dorkbox.classUtil.ClassHelper
 import dorkbox.classUtil.ClassHierarchy
 import dorkbox.collections.IdentityMap
-import dorkbox.network.Configuration
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.os.OS
-import dorkbox.util.NamedThreadFactory
 import mu.KLogger
 import net.jodah.typetools.TypeResolver
 import java.util.concurrent.*
@@ -37,11 +35,6 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
          */
         val LOAD_FACTOR = OS.getFloat(ListenerManager::class.qualifiedName + "LOAD_FACTOR", 0.8f)
-
-        internal val executor = Executors.newSingleThreadExecutor(
-            NamedThreadFactory("Error Dispatcher", Configuration.networkThreadGroup, Thread.NORM_PRIORITY, true)
-        )
-
 
         /**
          * Remove from the stacktrace kotlin coroutine info + dorkbox network call stack. This is NOT used by RMI
@@ -328,7 +321,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 val func = function as (CONNECTION, Any) -> Unit
 
                 val newMessageArray: Array<(CONNECTION, Any) -> Unit>
-                val onMessageArray: Array<(CONNECTION, Any) -> Unit>? = tempMap.get(messageClass)
+                val onMessageArray: Array<(CONNECTION, Any) -> Unit>? = tempMap[messageClass]
 
                 if (onMessageArray != null) {
                     newMessageArray = add(function, onMessageArray)
@@ -466,7 +459,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     fun notifyError(connection: CONNECTION, exception: Throwable) {
         val list = onErrorList
         if (list.isNotEmpty()) {
-            executor.submit {
+            EventDispatcher.ERROR.launch {
                 list.forEach {
                     try {
                         it(connection, exception)
@@ -490,7 +483,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     fun notifyError(exception: Throwable) {
         val list = onErrorGlobalList
         if (list.isNotEmpty()) {
-            executor.submit {
+            EventDispatcher.ERROR.launch {
                 list.forEach {
                     try {
                         it(exception)
