@@ -349,12 +349,11 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         val messageProcessThreads = (OS.optimumNumberOfThreads - aeronThreads).coerceAtLeast(1).coerceAtMost(4)
 
         // create a new one when the endpoint starts up, because we close it when the endpoint shuts down or when the client retries
-        val messageCoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        val messageCoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         this.messageCoroutineScope = messageCoroutineScope
 
         repeat(messageProcessThreads) {
             messageCoroutineScope.launch {
-                logger.error { "Starting executor for message processing" }
                 // this is only true while the endpoint is running.
                 while (endpointIsRunning.value) {
                     val paired = messageChannel.receive()
