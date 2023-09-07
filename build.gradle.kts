@@ -176,7 +176,7 @@ dependencies {
     api("com.dorkbox:NetworkUtils:2.23")
     api("com.dorkbox:OS:1.8")
     api("com.dorkbox:Serializers:2.9")
-    api("com.dorkbox:Storage:1.8")
+    api("com.dorkbox:Storage:1.10")
     api("com.dorkbox:Updates:1.1")
     api("com.dorkbox:Utilities:1.46")
 
