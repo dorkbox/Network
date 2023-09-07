@@ -43,12 +43,6 @@
        Copyright 2023
          JetBrains s.r.o.
 
-     - Conversant Disruptor - Disruptor is the highest performing intra-thread transfer mechanism available in Java.
-       [The Apache Software License, Version 2.0]
-       https://github.com/conversant/disruptor
-       Copyright 2023
-         Conversant, Inc
-
      - Javassist - Javassist (JAVA programming ASSISTant) makes Java bytecode manipulation simple
        [The Apache Software License, Version 2.0]
        https://www.javassist.org

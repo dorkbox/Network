@@ -172,7 +172,7 @@ dependencies {
     api("com.dorkbox:HexUtilities:1.1")
     api("com.dorkbox:JNA:1.2")
     api("com.dorkbox:MinLog:2.5")
-    api("com.dorkbox:NetworkDNS:2.14")
+    api("com.dorkbox:NetworkDNS:2.15")
     api("com.dorkbox:NetworkUtils:2.23")
     api("com.dorkbox:OS:1.8")
     api("com.dorkbox:Serializers:2.9")
@@ -180,9 +180,6 @@ dependencies {
     api("com.dorkbox:Updates:1.1")
     api("com.dorkbox:Utilities:1.46")
 
-    // necessary for thread dispatch without polluting the heap
-    // https://github.com/conversant/disruptor
-    api("com.conversantmedia:disruptor:1.2.21")
 
     // how we bypass using reflection/jpms to access fields for java17+
     api("org.javassist:javassist:3.29.2-GA")
