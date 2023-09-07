@@ -191,7 +191,7 @@ dependencies {
 
 
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.42.0"
+    val aeronVer = "1.42.1"
     api("io.aeron:aeron-driver:$aeronVer")
     // ALL of aeron, in case we need to debug aeron behavior
 //    api("io.aeron:aeron-all:$aeronVer")
