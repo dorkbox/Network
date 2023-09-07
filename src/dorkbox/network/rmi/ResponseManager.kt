@@ -176,7 +176,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
     /**
      * We only wait for a reply if we are SYNC.
      *
-     * ASYNC does not send a response
+     * ASYNC does not send a response and does not call this method
      *
      * @return the result (can be null) or timeout exception
      */
