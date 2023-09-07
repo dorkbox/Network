@@ -73,7 +73,7 @@ internal class EventPoller {
 
 
     @Volatile
-    private var threadId = Thread.currentThread().id
+    private var threadId = 0L
 
 
     fun isDispatch(): Boolean {
