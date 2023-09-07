@@ -180,7 +180,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      *
      * @return the result (can be null) or timeout exception
      */
-    fun waitForReply(
+    fun getReply(
         responseWaiter: ResponseWaiter,
         timeoutMillis: Long,
         logger: KLogger,
@@ -188,33 +188,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
     ): Any? {
         val id = RmiUtils.unpackUnsignedRight(responseWaiter.id)
 
-        logger.trace { "[RM] wait: $id" }
-
-        // NOTE: we ALWAYS send a response from the remote end (except when async).
-        //
-        // 'async' -> DO NOT WAIT (no response)
-        // 'timeout > 0' -> WAIT w/ TIMEOUT
-        // 'timeout == 0' -> WAIT FOREVER
-        if (timeoutMillis > 0) {
-            // wait for the response.
-            //
-            // If the response is ALREADY here, the doWait() returns instantly (with result)
-            // if no response yet, it will wait for:
-            //   A) get response
-            //   B) timeout
-            responseWaiter.doWait(timeoutMillis)
-
-            // if we timeout, it doesn't matter since we'll be removing the waiter from the array anyways,
-            // so no signal can occur, or a signal won't matter
-        } else {
-            // wait for the response --- THIS WAITS FOREVER (there is no timeout)!
-            //
-            // If the response is ALREADY here, the doWait() returns instantly (with result)
-            // if no response yet, it will wait for one
-            //   A) get response
-            responseWaiter.doWait()
-        }
-
+        logger.trace { "[RM] get: $id" }
 
         // deletes the entry in the map
         val resultOrWaiter = pendingLock.write {

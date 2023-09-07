@@ -20,6 +20,9 @@ import java.util.concurrent.*
 import java.util.concurrent.locks.ReentrantLock
 
 data class ResponseWaiter(val id: Int) {
+//    @Volatile
+//    private var latch = dorkbox.util.sync.CountDownLatch(1)
+
     private val lock = ReentrantLock()
     private val condition = lock.newCondition()
 
@@ -32,12 +35,14 @@ data class ResponseWaiter(val id: Int) {
      */
     fun prep() {
         result = null
+//        latch = dorkbox.util.sync.CountDownLatch(1)
     }
 
     /**
      * Waits until another thread invokes "doWait"
      */
     fun doNotify() {
+//        latch.countDown()
         try {
             lock.withLock {
                 condition.signal()
@@ -50,6 +55,7 @@ data class ResponseWaiter(val id: Int) {
      * Waits a specific amount of time until another thread invokes "doNotify"
      */
     fun doWait() {
+//        latch.await()
         try {
             lock.withLock {
                 condition.await()
@@ -62,6 +68,7 @@ data class ResponseWaiter(val id: Int) {
      * Waits a specific amount of time until another thread invokes "doNotify"
      */
     fun doWait(timeout: Long) {
+//        latch.await(timeout, TimeUnit.MILLISECONDS)
         try {
             lock.withLock {
                 condition.await(timeout, TimeUnit.MILLISECONDS)
