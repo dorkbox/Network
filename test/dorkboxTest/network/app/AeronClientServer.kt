@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkboxTest.network
+package dorkboxTest.network.app
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -21,10 +21,6 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
-import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.Serializer
-import com.esotericsoftware.kryo.io.Input
-import com.esotericsoftware.kryo.io.Output
 import dorkbox.netUtil.IPv4
 import dorkbox.network.Client
 import dorkbox.network.ClientConfiguration
@@ -33,18 +29,15 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.Connection
 import dorkbox.network.ipFilter.IpSubnetFilterRule
 import dorkbox.storage.Storage
-import dorkbox.util.Sys
-import dorkboxTest.network.app.Stopwatch
-import kotlinx.atomicfu.atomic
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
-import java.util.concurrent.TimeUnit
 
 /**
- * THIS WILL RUN FOREVER. It is primarily used for profiling.
+ *
  */
-class AeronClientServerForever {
+@Suppress("UNUSED_ANONYMOUS_PARAMETER")
+class AeronClientServer {
     companion object {
         init {
             try {
@@ -72,8 +65,8 @@ class AeronClientServerForever {
 //        rootLogger.setLevel(Level.OFF);
 
             // rootLogger.setLevel(Level.INFO);
-        rootLogger.level = Level.DEBUG
-//            rootLogger.level = Level.TRACE
+//        rootLogger.level = Level.DEBUG
+            rootLogger.level = Level.TRACE
 //        rootLogger.setLevel(Level.ALL);
 
 
@@ -109,19 +102,22 @@ class AeronClientServerForever {
         @Throws(Exception::class)
         @JvmStatic
         fun main(args: Array<String>) {
-            val acs = AeronClientServerForever()
-            val server = acs.server()
-            val client = acs.client("localhost")
+            val acs = AeronClientServer()
 
-            server.waitForClose()
+            if (args.contains("client")) {
+                acs.client("172.31.79.129")
+            } else if (args.contains("server")) {
+                val server = acs.server()
+                server.waitForClose()
+            } else {
+                acs.server()
+                acs.client("localhost")
+            }
         }
     }
 
 
     fun client(remoteAddress: String) {
-        val count = atomic(0L)
-        val time = Stopwatch.createUnstarted()
-
         val configuration = ClientConfiguration()
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.appId = "aeron_test"
@@ -140,8 +136,7 @@ class AeronClientServerForever {
 
         client.onConnect {
             logger.error("connected")
-            time.start()
-            send(NoGarbageObj())
+            send("HI THERE!")
         }
 
         client.onDisconnect {
@@ -153,19 +148,8 @@ class AeronClientServerForever {
             throwable.printStackTrace()
         }
 
-        client.onMessage<NoGarbageObj> { message ->
-            val andIncrement = count.getAndIncrement()
-            if ((andIncrement % 100000) == 0L) {
-                logger.error { "Sending messages: $andIncrement" }
-            }
-            if (andIncrement > 0 && (andIncrement % 500000) == 0L) {
-                // we are measuring roundtrip performance
-                logger.error { "For 1,000,000 messages: ${Sys.getTimePrettyFull(time.elapsedNanos())}" }
-                time.reset()
-                time.start()
-            }
-
-            send(message)
+        client.onMessage<String> { message ->
+            logger.error("HAS MESSAGE! $message")
         }
 
         client.connect(remoteAddress, 2000) // UDP connection via loopback
@@ -194,8 +178,8 @@ class AeronClientServerForever {
         //                  and can specify, if we want, the object created.
         //                 Once created though, as NEW ONE with the same ID cannot be created until the old one is removed!
 
-//        Thread.sleep(2000L)
-//        client.close()
+        Thread.sleep(2000L)
+        client.close()
     }
 
 
@@ -211,7 +195,6 @@ class AeronClientServerForever {
         configuration.enableIPv6 = false
 
         configuration.maxConnectionsPerIpAddress = 50
-        configuration.serialization.register(NoGarbageObj::class.java, NGOSerializer())
 
         val server = Server<Connection>(configuration)
 
@@ -249,27 +232,13 @@ class AeronClientServerForever {
             throwable.printStackTrace()
         }
 
-        server.onMessage<NoGarbageObj> { message ->
-            send(message)
+        server.onMessage<String> { message ->
+            logger.error("got message! $message")
+            send("ECHO $message")
         }
 
         server.bind(2000)
 
         return server
     }
-}
-
-class NoGarbageObj {
-    val data = "I'm not a witch!"
-}
-
-class NGOSerializer: Serializer<NoGarbageObj>() {
-    val data = NoGarbageObj()
-    override fun write(kryo: Kryo, output: Output, `object`: NoGarbageObj) {
-    }
-
-    override fun read(kryo: Kryo, input: Input, type: Class<out NoGarbageObj>): NoGarbageObj {
-        return data
-    }
-
 }
