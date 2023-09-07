@@ -19,7 +19,9 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.rmi.messages.MethodRequest
 import kotlinx.coroutines.asContextElement
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import mu.KLogger
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
@@ -213,11 +215,6 @@ internal class RmiClient(val isGlobal: Boolean,
         }
     }
 
-
-
-
-
-
     @Suppress("DuplicatedCode", "UNCHECKED_CAST")
     /**
      * @throws Exception
@@ -324,12 +321,12 @@ internal class RmiClient(val isGlobal: Boolean,
             val continuation = suspendCoroutineArg as Continuation<Any?>
 
             val suspendFunction: suspend () -> Any? = {
+                yield()  // if this is not here, it will not work (something must actually suspend!)
                 sendRequest(localAsync, invokeMethod, connection.logger)
             }
 
-            // function suspension works differently !!
-            return (suspendFunction as Function1<Continuation<Any?>, Any?>).invoke(
-                Continuation(continuation.context) {
+            // function suspension works differently. THIS IS A TRAMPOLINE TO CALL SUSPEND !!
+            return (suspendFunction as Function1<Continuation<Any?>, Any?>).invoke(Continuation(continuation.context) {
                     val any = it.getOrNull()
                     when (any) {
                         ResponseManager.TIMEOUT_EXCEPTION -> {
@@ -340,7 +337,7 @@ internal class RmiClient(val isGlobal: Boolean,
                             continuation.resumeWithException(exception)
                         }
 
-                        is Exception -> {
+                        is Throwable -> {
                             // for co-routines, it's impossible to get a legit stacktrace without impacting general performance,
                             // so we just don't do it.
                             // RmiUtils.cleanStackTraceForProxy(Exception(), any)
@@ -363,7 +360,7 @@ internal class RmiClient(val isGlobal: Boolean,
                     throw exception
                 }
 
-                is Exception -> {
+                is Throwable -> {
                     // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
                     // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
                     RmiUtils.cleanStackTraceForProxy(Exception(), any)
