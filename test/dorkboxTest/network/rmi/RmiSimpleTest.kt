@@ -296,7 +296,7 @@ class RmiSimpleTest : BaseTest() {
             configuration.enableIPv4 = clientType.ip4
             configuration.enableIPv6 = clientType.ip6
             configuration.enableIpc = clientType.ipc
-//            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+//            configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
