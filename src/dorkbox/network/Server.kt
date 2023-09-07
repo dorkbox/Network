@@ -185,7 +185,13 @@ open class Server<CONNECTION : Connection>(
      * Binds the server IPC only, using the previously set AERON configuration
      */
     fun bindIpc() {
-        require(config.enableIpc) { "IPC is not enabled, yet requested. Unable to continue." }
+        if (!config.enableIpc) {
+            logger.warn { "IPC explicitly requested, but not enabled. Enabling IPC..." }
+            // we explicitly requested IPC, make sure it's enabled
+            config.contextDefined = false
+            config.enableIpc = true
+            config.contextDefined = true
+        }
 
         if (config.enableIPv4) { logger.warn { "IPv4 is enabled, but only IPC will be used." }}
         if (config.enableIPv6) { logger.warn { "IPv6 is enabled, but only IPC will be used." }}
