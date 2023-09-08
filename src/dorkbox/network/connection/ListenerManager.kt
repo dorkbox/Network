@@ -41,13 +41,13 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
-        fun Throwable.cleanStackTrace(adjustedStartOfStack: Int = 0) {
+        fun Throwable.cleanStackTrace(adjustedStartOfStack: Int = 0): Throwable {
             // we never care about coroutine stacks, so filter then to start with.
             val origStackTrace = this.stackTrace
             val size = origStackTrace.size
 
             if (size == 0) {
-                return
+                return this
             }
 
             val stackTrace = origStackTrace.filterNot {
@@ -93,6 +93,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 // keep just one, since it's a stack frame INSIDE our network library, and we need that!
                 this.stackTrace = stackTrace.copyOfRange(0, 1)
             }
+
+            return this
         }
 
         /**
