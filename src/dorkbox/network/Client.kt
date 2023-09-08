@@ -679,7 +679,14 @@ open class Client<CONNECTION : Connection>(
                     break
                 }
 
-                listenerManager.notifyError(ClientException("[${handshake.connectKey}] : Un-recoverable error during handshake with $handshakeConnection. Aborting.", e))
+                val type = if (isIPC) {
+                    "IPC"
+                } else {
+                    "$remoteAddressPrettyString:$port1:$port2"
+                }
+
+
+                listenerManager.notifyError(ClientException("[${handshake.connectKey}] : Un-recoverable error during handshake with $type. Aborting.", e))
                 resetOnError()
                 throw e
             }
@@ -689,16 +696,14 @@ open class Client<CONNECTION : Connection>(
             endpointIsRunning.lazySet(false)
 
             if (stopConnectOnShutdown) {
-                val exception = ClientException("Client closed during connection attempt. Aborting connection attempts.")
+                val exception = ClientException("Client closed during connection attempt. Aborting connection attempts.").cleanStackTrace(3)
                 listenerManager.notifyError(exception)
                 throw exception
             }
 
             if (System.nanoTime() - startTime < connectionTimoutInNs) {
 
-                val type = if (connection0 == null) {
-                    "UNKNOWN"
-                } else if (isIPC) {
+                val type = if (isIPC) {
                     "IPC"
                 } else {
                     "$remoteAddressPrettyString:$port1:$port2"
