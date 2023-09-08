@@ -57,8 +57,7 @@ class ShutdownWhileInBadStateTest : BaseTest() {
                     // if the server isn't available, wait forever.
                     client.connect(LOCALHOST, 2222, connectionTimeoutSec = 0) // bad port
                     return@launch
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                } catch (ignored: Exception) {
                 }
             }
         }
