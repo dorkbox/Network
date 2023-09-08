@@ -83,31 +83,6 @@ internal class RmiClient(val isGlobal: Boolean,
         private const val shortPrim = 0.toShort()
         private const val bytePrim = 0.toByte()
 
-        private fun returnAsyncOrSync(isAsync: Boolean, method: Method, returnValue: Any?): Any? {
-            if (isAsync) {
-                // if we are async then we return immediately.
-                // If you want the response value, disable async!
-                val returnType = method.returnType
-                if (returnType.isPrimitive) {
-                    return when (returnType) {
-                        Boolean::class.javaPrimitiveType -> java.lang.Boolean.FALSE
-                        Int::class.javaPrimitiveType    -> 0
-                        Float::class.javaPrimitiveType  -> 0.0f
-                        Char::class.javaPrimitiveType   -> charPrim
-                        Long::class.javaPrimitiveType   -> 0L
-                        Short::class.javaPrimitiveType  -> shortPrim
-                        Byte::class.javaPrimitiveType   -> bytePrim
-                        Double::class.javaPrimitiveType -> 0.0
-                        else -> null // void type
-                    }
-                }
-                return null
-            }
-            else {
-                return returnValue
-            }
-        }
-
         @Suppress("UNCHECKED_CAST")
         private fun syncMethodAction(isAsync: Boolean, proxy: RemoteObject<*>, args: Array<Any>) {
             val action = args[0] as Any.() -> Unit
@@ -296,6 +271,23 @@ internal class RmiClient(val isGlobal: Boolean,
             invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, RemoteObjectStorage.ASYNC_RMI)
 
             connection.send(invokeMethod)
+
+            // if we are async then we return immediately (but must return the correct type!)
+            // If you want the response value, disable async!
+            val returnType = method.returnType
+            if (returnType.isPrimitive) {
+                return when (returnType) {
+                    Boolean::class.javaPrimitiveType -> java.lang.Boolean.FALSE
+                    Int::class.javaPrimitiveType    -> 0
+                    Float::class.javaPrimitiveType  -> 0.0f
+                    Char::class.javaPrimitiveType   -> charPrim
+                    Long::class.javaPrimitiveType   -> 0L
+                    Short::class.javaPrimitiveType  -> shortPrim
+                    Byte::class.javaPrimitiveType   -> bytePrim
+                    Double::class.javaPrimitiveType -> 0.0
+                    else -> null // void type
+                }
+            }
             return null
         }
 
@@ -373,7 +365,7 @@ internal class RmiClient(val isGlobal: Boolean,
                         }
 
                         else -> {
-                            continuation.resume(returnAsyncOrSync(localAsync, method, any))
+                            continuation.resume(any)
                         }
                     }
                 })
@@ -422,8 +414,7 @@ internal class RmiClient(val isGlobal: Boolean,
                 }
 
                 else -> {
-                    // attempt to return a proper value
-                    return returnAsyncOrSync(localAsync, method, any)
+                    return any
                 }
             }
         }
