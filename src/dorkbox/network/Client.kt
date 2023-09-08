@@ -195,6 +195,9 @@ open class Client<CONNECTION : Connection>(
     @Volatile
     private var slowDownForException = false
 
+    @Volatile
+    private var stopConnectOnShutdown = false
+
     // is valid when there is a connection to the server, otherwise it is null
     @Volatile
     private var connection0: CONNECTION? = null
@@ -516,6 +519,7 @@ open class Client<CONNECTION : Connection>(
         // this also makes sure that the dispatchers are still active.
         // Calling `client.close()` will shutdown the dispatchers (and a new client instance must be created)
         try {
+            stopConnectOnShutdown = false
             startDriver()
             initializeState()
         } catch (e: Exception) {
@@ -563,7 +567,7 @@ open class Client<CONNECTION : Connection>(
 
         val startTime = System.nanoTime()
         var success = false
-        while (connectionTimoutInNs == 0L || System.nanoTime() - startTime < connectionTimoutInNs) {
+        while (!stopConnectOnShutdown && (connectionTimoutInNs == 0L || System.nanoTime() - startTime < connectionTimoutInNs)) {
             if (isShutdown()) {
                 resetOnError()
 
@@ -626,6 +630,11 @@ open class Client<CONNECTION : Connection>(
                 // once we're done with the connection process, stop trying
                 break
             } catch (e: ClientRetryException) {
+                if (stopConnectOnShutdown) {
+                    aeronDriver.closeIfSingle()
+                    break
+                }
+
                 val inSeconds = TimeUnit.NANOSECONDS.toSeconds(handshakeTimeoutNs)
                 val message = if (isIPC) {
                     "Unable to connect to IPC in $inSeconds seconds, retrying..."
@@ -640,11 +649,15 @@ open class Client<CONNECTION : Connection>(
                 }
 
                 // maybe the aeron driver isn't running? (or isn't running correctly?)
-                aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
+                aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, stop it
 
                 slowDownForException = true
             } catch (e: ClientRejectedException) {
-                aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
+                aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, stop it
+
+                if (stopConnectOnShutdown) {
+                    break
+                }
 
                 slowDownForException = true
 
@@ -661,6 +674,11 @@ open class Client<CONNECTION : Connection>(
                 }
             } catch (e: Exception) {
                 aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
+
+                if (stopConnectOnShutdown) {
+                    break
+                }
+
                 listenerManager.notifyError(ClientException("[${handshake.connectKey}] : Un-recoverable error during handshake with $handshakeConnection. Aborting.", e))
                 resetOnError()
                 throw e
@@ -669,6 +687,12 @@ open class Client<CONNECTION : Connection>(
 
         if (!success) {
             endpointIsRunning.lazySet(false)
+
+            if (stopConnectOnShutdown) {
+                val exception = ClientException("Client closed during connection attempt. Aborting connection attempts.")
+                listenerManager.notifyError(exception)
+                throw exception
+            }
 
             if (System.nanoTime() - startTime < connectionTimoutInNs) {
 
@@ -822,8 +846,9 @@ open class Client<CONNECTION : Connection>(
         // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
         listenerManager.notifyInit(newConnection)
 
-        // have to make a new thread to listen for incoming data!
-        // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
+
+        // if we shutdown/close before the poller starts, we don't want to block forever
+        pollerClosedLatch = CountDownLatch(1)
         networkEventPoller.submit(
         action = object : EventActionOperator  {
             override fun invoke(): Int {
@@ -987,6 +1012,7 @@ open class Client<CONNECTION : Connection>(
      * @param closeEverything if true, all parts of the client will be closed (listeners, driver, event polling, etc)
      */
     fun close(closeEverything: Boolean = true) {
+        stopConnectOnShutdown = true
         close(
             closeEverything = closeEverything,
             notifyDisconnect = true,

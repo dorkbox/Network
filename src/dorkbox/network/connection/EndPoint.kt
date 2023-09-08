@@ -52,6 +52,7 @@ import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.IdleStrategy
+import org.agrona.concurrent.SigInt
 import java.util.concurrent.*
 
 
@@ -318,7 +319,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal fun initializeState() {
         // on the first run, we depend on these to be 0
         shutdownLatch = CountDownLatch(1)
-        pollerClosedLatch = CountDownLatch(1)
         closeLatch = CountDownLatch(1)
 
         endpointIsRunning.lazySet(true)
@@ -926,7 +926,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 it.closeImmediately(sendDisconnectMessage = true,
                                     notifyDisconnect = notifyDisconnect)
             }
-
 
 
             // this closes the endpoint specific instance running in the poller

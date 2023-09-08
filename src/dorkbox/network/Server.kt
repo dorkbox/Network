@@ -277,6 +277,8 @@ open class Server<CONNECTION : Connection>(
         logger.info { ipcPoller.info }
         logger.info { ipPoller.info }
 
+        // if we shutdown/close before the poller starts, we don't want to block forever
+        pollerClosedLatch = CountDownLatch(1)
         networkEventPoller.submit(
         action = object : EventActionOperator {
             override fun invoke(): Int {
