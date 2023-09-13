@@ -97,7 +97,7 @@ internal object ServerHandshakePollers {
                 // VALIDATE:: a Registration object is the only acceptable message during the connection phase
                 if (msg !is HandshakeMessage) {
                     throw ServerHandshakeException("[$logInfo] Connection not allowed! unrecognized message: $msg")
-                } else {
+                } else if (logger.isTraceEnabled) {
                     logger.trace { "[$logInfo] (${msg.connectKey}) received HS: $msg" }
                 }
                 msg
@@ -318,7 +318,7 @@ internal object ServerHandshakePollers {
                 // VALIDATE:: a Registration object is the only acceptable message during the connection phase
                 if (msg !is HandshakeMessage) {
                     throw ServerHandshakeException("[$logInfo] Connection not allowed! unrecognized message: $msg")
-                } else {
+                } else if (logger.isTraceEnabled) {
                     logger.trace { "[$logInfo] (${msg.connectKey}) received HS: $msg" }
                 }
                 msg

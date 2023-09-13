@@ -69,7 +69,9 @@ internal class Handshaker<CONNECTION : Connection>(
     @Suppress("DuplicatedCode")
     internal fun writeMessage(publication: Publication, logInfo: String, message: HandshakeMessage): Boolean {
         // The handshake sessionId IS NOT globally unique
-        logger.trace { "[$logInfo] (${message.connectKey}) send HS: $message" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "[$logInfo] (${message.connectKey}) send HS: $message" }
+        }
 
         try {
             val buffer = handshakeWriteKryo.write(message)

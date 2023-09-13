@@ -91,7 +91,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 // VALIDATE:: a Registration object is the only acceptable message during the connection phase
                 if (msg !is HandshakeMessage) {
                     throw ClientRejectedException("[$logInfo] Connection not allowed! unrecognized message: $msg") .apply { cleanAllStackTrace() }
-                } else {
+                } else if (logger.isTraceEnabled) {
+
                     logger.trace { "[$logInfo] (${msg.connectKey}) received HS: $msg" }
                 }
                 msg

@@ -844,7 +844,9 @@ open class Client<CONNECTION : Connection>(
         // finished with the handshake, so always close these!
         handshakeConnection.close()
 
-        logger.debug { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] done with handshake." }
+        if (logger.isDebugEnabled) {
+            logger.debug { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] done with handshake." }
+        }
 
         newConnection.setImage()
 
@@ -863,7 +865,9 @@ open class Client<CONNECTION : Connection>(
                     newConnection.poll()
                 } else {
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                    logger.debug { "[${connection}] connection expired (cleanup)" }
+                    if (logger.isDebugEnabled) {
+                        logger.debug { "[${connection}] connection expired (cleanup)" }
+                    }
 
                     // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
                     removeConnection(newConnection)
@@ -881,7 +885,9 @@ open class Client<CONNECTION : Connection>(
                 val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
 
                 // this can be closed when the connection is remotely closed in ADDITION to manually closing
-                logger.debug { "Client event dispatch closing..." }
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Client event dispatch closing..." }
+                }
 
                 // we only need to run shutdown methods if there was a network outage or D/C
                 if (!shutdownInProgress.value) {
@@ -916,7 +922,7 @@ open class Client<CONNECTION : Connection>(
 
                         reconnect()
                     }
-                } else {
+                } else if (logger.isDebugEnabled) {
                     logger.debug { "Closed the Network Event Poller..." }
                 }
             }
@@ -999,7 +1005,9 @@ open class Client<CONNECTION : Connection>(
     fun removeRegisteredServerKey(address: InetAddress) {
         val savedPublicKey = storage.getRegisteredServerKey(address)
         if (savedPublicKey != null) {
-            logger.debug { "Deleting remote IP address key $address" }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Deleting remote IP address key $address" }
+            }
             storage.removeRegisteredServerKey(address)
         }
     }

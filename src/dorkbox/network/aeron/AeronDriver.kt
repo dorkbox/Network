@@ -498,13 +498,13 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 logger.error(this) { "Aeron Driver [$driverId]: error!" }
             }
 
-            if (logEverything) {
+            if (logEverything && logger.isDebugEnabled) {
                 logger.debug { "Aeron Driver [$driverId]: Creating at '${driver.aeronDirectory}'" }
             }
 
             internal = driver
         } else {
-            if (logEverything) {
+            if (logEverything && logger.isDebugEnabled) {
                 logger.debug { "Aeron Driver [$driverId]: Reusing driver" }
             }
 

@@ -83,11 +83,15 @@ internal class EventPoller {
 
     fun configure(logger: KLogger, config: Configuration, endPoint: EndPoint<*>) {
         lock.write {
-            logger.debug { "Initializing the Network Event Poller..." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Initializing the Network Event Poller..." }
+            }
             configureEventsEndpoints.add(ByteArrayWrapper.wrap(endPoint.storage.publicKey))
 
             if (!configured) {
-                logger.trace { "Configuring the Network Event Poller..." }
+                if (logger.isTraceEnabled) {
+                    logger.trace { "Configuring the Network Event Poller..." }
+                }
 
                 delayClose = false
                 running = true
@@ -205,7 +209,9 @@ internal class EventPoller {
         }
 
         lock.write {
-            logger.debug { "Requesting close for the Network Event Poller..." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Requesting close for the Network Event Poller..." }
+            }
 
             // ONLY if there are no more poll-events do we ACTUALLY shut down.
             // when an endpoint closes its polling, it will automatically be removed from this datastructure.
@@ -220,19 +226,25 @@ internal class EventPoller {
             if (running && sEvents == 0 && cEvents == 0) {
                 when (pEvents) {
                     0 -> {
-                        logger.debug { "Closing the Network Event Poller..." }
+                        if (logger.isDebugEnabled) {
+                            logger.debug { "Closing the Network Event Poller..." }
+                        }
                         doClose(logger)
                     }
                     1 -> {
                         // this means we are trying to close on our poll event, and obviously it won't work.
-                        logger.debug { "Delayed closing the Network Event Poller..." }
+                        if (logger.isDebugEnabled) {
+                            logger.debug { "Delayed closing the Network Event Poller..." }
+                        }
                         delayClose = true
                     }
                     else -> {
-                        logger.debug { "Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)" }
+                        if (logger.isDebugEnabled) {
+                            logger.debug { "Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)" }
+                        }
                     }
                 }
-            } else {
+            } else if (logger.isDebugEnabled) {
                 logger.debug { "Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)" }
             }
         }

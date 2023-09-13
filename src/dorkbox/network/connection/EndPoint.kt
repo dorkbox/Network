@@ -521,7 +521,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // since ANY thread can call 'send', we have to take kryo instances in a safe way
             val kryo = serialization.take()
             try {
-                val buffer =  kryo.write(connection, message)
+                val buffer = kryo.write(connection, message)
                 val objectSize = buffer.position()
                 val internalBuffer = buffer.internalBuffer
 
@@ -614,7 +614,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // the remote endPoint will send this message if it is closing the connection.
             // IF we get this message in time, then we do not have to wait for the connection to expire before closing it
             is DisconnectMessage -> {
-                logger.debug { "Received disconnect message from $otherTypeName" }
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Received disconnect message from $otherTypeName" }
+                }
                 connection.close(sendDisconnectMessage = false,
                                  notifyDisconnect = true)
             }
@@ -657,7 +659,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * THIS IS PROCESSED ON MULTIPLE THREADS!
      */
-    private suspend inline fun processMessageFromChannel(connection: CONNECTION, message: Any) {
+    internal fun processMessageFromChannel(connection: CONNECTION, message: Any) {
         when (message) {
             is Ping -> {
                 // PING will also measure APP latency, not just NETWORK PIPE latency
@@ -883,13 +885,17 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         notifyDisconnect: Boolean,
         releaseWaitingThreads: Boolean)
     {
-        logger.debug { "Requesting close: closeEverything=$closeEverything, releaseWaitingThreads=$releaseWaitingThreads" }
+        if (logger.isDebugEnabled) {
+            logger.debug { "Requesting close: closeEverything=$closeEverything, releaseWaitingThreads=$releaseWaitingThreads" }
+        }
 
         // 1) endpoints can call close()
         // 2) client can close the endpoint if the connection is D/C from aeron (and the endpoint was not closed manually)
         val shutdownPreviouslyStarted = shutdownInProgress.getAndSet(true)
         if (closeEverything && shutdownPreviouslyStarted) {
-            logger.debug { "Shutdown previously started, cleaning up..." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Shutdown previously started, cleaning up..." }
+            }
             // this is only called when the client network event poller shuts down
             // if we have clientConnectionClosed, then run that logic (because it doesn't run on the client when the connection is closed remotely)
 
@@ -904,7 +910,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         }
 
         if (shutdownPreviouslyStarted) {
-            logger.debug { "Shutdown previously started, ignoring..." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Shutdown previously started, ignoring..." }
+            }
             return
         }
 
@@ -917,7 +925,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         }
 
         EventDispatcher.CLOSE.launch {
-            logger.debug { "Shutting down endpoint..." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Shutting down endpoint..." }
+            }
 
             // always do this. It is OK to run this multiple times
             // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
@@ -969,7 +979,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 shutdownInProgress.lazySet(false)
 
                 if (releaseWaitingThreads) {
-                    logger.trace { "Counting down the close latch..." }
+                    if (logger.isTraceEnabled) {
+                        logger.trace { "Counting down the close latch..." }
+                    }
                     closeLatch.countDown()
                 }
 

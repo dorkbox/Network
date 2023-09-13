@@ -297,7 +297,9 @@ open class Server<CONNECTION : Connection>(
                             pollCount += connection.poll()
                         } else {
                             // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                            logger.debug { "[${connection}] connection expired (cleanup)" }
+                            if (logger.isDebugEnabled) {
+                                logger.debug { "[${connection}] connection expired (cleanup)" }
+                            }
 
                             // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
                             removeConnection(connection)
@@ -317,7 +319,9 @@ open class Server<CONNECTION : Connection>(
         onClose = object : EventCloseOperator {
             override fun invoke() {
                 val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
-                logger.debug { "Server event dispatch closing..." }
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Server event dispatch closing..." }
+                }
 
                 ipcPoller.close()
                 ipPoller.close()
@@ -368,8 +372,9 @@ open class Server<CONNECTION : Connection>(
                 endpointIsRunning.lazySet(false)
                 pollerClosedLatch.countDown()
 
-                logger.debug { "Closed the Network Event Poller..." }
-
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Closed the Network Event Poller..." }
+                }
             }
         })
     }

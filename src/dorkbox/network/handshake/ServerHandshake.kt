@@ -130,7 +130,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
             }
 
             // Server is the "source", client mirrors the server
-            logger.debug { "[${existingConnection}] (${message.connectKey}) Connection done with handshake." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "[${existingConnection}] (${message.connectKey}) Connection done with handshake." }
+            }
 
             existingConnection.setImage()
 
@@ -381,7 +383,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = connection
 
-            logger.debug { "[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
+            }
 
             // this tells the client all the info to connect.
             handshaker.writeMessage(handshakePublication, logInfo, successMessage) // exception is already caught!
@@ -618,7 +622,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = connection
 
-            logger.debug { "[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
+            }
 
             // this tells the client all the info to connect.
             handshaker.writeMessage(handshakePublication, logInfo, successMessage) // exception is already caught

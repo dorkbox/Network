@@ -81,7 +81,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      * NOTE: async RMI will never call this (because async doesn't return a response)
      */
     fun notifyWaiter(id: Int, result: Any?, logger: KLogger) {
-        logger.trace { "[RM] notify: $id" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "[RM] notify: $id" }
+        }
 
         val previous = pendingLock.write {
             val previous = pending[id]
@@ -91,7 +93,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
 
         // if NULL, since either we don't exist (because we were async), or it was cancelled
         if (previous is ResponseWaiter) {
-            logger.trace { "[RM] valid-notify: $id" }
+            if (logger.isTraceEnabled) {
+                logger.trace { "[RM] valid-notify: $id" }
+            }
 
             // this means we were NOT timed out! (we cannot be timed out here)
             previous.doNotify()
@@ -104,7 +108,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      * This is ONLY called when we want to get the data out of the stored entry, because we are operating ASYNC. (pure RMI async is different)
      */
     fun <T> removeWaiterCallback(id: Int, logger: KLogger): T? {
-        logger.trace { "[RM] get-callback: $id" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "[RM] get-callback: $id" }
+        }
 
         val previous = pendingLock.write {
             val previous = pending[id]
@@ -135,7 +141,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
     fun prep(logger: KLogger): ResponseWaiter {
         val waiter = waiterCache.take()
         rmiWaitersInUse.getAndIncrement()
-        logger.trace { "[RM] prep in-use: ${rmiWaitersInUse.value}" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "[RM] prep in-use: ${rmiWaitersInUse.value}" }
+        }
 
         // this will initialize the result
         waiter.prep()
@@ -155,7 +163,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
     fun prepWithCallback(logger: KLogger, function: Any): Int {
         val waiter = waiterCache.take()
         rmiWaitersInUse.getAndIncrement()
-        logger.trace { "[RM] prep in-use: ${rmiWaitersInUse.value}" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "[RM] prep in-use: ${rmiWaitersInUse.value}" }
+        }
 
         // this will initialize the result
         waiter.prep()
@@ -188,7 +198,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
     ): Any? {
         val id = RmiUtils.unpackUnsignedRight(responseWaiter.id)
 
-        logger.trace { "[RM] get: $id" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "[RM] get: $id" }
+        }
 
         // deletes the entry in the map
         val resultOrWaiter = pendingLock.write {
@@ -203,7 +215,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         rmiWaitersInUse.getAndDecrement()
 
         if (resultOrWaiter is ResponseWaiter) {
-            logger.trace { "[RM] timeout cancel ($timeoutMillis): $id" }
+            if (logger.isTraceEnabled) {
+                logger.trace { "[RM] timeout cancel ($timeoutMillis): $id" }
+            }
 
             return if (connection.isClosed() || connection.isClosed()) {
                 null
@@ -217,7 +231,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
 
     fun close() {
         // technically, this isn't closing it, so much as it's cleaning it out
-        logger.debug { "Closing the response manager for RMI" }
+        if (logger.isDebugEnabled) {
+            logger.debug { "Closing the response manager for RMI" }
+        }
 
         // wait for responses, or wait for timeouts!
         while (rmiWaitersInUse.value > 0) {

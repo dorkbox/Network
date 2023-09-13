@@ -235,7 +235,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         val isLoaded = mediaDriver != null && aeron != null && aeron?.isClosed == false
         if (isLoaded) {
-            logger.debug { "Aeron Driver [$driverId]: Already running... Not starting again." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Aeron Driver [$driverId]: Already running... Not starting again." }
+            }
             return true
         }
 
@@ -247,7 +249,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 // wait for a bit, because we are running, but we ALSO issued a START, and expect it to start.
                 // SOMETIMES aeron is in the middle of shutting down, and this prevents us from trying to connect to
                 // that instance
-                logger.debug { "Aeron Driver [$driverId]: Already running. Double checking status..." }
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Aeron Driver [$driverId]: Already running. Double checking status..." }
+                }
                 Thread.sleep(context.driverTimeout / 2)
                 running = isRunning()
             }
@@ -258,14 +262,16 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 while (count-- > 0) {
                     try {
                         mediaDriver = MediaDriver.launch(context.context)
-                        logger.debug { "Aeron Driver [$driverId]: Successfully started" }
+                        if (logger.isDebugEnabled) {
+                            logger.debug { "Aeron Driver [$driverId]: Successfully started" }
+                        }
                         break
                     } catch (e: Exception) {
                         logger.warn(e) { "Aeron Driver [$driverId]: Unable to start at ${context.directory}. Retrying $count more times..." }
                         Thread.sleep(context.driverTimeout)
                     }
                 }
-            } else {
+            } else if (logger.isDebugEnabled) {
                 logger.debug { "Aeron Driver [$driverId]: Not starting. It was already running." }
             }
 
@@ -297,7 +303,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         // this might succeed if we can connect to the media driver
         aeron = Aeron.connect(aeronDriverContext)
-        logger.debug { "Aeron Driver [$driverId]: Connected to '${context.directory}'" }
+        if (logger.isDebugEnabled) {
+            logger.debug { "Aeron Driver [$driverId]: Connected to '${context.directory}'" }
+        }
 
         return true
     }
@@ -378,13 +386,15 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
             if (!hasDelay) {
                 hasDelay = true
-                logger.debug { "Aeron Driver [$driverId]: Delaying creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Aeron Driver [$driverId]: Delaying creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+                }
             }
             // the publication has not ACTUALLY been created yet!
             Thread.sleep(AERON_PUB_SUB_TIMEOUT)
         }
 
-        if (hasDelay) {
+        if (hasDelay && logger.isDebugEnabled) {
             logger.debug { "Aeron Driver [$driverId]: Delayed creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
         }
 
@@ -394,7 +404,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             registeredPublicationsTrace.add(publication.registrationId())
         }
 
-        logger.trace { "Aeron Driver [$driverId]: Creating publication [$logInfo] :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}, channel=${publication.channel()}" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "Aeron Driver [$driverId]: Creating publication [$logInfo] :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}, channel=${publication.channel()}" }
+        }
         return publication
     }
 
@@ -474,7 +486,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
             if (!hasDelay) {
                 hasDelay = true
-                logger.debug { "Aeron Driver [$driverId]: Delaying creation of ex-publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Aeron Driver [$driverId]: Delaying creation of ex-publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+                }
             }
             // the publication has not ACTUALLY been created yet!
             Thread.sleep(AERON_PUB_SUB_TIMEOUT)
@@ -489,7 +503,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             registeredPublicationsTrace.add(publication.registrationId())
         }
 
-        logger.trace { "Aeron Driver [$driverId]: Creating ex-publication $logInfo :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}, channel=${publication.channel()}" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "Aeron Driver [$driverId]: Creating ex-publication $logInfo :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}, channel=${publication.channel()}" }
+        }
         return publication
     }
 
@@ -570,13 +586,15 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
             if (!hasDelay) {
                 hasDelay = true
-                logger.debug { "Aeron Driver [$driverId]: Delaying creation of subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Aeron Driver [$driverId]: Delaying creation of subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+                }
             }
             // the subscription has not ACTUALLY been created yet!
             Thread.sleep(AERON_PUB_SUB_TIMEOUT)
         }
 
-        if (hasDelay) {
+        if (hasDelay && logger.isDebugEnabled) {
             logger.debug { "Aeron Driver [$driverId]: Delayed creation of subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
         }
 
@@ -585,7 +603,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             registeredSubscriptionsTrace.add(subscription.registrationId())
         }
 
-        logger.trace { "Aeron Driver [$driverId]: Creating subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscriptionUri.sessionId()}, streamId=${subscription.streamId()}, channel=${subscription.channel()}" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "Aeron Driver [$driverId]: Creating subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscriptionUri.sessionId()}, streamId=${subscription.streamId()}, channel=${subscription.channel()}" }
+        }
         return subscription
     }
 
@@ -601,7 +621,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         val registrationId = publication.registrationId()
 
-        logger.trace { "Aeron Driver [$driverId]: Closing $name file [$logInfo] :: regId=$registrationId, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "Aeron Driver [$driverId]: Closing $name file [$logInfo] :: regId=$registrationId, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
+        }
 
 
         val aeron1 = aeron
@@ -643,7 +665,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      * Guarantee that the publication is closed AND the backing file is removed
      */
     fun close(subscription: Subscription, logger: KLogger, logInfo: String) = stateLock.write {
-        logger.trace { "Aeron Driver [$driverId]: Closing subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "Aeron Driver [$driverId]: Closing subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
+        }
 
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
@@ -690,7 +714,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             // only emit the log info once. It's rather spammy otherwise!
             if (!didLog) {
                 didLog = true
-                logger.debug { "Aeron Driver [$driverId]: Still running (${aeronDirectory}). Waiting for it to stop..." }
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Aeron Driver [$driverId]: Still running (${aeronDirectory}). Waiting for it to stop..." }
+                }
             }
             Thread.sleep(intervalTimeoutMS)
         }
@@ -718,7 +744,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     fun isInUse(endPoint: EndPoint<*>?, logger: KLogger): Boolean {
         // as many "sort-cuts" as we can for checking if the current Aeron Driver/client is still in use
         if (!isRunning()) {
-            logger.trace { "Aeron Driver [$driverId]: not running" }
+            if (logger.isTraceEnabled) {
+                logger.trace { "Aeron Driver [$driverId]: not running" }
+            }
             return false
         }
 
@@ -726,8 +754,10 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (logger.isTraceEnabled) {
                 val elements = registeredPublicationsTrace.elements
                 val joined = elements.joinToString()
-                logger.debug { "Aeron Driver [$driverId]: has [$joined] publications (${registeredPublications.value} total)" }
-            } else {
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Aeron Driver [$driverId]: has [$joined] publications (${registeredPublications.value} total)" }
+                }
+            } else if (logger.isDebugEnabled) {
                 logger.debug { "Aeron Driver [$driverId]: has publications (${registeredPublications.value} total)" }
             }
             return true
@@ -737,15 +767,19 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (logger.isTraceEnabled) {
                 val elements = registeredSubscriptionsTrace.elements
                 val joined = elements.joinToString()
-                logger.debug { "Aeron Driver [$driverId]: has [$joined] subscriptions (${registeredSubscriptions.value} total)" }
-            } else {
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Aeron Driver [$driverId]: has [$joined] subscriptions (${registeredSubscriptions.value} total)" }
+                }
+            } else if (logger.isDebugEnabled) {
                 logger.debug { "Aeron Driver [$driverId]: has subscriptions (${registeredSubscriptions.value} total)" }
             }
             return true
         }
 
         if (endPointUsages.size() > 1 && !endPointUsages.contains(endPoint)) {
-            logger.debug { "Aeron Driver [$driverId]: still referenced by ${endPointUsages.size()} endpoints" }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Aeron Driver [$driverId]: still referenced by ${endPointUsages.size()} endpoints" }
+            }
             return true
         }
 
@@ -763,7 +797,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         var count = 3
 
         while (count > 0 && currentUsage > 0) {
-            logger.debug { "Aeron Driver [$driverId]: in use, double checking status" }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Aeron Driver [$driverId]: in use, double checking status" }
+            }
             delayLingerTimeout()
             currentUsage = driverBacklog()?.snapshot()?.size ?: 0
             count--
@@ -776,13 +812,15 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         count = 3
         while (count > 0 && currentUsage > 0) {
-            logger.debug { "Aeron Driver [$driverId]: in use, double checking status (long)" }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Aeron Driver [$driverId]: in use, double checking status (long)" }
+            }
             delayDriverTimeout()
             currentUsage = driverBacklog()?.snapshot()?.size ?: 0
             count--
         }
 
-        if (currentUsage > 0) {
+        if (currentUsage > 0 && logger.isDebugEnabled) {
             logger.debug { "Aeron Driver [$driverId]: usage is: $currentUsage" }
         }
 
@@ -802,7 +840,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             endPointUsages.remove(endPoint)
         }
 
-        logger.trace { "Aeron Driver [$driverId]: Requested close... (${endPointUsages.size()} endpoints still in use)" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "Aeron Driver [$driverId]: Requested close... (${endPointUsages.size()} endpoints still in use)" }
+        }
 
         // ignore the extra driver checks, because in SOME situations, when trying to reconnect upon an error, the
         if (isInUse(endPoint, logger)) {
@@ -810,7 +850,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 // driver gets into a bad state. When this happens, we have to ignore "are we already in use" checks, BECAUSE the driver is now corrupted and unusable!
             }
             else {
-                logger.debug { "Aeron Driver [$driverId]: in use, not shutting down this instance." }
+                if (logger.isDebugEnabled) {
+                    logger.debug { "Aeron Driver [$driverId]: in use, not shutting down this instance." }
+                }
 
                 // reset our contextDefine value, so that this configuration can safely be reused
                 endPoint?.config?.contextDefined = false
@@ -820,14 +862,17 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         val removed = AeronDriver.driverConfigurations[driverId]
         if (removed == null) {
-            logger.debug { "Aeron Driver [$driverId]: already closed. Ignoring close request." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Aeron Driver [$driverId]: already closed. Ignoring close request." }
+            }
             // reset our contextDefine value, so that this configuration can safely be reused
             endPoint?.config?.contextDefined = false
             return@write false
         }
 
-
-        logger.debug { "Aeron Driver [$driverId]: Closing..." }
+        if (logger.isDebugEnabled) {
+            logger.debug { "Aeron Driver [$driverId]: Closing..." }
+        }
 
         // we have to assign context BEFORE we close, because the `getter` for context will create it if necessary
         val aeronContext = context
@@ -847,14 +892,18 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
 
         if (mediaDriver == null) {
-            logger.debug { "Aeron Driver [$driverId]: No driver started, not stopping driver or context." }
+            if (logger.isDebugEnabled) {
+                logger.debug { "Aeron Driver [$driverId]: No driver started, not stopping driver or context." }
+            }
 
             // reset our contextDefine value, so that this configuration can safely be reused
             endPoint?.config?.contextDefined = false
             return@write false
         }
 
-        logger.debug { "Aeron Driver [$driverId]: Stopping driver at '${driverDirectory}'..." }
+        if (logger.isDebugEnabled) {
+            logger.debug { "Aeron Driver [$driverId]: Stopping driver at '${driverDirectory}'..." }
+        }
 
         // if we are the ones that started the media driver, then we must be the ones to close it
         try {
@@ -933,7 +982,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         // actually remove it, since we've passed all the checks to guarantee it's closed...
         AeronDriver.driverConfigurations.remove(driverId)
 
-        logger.debug { "Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'" }
+        if (logger.isDebugEnabled) {
+            logger.debug { "Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'" }
+        }
         closed = true
 
         return@write true
@@ -973,7 +1024,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      */
     fun deleteLogFile(image: Image) {
         val file = getMediaDriverFile(image)
-        driverLogger.debug { "Deleting log file: $image" }
+        if (driverLogger.isDebugEnabled) {
+            driverLogger.debug { "Deleting log file: $image" }
+        }
         file.delete()
     }
 

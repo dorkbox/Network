@@ -67,7 +67,9 @@ internal class ClientHandshakeDriver(
             reliable: Boolean,
             logger: KLogger
         ): ClientHandshakeDriver {
-            logger.trace { "Starting client handshake" }
+            if (logger.isTraceEnabled) {
+                logger.trace { "Starting client handshake" }
+            }
 
             var isUsingIPC = false
 

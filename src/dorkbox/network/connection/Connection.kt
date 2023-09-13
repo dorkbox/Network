@@ -199,7 +199,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         if (logger.isTraceEnabled) {
             // The handshake sessionId IS NOT globally unique
             // don't automatically create the lambda when trace is disabled! Because this uses 'outside' scoped info, it's a new lambda each time!
-            logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
+            if (logger.isTraceEnabled) {
+                logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
+            }
         }
         return endPoint.write(message, publication, sendIdleStrategy, this@Connection, maxMessageSize, abortEarly)
     }
@@ -342,7 +344,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             return
         }
 
-        logger.debug {"[$toString0] connection closing"}
+        if (logger.isDebugEnabled) {
+            logger.debug {"[$toString0] connection closing"}
+        }
 
         // on close, we want to make sure this file is DELETED!
         endPoint.aeronDriver.close(subscription, toString0)
@@ -350,7 +354,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         // notify the remote endPoint that we are closing
         // we send this AFTER we close our subscription (so that no more messages will be received, when the remote end ping-pong's this message back)
         if (sendDisconnectMessage && publication.isConnected) {
-            logger.trace { "Sending disconnect message to ${endPoint.otherTypeName}" }
+            if (logger.isTraceEnabled) {
+                logger.trace { "Sending disconnect message to ${endPoint.otherTypeName}" }
+            }
 
             // sometimes the remote end has already disconnected, THERE WILL BE ERRORS if this happens (but they are ok)
             send(DisconnectMessage.INSTANCE, true)
@@ -372,7 +378,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         val connection = this
         endPoint.ifServer {
             // clean up the resources associated with this connection when it's closed
-            logger.debug { "[${connection}] freeing resources" }
+            if (logger.isDebugEnabled) {
+                logger.debug { "[${connection}] freeing resources" }
+            }
             sessionIdAllocator.free(info.sessionIdPub)
             sessionIdAllocator.free(info.sessionIdSub)
 
@@ -385,7 +393,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             }
         }
 
-        logger.debug {"[$toString0] connection closed"}
+        if (logger.isDebugEnabled) {
+            logger.debug {"[$toString0] connection closed"}
+        }
     }
 
 

@@ -78,7 +78,9 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
 
         val count = assigned.incrementAndGet()
         val id = cache.take()
-        logger.trace { "Allocating $id (total $count)" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "Allocating $id (total $count)" }
+        }
         return id
     }
 
@@ -92,7 +94,9 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
         if (assigned < 0) {
             throw AllocationException("Unequal allocate/free method calls attempting to free [$id] (too many 'free' calls).")
         }
-        logger.trace { "Freeing $id" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "Freeing $id" }
+        }
         cache.put(id)
     }
 

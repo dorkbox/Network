@@ -267,7 +267,7 @@ abstract class Configuration protected constructor() {
                             .enableRead()
                             .startBlocking(60, TimeUnit.SECONDS)
                             .output
-                            .string().trim().also { logger.trace { "Created new disk: $it" } }
+                            .string().trim().also {  if (logger.isTraceEnabled) { logger.trace { "Created new disk: $it" } } }
 
                         // diskutil apfs createContainer /dev/disk4
                         val lines = dorkbox.executor.Executor()
@@ -288,7 +288,7 @@ abstract class Configuration protected constructor() {
                             .enableRead()
                             .startBlocking(60, TimeUnit.SECONDS)
                             .output
-                            .string().also { logger.trace { it } }
+                            .string().also {  if (logger.isTraceEnabled) { logger.trace { it } } }
 
                         // diskutil mount nobrowse "DevShm"
                         dorkbox.executor.Executor()
@@ -297,7 +297,7 @@ abstract class Configuration protected constructor() {
                             .enableRead()
                             .startBlocking(60, TimeUnit.SECONDS)
                             .output
-                            .string().also { logger.trace { it } }
+                            .string().also {  if (logger.isTraceEnabled) { logger.trace { it } } }
 
                         // touch /Volumes/RAMDisk/.metadata_never_index
                         File("${suggestedLocation}/.metadata_never_index").createNewFile()

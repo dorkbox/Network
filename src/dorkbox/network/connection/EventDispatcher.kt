@@ -130,9 +130,13 @@ enum class EventDispatcher {
             if (DEBUG_EVENTS) {
                 val id = traceId.getAndIncrement()
                 executors[eventId].submit {
-                    logger.debug { "Starting $event : $id" }
+                    if (logger.isDebugEnabled) {
+                        logger.debug { "Starting $event : $id" }
+                    }
                     function()
-                    logger.debug { "Finished $event : $id" }
+                    if (logger.isDebugEnabled) {
+                        logger.debug { "Finished $event : $id" }
+                    }
                 }
             } else {
                 executors[eventId].submit(function)

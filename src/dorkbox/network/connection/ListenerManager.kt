@@ -551,7 +551,9 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      */
     fun close() {
         // we have to follow the single-writer principle!
-        logger.debug { "Closing the listener manager" }
+        if (logger.isDebugEnabled) {
+            logger.debug { "Closing the listener manager" }
+        }
 
         onConnectFilterLock.write {
             onConnectFilterList = Array(0) { { true } }

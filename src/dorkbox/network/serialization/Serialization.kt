@@ -713,19 +713,27 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
                 when (typeId) {
                     0 -> {
-                        logger.trace { "REGISTRATION (0) ${clazz.name}" }
+                        if (logger.isTraceEnabled) {
+                            logger.trace { "REGISTRATION (0) ${clazz.name}" }
+                        }
                         newRegistrations.add(ClassRegistration0(clazz, maker.newInstantiatorOf(Class.forName(serializerName)).newInstance() as Serializer<Any>))
                     }
                     1 -> {
-                        logger.trace { "REGISTRATION (1) ${clazz.name} :: $id" }
+                        if (logger.isTraceEnabled) {
+                            logger.trace { "REGISTRATION (1) ${clazz.name} :: $id" }
+                        }
                         newRegistrations.add(ClassRegistration1(clazz, id))
                     }
                     2 -> {
-                        logger.trace { "REGISTRATION (2) ${clazz.name} :: $id" }
+                        if (logger.isTraceEnabled) {
+                            logger.trace { "REGISTRATION (2) ${clazz.name} :: $id" }
+                        }
                         newRegistrations.add(ClassRegistration2(clazz, maker.newInstantiatorOf(Class.forName(serializerName)).newInstance() as Serializer<Any>, id))
                     }
                     3 -> {
-                        logger.trace { "REGISTRATION (3) ${clazz.name}" }
+                        if (logger.isTraceEnabled) {
+                            logger.trace { "REGISTRATION (3) ${clazz.name}" }
+                        }
                         newRegistrations.add(ClassRegistration3(clazz))
                     }
                     4 -> {
@@ -746,11 +754,13 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
                         // NOTE: implClass can still be null!
 
-                        logger.trace {
-                            if (implClass != null) {
-                                "REGISTRATION (RMI-CLIENT) ${clazz.name} -> ${implClass.name}"
-                            } else {
-                                "REGISTRATION (RMI-CLIENT) ${clazz.name}"
+                        if (logger.isTraceEnabled) {
+                            logger.trace {
+                                if (implClass != null) {
+                                    "REGISTRATION (RMI-CLIENT) ${clazz.name} -> ${implClass.name}"
+                                } else {
+                                    "REGISTRATION (RMI-CLIENT) ${clazz.name}"
+                                }
                             }
                         }
 
