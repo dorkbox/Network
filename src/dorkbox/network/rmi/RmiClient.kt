@@ -15,6 +15,7 @@
  */
 package dorkbox.network.rmi
 
+import com.conversantmedia.util.collection.FixedStack
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.rmi.messages.MethodRequest
@@ -22,7 +23,6 @@ import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
-import mu.KLogger
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.util.*
@@ -75,8 +75,8 @@ internal class RmiClient(val isGlobal: Boolean,
         @Suppress("UNCHECKED_CAST")
         private val EMPTY_ARRAY: Array<Any> = Collections.EMPTY_LIST.toTypedArray() as Array<Any>
 
-        private val safeAsyncState: ThreadLocal<Boolean?> = ThreadLocal.withInitial {
-            null
+        private val safeAsyncStack: ThreadLocal<FixedStack<Boolean?>> = ThreadLocal.withInitial {
+            FixedStack(64)
         }
 
         private const val charPrim = 0.toChar()
@@ -86,28 +86,23 @@ internal class RmiClient(val isGlobal: Boolean,
         @Suppress("UNCHECKED_CAST")
         private fun syncMethodAction(isAsync: Boolean, proxy: RemoteObject<*>, args: Array<Any>) {
             val action = args[0] as Any.() -> Unit
-            val prev = safeAsyncState.get()
 
             // the sync state is treated as a stack. Manually changing the state via `.async` field setter can cause problems, but
             // the docs cover that (and say, `don't do this`)
-            safeAsyncState.set(false)
+            safeAsyncStack.get().push(isAsync)
 
             // the `sync` method is always a unit function - we want to execute that unit function directly - this way we can control
             // exactly how sync state is preserved.
             try {
                 action(proxy)
             } finally {
-                if (prev != isAsync) {
-                    safeAsyncState.remove()
-                }
+                safeAsyncStack.get().pop()
             }
         }
 
         @Suppress("UNCHECKED_CAST")
         private fun syncSuspendMethodAction(isAsync: Boolean, proxy: RemoteObject<*>, args: Array<Any>): Any? {
             val action = args[0] as suspend Any.() -> Unit
-
-            val prev = safeAsyncState.get()
 
             // if a 'suspend' function is called, then our last argument is a 'Continuation' object
             // We will use this for our coroutine context instead of running on a new coroutine
@@ -117,20 +112,20 @@ internal class RmiClient(val isGlobal: Boolean,
             val suspendFunction: suspend () -> Any? = {
                 // the sync state is treated as a stack. Manually changing the state via `.async` field setter can cause problems, but
                 // the docs cover that (and say, `don't do this`)
-                withContext(safeAsyncState.asContextElement(isAsync)) {
+                withContext(safeAsyncStack.asContextElement()) {
+                    yield() // must have an actually suspending call here!
+                    safeAsyncStack.get().push(isAsync)
                     action(proxy)
                 }
             }
 
             // function suspension works differently !!
-            return (suspendFunction as Function1<Continuation<Any?>, Any?>).invoke(
+            val result = (suspendFunction as Function1<Continuation<Any?>, Any?>).invoke(
                 Continuation(continuation.context) {
                     val any = try {
                         it.getOrNull()
                     } finally {
-                        if (prev != isAsync) {
-                            safeAsyncState.remove()
-                        }
+                        safeAsyncStack.get().pop()
                     }
                     when (any) {
                         is Exception -> {
@@ -144,6 +139,10 @@ internal class RmiClient(val isGlobal: Boolean,
                         }
                     }
                 })
+
+            runBlocking(safeAsyncStack.asContextElement()) {}
+
+            return result
         }
     }
 
@@ -159,7 +158,7 @@ internal class RmiClient(val isGlobal: Boolean,
      */
     override fun invoke(proxy: Any, method: Method, args: Array<Any>?): Any? {
         val localAsync =
-            safeAsyncState.get() // value set via obj.sync {}
+            safeAsyncStack.get().peek() // value set via obj.sync {}
                 ?:
             isAsync // the value was set via obj.sync = xyz
 

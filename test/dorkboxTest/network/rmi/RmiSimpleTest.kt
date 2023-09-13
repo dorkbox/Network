@@ -338,4 +338,99 @@ class RmiSimpleTest : BaseTest() {
 
         waitForThreads()
     }
+
+
+    @Test
+    fun rmiTimeoutIpc() {
+        rmiBasicIpc { connection, testCow ->
+            RmiCommonTest.runTimeoutTest(connection, testCow)
+        }
+    }
+
+    @Test
+    fun rmiSyncIpc() {
+        rmiBasicIpc { connection, testCow ->
+            RmiCommonTest.runSyncTest(connection, testCow)
+        }
+    }
+
+    @Test
+    fun rmiASyncIpc() {
+        rmiBasicIpc { connection, testCow ->
+            RmiCommonTest.runASyncTest(connection, testCow)
+        }
+    }
+
+    fun rmiBasicIpc(runFun: (Connection, TestCow) -> Unit) {
+        val server = run {
+            val configuration = serverConfig()
+            configuration.enableIPv4 = false
+            configuration.enableIPv6 = false
+            configuration.enableIpc = true
+
+            configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
+            configuration.serialization.register(MessageWithTestCow::class.java)
+            configuration.serialization.register(UnsupportedOperationException::class.java)
+
+
+            val server = Server<Connection>(configuration)
+            addEndPoint(server)
+
+
+            server.onMessage<MessageWithTestCow> { m ->
+                server.logger.error("Received finish signal for test for: Client -> Server")
+                val `object` = m.testCow
+                val id = `object`.id()
+                Assert.assertEquals(23, id)
+                server.logger.error("Finished test for: Client -> Server")
+
+
+                server.logger.error("Starting test for: Server -> Client")
+                // NOTE: THIS IS BI-DIRECTIONAL!
+                rmi.create<TestCow>(123) {
+                    server.logger.error("Running test for: Server -> Client")
+                    runFun(this@onMessage, this@create)
+                    server.logger.error("Done with test for: Server -> Client")
+                }
+            }
+            server
+        }
+
+        val client = run {
+            val configuration = clientConfig()
+            configuration.enableIPv4 = false
+            configuration.enableIPv6 = false
+            configuration.enableIpc = true
+//            configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
+
+            val client = Client<Connection>(configuration)
+            addEndPoint(client)
+
+            client.onConnect {
+                rmi.create<TestCow>(23) {
+                    runBlocking {
+                        client.logger.error("Running test for: Client -> Server")
+                        runFun(this@onConnect, this@create)
+                        client.logger.error("Done with test for: Client -> Server")
+                    }
+                }
+            }
+
+            client.onMessage<MessageWithTestCow> { m ->
+                client.logger.error("Received finish signal for test for: Client -> Server")
+                val `object` = m.testCow
+                val id = `object`.id()
+                Assert.assertEquals(123, id)
+                client.logger.error("Finished test for: Client -> Server")
+                stopEndPoints()
+            }
+
+            client
+        }
+
+        server.bindIpc()
+        client.connectIpc()
+
+        waitForThreads()
+    }
 }

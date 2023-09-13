@@ -19,20 +19,171 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 
 object RmiCommonTest {
-    suspend fun runTests(connection: Connection, test: TestCow, remoteObjectID: Int) {
-        val remoteObject = RemoteObject.cast<TestCow>(test)
+    fun runTimeoutTest(connection: Connection, test: TestCow) {
+        val remoteObject = RemoteObject.cast(test)
+
+        remoteObject.responseTimeout = 1000
+        try {
+            test.moo("You should see this two seconds before...", 2000)
+            Assert.fail("We should be throwing a timeout exception!")
+        } catch (ignored: Exception) {
+        }
+
+        try {
+            test.moo("You should see this two seconds before...", 200)
+        } catch (ignored: Exception) {
+            Assert.fail("We should NOT be throwing a timeout exception!")
+        }
+
+        runBlocking {
+            try {
+                test.mooSuspend("You should see this two seconds before...", 2000)
+                Assert.fail("We should be throwing a timeout exception!")
+            } catch (ignored: Exception) {
+            }
+
+            try {
+                test.mooSuspend("You should see this two seconds before...", 200)
+            } catch (ignored: Exception) {
+                Assert.fail("We should NOT be throwing a timeout exception!")
+            }
+        }
+
+
+        // Test sending a reference to a remote object.
+        val m = MessageWithTestCow(test)
+        m.number = 678
+        m.text = "sometext"
+        connection.send(m)
+
+        remoteObject.enableHashCode(true)
+        remoteObject.enableEquals(true)
+
+        connection.logger.error("Finished tests")
+    }
+
+    fun runSyncTest(connection: Connection, test: TestCow) {
+        val remoteObject = RemoteObject.cast(test)
+
+        remoteObject.responseTimeout = 1000
+
+        remoteObject.sync {
+            try {
+                test.moo("You should see this two seconds before...", 2000)
+                Assert.fail("We should be throwing a timeout exception!")
+            } catch (ignored: Exception) {
+            }
+        }
+
+        runBlocking {
+            remoteObject.syncSuspend {
+                try {
+                    test.mooSuspend("You should see this two seconds before...", 2000)
+                    Assert.fail("We should be throwing a timeout exception!")
+                } catch (ignored: Exception) {
+                }
+            }
+        }
+
+
+        // Test sending a reference to a remote object.
+        val m = MessageWithTestCow(test)
+        m.number = 678
+        m.text = "sometext"
+        connection.send(m)
+
+        remoteObject.enableHashCode(true)
+        remoteObject.enableEquals(true)
+
+        connection.logger.error("Finished tests")
+    }
+
+    fun runASyncTest(connection: Connection, test: TestCow) {
+        val remoteObject = RemoteObject.cast(test)
+
+        remoteObject.responseTimeout = 100
+        remoteObject.async {
+            try {
+                test.moo("You should see this 400 m-seconds before...", 400)
+            } catch (ignored: Exception) {
+                Assert.fail("We should NOT be throwing a timeout exception!")
+            }
+        }
+
+
+        remoteObject.sync {
+            try {
+                test.moo("You should see this 400  m-seconds before...", 400)
+                Assert.fail("We should be throwing a timeout exception!")
+            } catch (ignored: Exception) {
+            }
+
+            remoteObject.async {
+                remoteObject.sync {
+                    try {
+                        test.moo("You should see this 400 m-seconds before...", 400)
+                        Assert.fail("We should be throwing a timeout exception!")
+                    } catch (ignored: Exception) {
+                    }
+                }
+
+                try {
+                    test.moo("You should see this 400 m-seconds before...", 400)
+                } catch (ignored: Exception) {
+                    Assert.fail("We should NOT be throwing a timeout exception!")
+                }
+            }
+
+            try {
+                test.moo("You should see this 400  m-seconds before...", 400)
+                Assert.fail("We should be throwing a timeout exception!")
+            } catch (ignored: Exception) {
+            }
+        }
+
+
+
+        runBlocking {
+            remoteObject.asyncSuspend {
+                try {
+                    test.mooSuspend("You should see this 400 m-seconds before...", 400)
+                } catch (ignored: Exception) {
+                    Assert.fail("We should NOT be throwing a timeout exception!")
+                }
+            }
+        }
+
+
+        // Test sending a reference to a remote object.
+        val m = MessageWithTestCow(test)
+        m.number = 678
+        m.text = "sometext"
+        connection.send(m)
+
+        remoteObject.enableHashCode(true)
+        remoteObject.enableEquals(true)
+
+        connection.logger.error("Finished tests")
+    }
+
+    fun runTests(connection: Connection, test: TestCow, remoteObjectID: Int) {
+        val remoteObject = RemoteObject.cast(test)
 
         // Default behavior. RMI is transparent, method calls behave like normal
         // (return values and exceptions are returned, call is synchronous)
         connection.logger.error("hashCode: " + test.hashCode())
         connection.logger.error("toString: $test")
 
-        test.withSuspend("test", 32)
-        val s1 = test.withSuspendAndReturn("test", 32)
-        Assert.assertEquals(s1, 32)
+        runBlocking {
+            test.withSuspend("test", 32)
+            val s1 = test.withSuspendAndReturn("test", 32)
+            Assert.assertEquals(s1, 32)
+        }
+
 
 
         // see what the "remote" toString() method is
@@ -50,6 +201,14 @@ object RmiCommonTest {
         connection.logger.error("...This")
         remoteObject.responseTimeout = 3000
 
+        runBlocking {
+            remoteObject.responseTimeout = 5000
+            test.mooSuspend("You should see this two seconds before...", 2000)
+            connection.logger.error("...This")
+            remoteObject.responseTimeout = 3000
+        }
+
+
         // Try exception handling
         try {
             test.throwException()
@@ -58,11 +217,14 @@ object RmiCommonTest {
             connection.logger.error("Expected exception (exception log should also be on the object impl side).", e)
         }
 
-        try {
-            test.throwSuspendException()
-            Assert.fail("sync should be throwing an exception!")
-        } catch (e: UnsupportedOperationException) {
-            connection.logger.error("\tExpected exception (exception log should also be on the object impl side).", e)
+        runBlocking {
+            try {
+                test.throwSuspendException()
+                Assert.fail("sync should be throwing an exception!")
+            }
+            catch (e: UnsupportedOperationException) {
+                connection.logger.error("\tExpected exception (exception log should also be on the object impl side).", e)
+            }
         }
 
 
@@ -70,8 +232,10 @@ object RmiCommonTest {
             moo("Bzzzzzz")
         }
 
-        remoteObject.syncSuspend {
-            moo("Bzzzzzz----MOOO", 22)
+        runBlocking {
+            remoteObject.syncSuspend {
+                moo("Bzzzzzz----MOOO", 22)
+            }
         }
 
 
@@ -81,13 +245,14 @@ object RmiCommonTest {
         connection.logger.error("I'm currently async: ${remoteObject.async}. Now testing ASYNC")
 
 
+        runBlocking {
+            remoteObject.asyncSuspend {
+                // calls that ignore the return value
+                mooSuspend("Bark. should wait 4 seconds", 4000) // this should not timeout (because it's async!)
 
-        remoteObject.asyncSuspend {
-            // calls that ignore the return value
-            moo("Bark. should wait 4 seconds", 4000) // this should not timeout (because it's async!)
-
-            // Non-blocking call that ignores the return value
-            Assert.assertEquals(0, test.id().toLong())
+                // Non-blocking call that ignores the return value
+                Assert.assertEquals(0, test.id().toLong())
+            }
         }
 
 
@@ -110,11 +275,14 @@ object RmiCommonTest {
             Assert.fail("Async should not be throwing an exception!")
         }
 
-        try {
-            test.throwSuspendException()
-        } catch (e: IllegalStateException) {
-            // exceptions are not caught when async = true!
-            Assert.fail("Async should not be throwing an exception!")
+        runBlocking {
+            try {
+                test.throwSuspendException()
+            }
+            catch (e: IllegalStateException) {
+                // exceptions are not caught when async = true!
+                Assert.fail("Async should not be throwing an exception!")
+            }
         }
 
 
@@ -129,9 +297,11 @@ object RmiCommonTest {
         remoteObject.responseTimeout = 6000
         connection.logger.error("You should see this 2 seconds before")
 
-        val slow = test.slow()
-        connection.logger.error("...This")
-        Assert.assertEquals(slow.toDouble(), 123.0, 0.0001)
+        runBlocking {
+            val slow = test.slow()
+            connection.logger.error("...This")
+            Assert.assertEquals(slow.toDouble(), 123.0, 0.0001)
+        }
 
 
         // Test sending a reference to a remote object.

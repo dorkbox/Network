@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,8 @@ interface TestCow : TestCowBase {
     fun moo()
     fun moo(value: String)
     fun mooTwo(value: String): String
-    suspend fun moo(value: String, delay: Long)
+    fun moo(value: String, delay: Long)
+    suspend fun mooSuspend(value: String, delay: Long)
     fun id(): Int
     suspend fun slow(): Float
 
