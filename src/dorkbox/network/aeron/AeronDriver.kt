@@ -934,12 +934,14 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                 // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
                 // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
                 // send the message.
-                // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
 
-                val exception = endPoint!!.newException(
-                    "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${errorCodeName(result)})"
-                )
-                listenerManager.notifyError(exception)
+                if (!endPoint!!.shutdownInProgress.value) {
+                    // we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
+                    val exception = endPoint.newException(
+                        "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${errorCodeName(result)})"
+                    )
+                    listenerManager.notifyError(exception)
+                }
                 return false
             }
 
@@ -1034,12 +1036,15 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
             }
 
             if (result == Publication.CLOSED) {
-                // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
 
-                val exception = endPoint!!.newException(
-                    "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${errorCodeName(result)})"
-                )
-                listenerManager.notifyError(exception)
+                if (!endPoint!!.shutdownInProgress.value) {
+                    // we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
+
+                    val exception = endPoint.newException(
+                        "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${errorCodeName(result)})"
+                    )
+                    listenerManager.notifyError(exception)
+                }
                 return false
             }
 
