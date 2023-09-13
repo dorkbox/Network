@@ -138,7 +138,9 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
                 val args = message.args
                 val sendResponse = rmiId != RemoteObjectStorage.ASYNC_RMI // async is always with a '1', and we should NOT send a message back if it is '1'
 
-                logger.trace { "RMI received: $rmiId" }
+                if (logger.isTraceEnabled) {
+                    logger.trace { "RMI received: $rmiId" }
+                }
 
                 val implObject: Any? = if (isGlobal) {
                     getImplObject(rmiObjectId)
@@ -160,24 +162,33 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
                     return
                 }
 
-                logger.trace {
-                    var argString = ""
-                    if (args != null) {
-                        argString = Arrays.deepToString(args)
-                        argString = argString.substring(1, argString.length - 1)
-                    }
+                if (logger.isTraceEnabled) {
+                    logger.trace {
+                        var argString = ""
+                        if (args != null && args.isNotEmpty()) {
+                            // long byte arrays have SERIOUS problems!
+                            argString = Arrays.deepToString(args.map {
+                                if (it is ByteArray && it.size > 256) {
+                                    "ByteArray(length=${it.size})"
+                                }  else {
+                                    it
+                                }
+                            }.toTypedArray())
+                            argString = argString.substring(1, argString.length - 1)
+                        }
 
-                    val stringBuilder = StringBuilder(128)
-                    stringBuilder.append(connection.toString()).append(" received: ").append(implObject.javaClass.simpleName)
-                    stringBuilder.append(":").append(rmiObjectId)
-                    stringBuilder.append("#").append(cachedMethod.method.name)
-                    stringBuilder.append("(").append(argString).append(")")
+                        val stringBuilder = StringBuilder(128)
+                        stringBuilder.append(connection.toString()).append(" received: ").append(implObject.javaClass.simpleName)
+                        stringBuilder.append(":").append(rmiObjectId)
+                        stringBuilder.append("#").append(cachedMethod.method.name)
+                        stringBuilder.append("(").append(argString).append(")")
 
-                    if (cachedMethod.overriddenMethod != null) {
-                        // did we override our cached method? THIS IS NOT COMMON.
-                        stringBuilder.append(" [Connection method override]")
+                        if (cachedMethod.overriddenMethod != null) {
+                            // did we override our cached method? THIS IS NOT COMMON.
+                            stringBuilder.append(" [Connection method override]")
+                        }
+                        stringBuilder.toString()
                     }
-                    stringBuilder.toString()
                 }
 
                 var result: Any?
@@ -269,7 +280,9 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
     }
 
     private fun returnRmiMessage(message: MethodRequest, result: Any?, logger: KLogger): MethodResponse {
-        logger.trace { "RMI return. Send: ${RmiUtils.unpackUnsignedRight(message.packedId)}" }
+        if (logger.isTraceEnabled) {
+            logger.trace { "RMI return. Send: ${RmiUtils.unpackUnsignedRight(message.packedId)}" }
+        }
 
         val rmiMessage = MethodResponse()
         rmiMessage.packedId = message.packedId
