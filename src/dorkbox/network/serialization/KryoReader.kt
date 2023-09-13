@@ -122,7 +122,7 @@ class KryoReader<CONNECTION: Connection>(private val maxMessageSize: Int) : Kryo
      * + class and object bytes +
      * ++++++++++++++++++++++++++
      */
-    private fun read(connection: CONNECTION, reader: Input): Any? {
+    fun read(connection: CONNECTION, reader: Input): Any? {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 
