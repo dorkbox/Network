@@ -25,6 +25,7 @@ import org.agrona.ExpandableDirectByteBuffer
 import org.junit.Assert
 import org.junit.Test
 import java.io.File
+import java.rmi.server.RemoteObject
 import java.security.SecureRandom
 
 class StreamingTest : BaseTest() {
@@ -78,23 +79,69 @@ class StreamingTest : BaseTest() {
     }
 
     @Test
-    fun sendFile() {
-        val file = File("LICENSE")
+    fun sendRmiStreamingObject() {
+        //  if this number is too high, we will run out of memory
+        // ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
+        val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 32
+        val hugeData = ByteArray(sizeToTest)
+        SecureRandom().nextBytes(hugeData)
+
 
         val server = run {
             val configuration = serverConfig()
+            configuration.serialization.rmi.register(TestStream::class.java, TestStreamCow::class.java)
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
 
-            server.onMessage<File> {
-                logger.error { "received data, shutting down!" }
-                logger.error { "FILE: $it" }
-                Assert.assertArrayEquals(file.sha256(), it.sha256())
-                it.delete()
-
-                stopEndPoints()
+            server.onInit {
+                rmi.save(TestStreamCow(this@StreamingTest, hugeData), 765)
             }
+
+            server
+        }
+
+        val client = run {
+            val config = clientConfig()
+
+            val client: Client<Connection> = Client(config) {
+                Connection(it)
+            }
+            addEndPoint(client)
+
+            client.onConnect {
+                logger.error { "Sending huge data: ${Sys.getSizePretty(hugeData.size)} bytes" }
+                val remote = rmi.get<TestStream>(765)
+                dorkbox.network.rmi.RemoteObject.cast(remote).async = true
+                remote.send(hugeData)
+                logger.error { "Done sending huge data: ${hugeData.size} bytes" }
+            }
+
+            client
+        }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
+
+        waitForThreads()
+    }
+
+    @Test
+    fun sendRmiFile() {
+        val file = File("LICENSE")
+
+        val server = run {
+            val configuration = serverConfig()
+            configuration.serialization.rmi.register(TestStream::class.java, TestStreamCow::class.java)
+
+            val server: Server<Connection> = Server(configuration)
+            addEndPoint(server)
+
+            server.onInit {
+                rmi.save(TestStreamCow(this@StreamingTest, null, file), 765)
+            }
+
             server
         }
 
@@ -108,7 +155,8 @@ class StreamingTest : BaseTest() {
 
             client.onConnect {
                 logger.error { "Sending file: $file" }
-                send(file)
+                val remote = rmi.get<TestStream>(765)
+                remote.send(file)
                 logger.error { "Done sending file: $file" }
             }
 
@@ -120,5 +168,36 @@ class StreamingTest : BaseTest() {
 
 
         waitForThreads()
+    }
+
+}
+
+interface TestStream {
+    fun send(byteArray: ByteArray)
+    fun send(file: File)
+}
+
+class TestStreamCow(val unitTest: BaseTest, val hugeData: ByteArray? = null, val file: File? = null) : TestStream {
+    override fun send(byteArray: ByteArray) {
+        // not used
+    }
+
+    override fun send(file: File) {
+        // not used
+    }
+
+    fun send(connection: Connection, byteArray: ByteArray) {
+        connection.logger.error { "received data, shutting down!" }
+        Assert.assertEquals(hugeData!!.size, byteArray.size)
+        Assert.assertArrayEquals(hugeData, byteArray)
+        unitTest.stopEndPoints()
+    }
+
+    fun send(connection: Connection, file: File) {
+        connection.logger.error { "received data, shutting down!" }
+        connection.logger.error { "FILE: $file" }
+        Assert.assertArrayEquals(this.file!!.sha256(), file.sha256())
+        file.delete()
+        unitTest.stopEndPoints()
     }
 }

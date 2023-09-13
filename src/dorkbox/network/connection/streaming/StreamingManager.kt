@@ -204,7 +204,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 val streamedMessage = if (input != null) {
                         val kryo = endPoint.serialization.takeRead()
                         try {
-                            kryo.read(input)
+                            kryo.read(connection, input)
                         } catch (e: Exception) {
                             // something SUPER wrong!
                             // more critical error sending the message. we shouldn't retry or anything.
@@ -240,20 +240,8 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 }
 
 
-                val listenerManager = endPoint.listenerManager
-                try {
-                    var hasListeners = listenerManager.notifyOnMessage(connection, streamedMessage)
-
-                    // each connection registers, and is polled INDEPENDENTLY for messages.
-                    hasListeners = hasListeners or connection.notifyOnMessage(streamedMessage)
-
-                    if (!hasListeners) {
-                        logger.error("No streamed message callbacks found for ${streamedMessage::class.java.name}")
-                    }
-                } catch (e: Exception) {
-                    val newException = StreamingException("Error processing message ${streamedMessage::class.java.name}", e)
-                    listenerManager.notifyError(connection, newException)
-                }
+                // this can be a regular message or an RMI message. Redispatch!
+                endPoint.processMessageFromChannel(connection, streamedMessage)
             }
             StreamingState.FAILED -> {
                 val output = streamingDataInMemory.remove(streamId)
