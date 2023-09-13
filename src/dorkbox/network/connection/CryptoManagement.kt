@@ -22,7 +22,7 @@ import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
 import dorkbox.network.serialization.SettingsStore
 import dorkbox.util.entropy.Entropy
-import mu.KLogger
+import org.slf4j.Logger
 import java.math.BigInteger
 import java.net.InetAddress
 import java.security.KeyFactory
@@ -42,7 +42,7 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Management for all the crypto stuff used
  */
-internal class CryptoManagement(val logger: KLogger,
+internal class CryptoManagement(val logger: Logger,
                                 private val settingsStore: SettingsStore,
                                 type: Class<*>,
                                 private val enableRemoteSignatureValidation: Boolean) {

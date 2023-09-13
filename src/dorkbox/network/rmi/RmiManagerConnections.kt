@@ -25,10 +25,10 @@ import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteResponse
 import dorkbox.network.serialization.Serialization
-import mu.KLogger
+import org.slf4j.Logger
 
 class RmiManagerConnections<CONNECTION: Connection> internal constructor(
-    private val logger: KLogger,
+    private val logger: Logger,
     private val responseManager: ResponseManager,
     private val listenerManager: ListenerManager<CONNECTION>,
     private val serialization: Serialization<CONNECTION>,

@@ -21,15 +21,15 @@ import dorkbox.network.aeron.endpoint
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.CommonContext
 import io.aeron.Publication
-import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
+import org.slf4j.LoggerFactory
 import java.util.concurrent.*
 
 class AeronPubSubTest : BaseTest() {
     @Test
     fun connectTest() {
-        val log = KotlinLogging.logger("ConnectTest")
+        val log = LoggerFactory.getLogger("ConnectTest")
 
         // NOTE: once a config is assigned to a driver, the config cannot be changed
         val totalCount = 40
@@ -112,7 +112,7 @@ class AeronPubSubTest : BaseTest() {
 
     @Test()
     fun connectFailWithBadSessionIdTest() {
-        val log = KotlinLogging.logger("ConnectTest")
+        val log = LoggerFactory.getLogger("ConnectTest")
 
         // NOTE: once a config is assigned to a driver, the config cannot be changed
         val totalCount = 40

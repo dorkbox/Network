@@ -20,9 +20,9 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.SettingsStore
 import dorkbox.storage.Storage
-import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
+import org.slf4j.LoggerFactory
 import java.io.File
 
 class StorageTest : BaseTest() {
@@ -47,7 +47,7 @@ class StorageTest : BaseTest() {
 
     @Test
     fun memoryTest() {
-        val salt1 = SettingsStore(Storage.Memory(), KotlinLogging.logger("test1")).use { it.salt }
+        val salt1 = SettingsStore(Storage.Memory(), LoggerFactory.getLogger("test1")).use { it.salt }
 
         val salt2 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Memory() }).use { it.storage.salt }
         val salt3 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Memory() }).use { it.storage.salt }
@@ -82,8 +82,8 @@ class StorageTest : BaseTest() {
     fun propFileTest() {
         val file = File("test.db").absoluteFile
 
-        val salt1 = SettingsStore(Storage.Property(), KotlinLogging.logger("test1")).use { it.salt }
-        val salt2 = SettingsStore(Storage.Property(), KotlinLogging.logger("test2")).use { it.salt }
+        val salt1 = SettingsStore(Storage.Property(), LoggerFactory.getLogger("test1")).use { it.salt }
+        val salt2 = SettingsStore(Storage.Property(), LoggerFactory.getLogger("test2")).use { it.salt }
 
         Assert.assertArrayEquals(salt1, salt2)
         file.delete()

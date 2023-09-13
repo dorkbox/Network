@@ -21,10 +21,6 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
-import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.Serializer
-import com.esotericsoftware.kryo.io.Input
-import com.esotericsoftware.kryo.io.Output
 import dorkbox.netUtil.IPv4
 import dorkbox.network.Client
 import dorkbox.network.ClientConfiguration
@@ -154,11 +150,11 @@ class AeronClientServerForever {
         client.onMessage<NoGarbageObj> { message ->
             val andIncrement = count.getAndIncrement()
             if ((andIncrement % 100000) == 0L) {
-                logger.error { "Sending messages: $andIncrement" }
+                logger.error("Sending messages: $andIncrement")
             }
             if (andIncrement > 0 && (andIncrement % 500000) == 0L) {
                 // we are measuring roundtrip performance
-                logger.error { "For 1,000,000 messages: ${Sys.getTimePrettyFull(time.elapsedNanos())}" }
+                logger.error("For 1,000,000 messages: ${Sys.getTimePrettyFull(time.elapsedNanos())}")
                 time.reset()
                 time.start()
             }

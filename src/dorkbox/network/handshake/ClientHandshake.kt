@@ -26,12 +26,12 @@ import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
-import mu.KLogger
 import org.agrona.DirectBuffer
+import org.slf4j.Logger
 
 internal class ClientHandshake<CONNECTION: Connection>(
     private val client: Client<CONNECTION>,
-    private val logger: KLogger
+    private val logger: Logger
 ) {
 
     // @Volatile is used BECAUSE suspension of coroutines can continue on a DIFFERENT thread. We want to make sure that thread visibility is
@@ -92,8 +92,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 if (msg !is HandshakeMessage) {
                     throw ClientRejectedException("[$logInfo] Connection not allowed! unrecognized message: $msg") .apply { cleanAllStackTrace() }
                 } else if (logger.isTraceEnabled) {
-
-                    logger.trace { "[$logInfo] (${msg.connectKey}) received HS: $msg" }
+                    logger.trace("[$logInfo] (${msg.connectKey}) received HS: $msg")
                 }
                 msg
             } catch (e: Exception) {

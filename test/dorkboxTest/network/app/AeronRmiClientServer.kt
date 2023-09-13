@@ -121,12 +121,12 @@ class AeronRmiClientServer {
                 val client = acs.client(0)
 
                 client.onDisconnect {
-                    logger.error { "Disconnect -> Reconnect..." }
+                    logger.error("Disconnect -> Reconnect...")
                     client.reconnect()
                 }
 
                 client.onConnect {
-                    logger.error { "Starting test..." }
+                    logger.error("Starting test...")
                     val secureRandom = SecureRandom()
                     val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 32
 
@@ -137,17 +137,17 @@ class AeronRmiClientServer {
                     var count = 0
                     var timed = 0L
 
-                    client.logger.error { "Initializing test." }
+                    client.logger.error("Initializing test.")
 
                     // just to start it up.
                     repeat(15) {
                         if (!client.send(hugeData)) {
-                            client.logger.error { "Unable to send data!" }
+                            client.logger.error("Unable to send data!")
                             return@onConnect
                         }
                     }
 
-                    client.logger.error { "Starting test." }
+                    client.logger.error("Starting test.")
 
 
                     val allStopwatch = Stopwatch.createStarted()
@@ -166,12 +166,12 @@ class AeronRmiClientServer {
                     val amountInmb = (count.toLong()*sizeToTest*8)/Sys.MEGABYTE
                     val fullElapsed = allStopwatch.elapsedNanos()
 
-                    client.logger.error { "Finished $count rounds in: ${Sys.getTimePrettyFull(fullElapsed)}" }
-                    client.logger.error { "Sending data portion took: ${Sys.getTimePrettyFull(timed)} for $amountInMB MB" }
+                    client.logger.error("Finished $count rounds in: ${Sys.getTimePrettyFull(fullElapsed)}")
+                    client.logger.error("Sending data portion took: ${Sys.getTimePrettyFull(timed)} for $amountInMB MB")
 
                     val timedInSeconds = TimeUnit.NANOSECONDS.toSeconds(timed)
-                    client.logger.error { "Rate is: ${amountInMB/timedInSeconds} MB/s" }
-                    client.logger.error { "Rate is: ${amountInmb/timedInSeconds} mb/s" }
+                    client.logger.error("Rate is: ${amountInMB/timedInSeconds} MB/s")
+                    client.logger.error("Rate is: ${amountInmb/timedInSeconds} mb/s")
                 }
 
                 return client
@@ -184,7 +184,7 @@ class AeronRmiClientServer {
                     val server = acs.server()
 
                     server.onMessage<ByteArray> {
-                        logger.error { "Received Byte array!" }
+                        logger.error("Received Byte array!")
                     }
 
                     server.bind(2000, 2001)
@@ -196,7 +196,7 @@ class AeronRmiClientServer {
                     client.connect(config.ip, 2000, 2001, 0) // UDP connection via loopback
 
                     client.waitForClose()
-                    client.logger.error { "DONE WAITING" }
+                    client.logger.error("DONE WAITING")
                 } else {
                     val server = acs.server()
                     server.onMessage<ByteArray> {
@@ -209,7 +209,7 @@ class AeronRmiClientServer {
                     client.connectIpc()
 
                     client.waitForClose()
-                    client.logger.error { "DONE WAITING" }
+                    client.logger.error("DONE WAITING")
                 }
 
             } catch (e: Exception) {
@@ -388,7 +388,7 @@ class AeronRmiClientServer {
         }
 
         SigInt.register {
-            server.logger.info { "Shutting down via sig-int command" }
+            server.logger.info("Shutting down via sig-int command")
             server.close()
         }
 

@@ -25,7 +25,6 @@ import org.agrona.ExpandableDirectByteBuffer
 import org.junit.Assert
 import org.junit.Test
 import java.io.File
-import java.rmi.server.RemoteObject
 import java.security.SecureRandom
 
 class StreamingTest : BaseTest() {
@@ -46,7 +45,7 @@ class StreamingTest : BaseTest() {
             addEndPoint(server)
 
             server.onMessage<ByteArray> {
-                logger.error { "received data, shutting down!" }
+                logger.error("received data, shutting down!")
                 Assert.assertEquals(sizeToTest, it.size)
                 Assert.assertArrayEquals(hugeData, it)
                 stopEndPoints()
@@ -63,9 +62,9 @@ class StreamingTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect {
-                logger.error { "Sending huge data: ${Sys.getSizePretty(hugeData.size)} bytes" }
+                logger.error("Sending huge data: ${Sys.getSizePretty(hugeData.size)} bytes")
                 send(hugeData)
-                logger.error { "Done sending huge data: ${hugeData.size} bytes" }
+                logger.error("Done sending huge data: ${hugeData.size} bytes")
             }
 
             client
@@ -110,11 +109,11 @@ class StreamingTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect {
-                logger.error { "Sending huge data: ${Sys.getSizePretty(hugeData.size)} bytes" }
+                logger.error("Sending huge data: ${Sys.getSizePretty(hugeData.size)} bytes")
                 val remote = rmi.get<TestStream>(765)
                 dorkbox.network.rmi.RemoteObject.cast(remote).async = true
                 remote.send(hugeData)
-                logger.error { "Done sending huge data: ${hugeData.size} bytes" }
+                logger.error("Done sending huge data: ${hugeData.size} bytes")
             }
 
             client
@@ -154,10 +153,10 @@ class StreamingTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect {
-                logger.error { "Sending file: $file" }
+                logger.error("Sending file: $file")
                 val remote = rmi.get<TestStream>(765)
                 remote.send(file)
-                logger.error { "Done sending file: $file" }
+                logger.error("Done sending file: $file")
             }
 
             client
@@ -187,15 +186,15 @@ class TestStreamCow(val unitTest: BaseTest, val hugeData: ByteArray? = null, val
     }
 
     fun send(connection: Connection, byteArray: ByteArray) {
-        connection.logger.error { "received data, shutting down!" }
+        connection.logger.error("received data, shutting down!")
         Assert.assertEquals(hugeData!!.size, byteArray.size)
         Assert.assertArrayEquals(hugeData, byteArray)
         unitTest.stopEndPoints()
     }
 
     fun send(connection: Connection, file: File) {
-        connection.logger.error { "received data, shutting down!" }
-        connection.logger.error { "FILE: $file" }
+        connection.logger.error("received data, shutting down!")
+        connection.logger.error("FILE: $file")
         Assert.assertArrayEquals(this.file!!.sha256(), file.sha256())
         file.delete()
         unitTest.stopEndPoints()

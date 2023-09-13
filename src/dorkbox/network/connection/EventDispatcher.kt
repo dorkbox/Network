@@ -19,7 +19,7 @@ package dorkbox.network.connection
 import dorkbox.network.Configuration
 import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
-import mu.KotlinLogging
+import org.slf4j.LoggerFactory
 import java.util.concurrent.*
 
 /**
@@ -35,7 +35,7 @@ enum class EventDispatcher {
         private val DEBUG_EVENTS = false
         private val traceId = atomic(0)
 
-        private val logger = KotlinLogging.logger(EventDispatcher::class.java.simpleName)
+        private val logger = LoggerFactory.getLogger(EventDispatcher::class.java.simpleName)
 
         private val threadIds = entries.map { atomic(0L) }.toTypedArray()
 
@@ -131,11 +131,11 @@ enum class EventDispatcher {
                 val id = traceId.getAndIncrement()
                 executors[eventId].submit {
                     if (logger.isDebugEnabled) {
-                        logger.debug { "Starting $event : $id" }
+                        logger.debug("Starting $event : $id")
                     }
                     function()
                     if (logger.isDebugEnabled) {
-                        logger.debug { "Finished $event : $id" }
+                        logger.debug("Finished $event : $id")
                     }
                 }
             } else {

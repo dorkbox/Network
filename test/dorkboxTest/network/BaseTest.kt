@@ -32,8 +32,7 @@ import dorkbox.storage.Storage
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
 import dorkbox.util.exceptions.InitializationException
-import kotlinx.coroutines.*
-import org.jetbrains.annotations.Debug
+import kotlinx.coroutines.DelicateCoroutinesApi
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
@@ -188,15 +187,15 @@ abstract class BaseTest {
             throw IllegalStateException("Unable to continue, AERON was unable to stop.")
         }
 
-        endPoint.onInit { logger.error { "UNIT TEST: init $id (${uuid.toHexString()})" } }
-        endPoint.onConnect { logger.error { "UNIT TEST: connect $id (${uuid.toHexString()})" } }
-        endPoint.onDisconnect { logger.error { "UNIT TEST: disconnect $id (${uuid.toHexString()})" } }
+        endPoint.onInit { logger.error("UNIT TEST: init $id (${uuid.toHexString()})") }
+        endPoint.onConnect { logger.error("UNIT TEST: connect $id (${uuid.toHexString()})") }
+        endPoint.onDisconnect { logger.error("UNIT TEST: disconnect $id (${uuid.toHexString()})") }
 
-        endPoint.onError { logger.error(it) { "UNIT TEST: ERROR! $id (${uuid.toHexString()})" } }
+        endPoint.onError { logger.error("UNIT TEST: ERROR! $id (${uuid.toHexString()})", it) }
 
         endPoint.onError {
             if (it is KryoException) {
-                logger.error(it) { "UNIT TEST: ERROR! $id (${uuid.toHexString()})" }
+                logger.error("UNIT TEST: ERROR! $id (${uuid.toHexString()})", it)
                 Assert.fail("KryoException caught, and it shouldn't be!")
             }
         }

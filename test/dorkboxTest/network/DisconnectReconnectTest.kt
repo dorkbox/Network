@@ -22,9 +22,9 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import kotlinx.atomicfu.atomic
-import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
+import org.slf4j.LoggerFactory
 import java.util.concurrent.*
 
 class DisconnectReconnectTest : BaseTest() {
@@ -227,7 +227,7 @@ class DisconnectReconnectTest : BaseTest() {
         val latch = CountDownLatch(reconnects+1)
         val reconnectCount = atomic(0)
 
-        val log = KotlinLogging.logger("DCUnitTest")
+        val log = LoggerFactory.getLogger("DCUnitTest")
         // NOTE: once a config is assigned to a driver, the config cannot be changed
         val aeronDriver = AeronDriver(serverConfig(), log, null)
         aeronDriver.start()

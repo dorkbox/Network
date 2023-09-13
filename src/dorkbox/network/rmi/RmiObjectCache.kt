@@ -15,7 +15,7 @@
  */
 package dorkbox.network.rmi
 
-import mu.KLogger
+import org.slf4j.Logger
 
 /**
  * Cache for implementation and proxy objects.
@@ -23,7 +23,7 @@ import mu.KLogger
  * The impl/proxy objects CANNOT be stored in the same data structure, because their IDs are not tied to the same ID source (and there
  * would be conflicts in the data structure)
  */
-open class RmiObjectCache(logger: KLogger) {
+open class RmiObjectCache(logger: Logger) {
 
     private val implObjects = RemoteObjectStorage(logger)
 

@@ -31,19 +31,19 @@ import io.aeron.*
 import io.aeron.driver.MediaDriver
 import io.aeron.status.ChannelEndpointStatus
 import kotlinx.atomicfu.atomic
-import mu.KLogger
-import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.BackoffIdleStrategy
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.IOException
 import java.net.BindException
 import java.net.SocketException
 import java.util.concurrent.*
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.concurrent.locks.*
 import kotlin.concurrent.write
 
-internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration.MediaDriverConfig, logger: KLogger) {
+internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration.MediaDriverConfig, logger: Logger) {
     companion object {
         // on close, the publication CAN linger (in case a client goes away, and then comes back)
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
@@ -51,7 +51,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         private const val AERON_PUB_SUB_TIMEOUT = 50L // in MS
 
-        private val driverLogger = KotlinLogging.logger(AeronDriver::class.java.simpleName)
+        private val driverLogger = LoggerFactory.getLogger(AeronDriver::class.java.simpleName)
 
         private val onErrorGlobalList = atomic(Array<Throwable.() -> Unit>(0) { { } })
         private val onErrorGlobalLock = ReentrantReadWriteLock()
@@ -230,13 +230,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      *
      *  @return true if we are successfully connected to the aeron client
      */
-    fun start(logger: KLogger): Boolean = stateLock.write {
+    fun start(logger: Logger): Boolean = stateLock.write {
         require(!closed) { "Aeron Driver [$driverId]: Cannot start a driver that was closed. A new driver + context must be created" }
 
         val isLoaded = mediaDriver != null && aeron != null && aeron?.isClosed == false
         if (isLoaded) {
             if (logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: Already running... Not starting again." }
+                logger.debug("Aeron Driver [$driverId]: Already running... Not starting again.")
             }
             return true
         }
@@ -250,7 +250,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 // SOMETIMES aeron is in the middle of shutting down, and this prevents us from trying to connect to
                 // that instance
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Aeron Driver [$driverId]: Already running. Double checking status..." }
+                    logger.debug("Aeron Driver [$driverId]: Already running. Double checking status...")
                 }
                 Thread.sleep(context.driverTimeout / 2)
                 running = isRunning()
@@ -263,21 +263,21 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                     try {
                         mediaDriver = MediaDriver.launch(context.context)
                         if (logger.isDebugEnabled) {
-                            logger.debug { "Aeron Driver [$driverId]: Successfully started" }
+                            logger.debug("Aeron Driver [$driverId]: Successfully started")
                         }
                         break
                     } catch (e: Exception) {
-                        logger.warn(e) { "Aeron Driver [$driverId]: Unable to start at ${context.directory}. Retrying $count more times..." }
+                        logger.warn("Aeron Driver [$driverId]: Unable to start at ${context.directory}. Retrying $count more times...", e)
                         Thread.sleep(context.driverTimeout)
                     }
                 }
             } else if (logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: Not starting. It was already running." }
+                logger.debug("Aeron Driver [$driverId]: Not starting. It was already running.")
             }
 
             // if we were unable to load the aeron driver, don't continue.
             if (!running && mediaDriver == null) {
-                logger.error { "Aeron Driver [$driverId]: Not running and unable to start at ${context.directory}." }
+                logger.error("Aeron Driver [$driverId]: Not running and unable to start at ${context.directory}.")
                 return false
             }
         }
@@ -304,7 +304,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         // this might succeed if we can connect to the media driver
         aeron = Aeron.connect(aeronDriverContext)
         if (logger.isDebugEnabled) {
-            logger.debug { "Aeron Driver [$driverId]: Connected to '${context.directory}'" }
+            logger.debug("Aeron Driver [$driverId]: Connected to '${context.directory}'")
         }
 
         return true
@@ -320,7 +320,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      */
     @Suppress("DEPRECATION")
     fun addPublication(
-        logger: KLogger,
+        logger: Logger,
         publicationUri: ChannelUriStringBuilder,
         streamId: Int,
         logInfo: String,
@@ -345,7 +345,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
-            logger.error { "Aeron Driver [$driverId]: Aeron is closed, error creating publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId" }
+            logger.error("Aeron Driver [$driverId]: Aeron is closed, error creating publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId")
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a publication to aeron")
             ex.cleanAllStackTrace()
@@ -355,7 +355,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         val publication: ConcurrentPublication? = try {
             aeron1.addPublication(uri, streamId)
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Error creating publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId" }
+            logger.error("Aeron Driver [$driverId]: Error creating publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId", e)
 
             // this happens if the aeron media driver cannot actually establish connection... OR IF IT IS TOO FAST BETWEEN ADD AND REMOVE FOR THE SAME SESSION/STREAM ID!
             e.cleanAllStackTrace()
@@ -365,7 +365,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (publication == null) {
-            logger.error { "Aeron Driver [$driverId]: Error creating publication (is null) [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId" }
+            logger.error("Aeron Driver [$driverId]: Error creating publication (is null) [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId")
 
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a publication")
@@ -376,7 +376,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         var hasDelay = false
         while (publication.channelStatus() != ChannelEndpointStatus.ACTIVE || (!isIpc && publication.localSocketAddresses().isEmpty())) {
             if (publication.channelStatus() == ChannelEndpointStatus.ERRORED) {
-                logger.error { "Aeron Driver [$driverId]: Error creating publication (has errors) $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+                logger.error("Aeron Driver [$driverId]: Error creating publication (has errors) $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}")
 
                 // there was an error connecting to the aeron client or media driver.
                 val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding an publication")
@@ -387,7 +387,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (!hasDelay) {
                 hasDelay = true
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Aeron Driver [$driverId]: Delaying creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+                    logger.debug("Aeron Driver [$driverId]: Delaying creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}")
                 }
             }
             // the publication has not ACTUALLY been created yet!
@@ -395,7 +395,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (hasDelay && logger.isDebugEnabled) {
-            logger.debug { "Aeron Driver [$driverId]: Delayed creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+            logger.debug("Aeron Driver [$driverId]: Delayed creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}")
         }
 
 
@@ -405,7 +405,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (logger.isTraceEnabled) {
-            logger.trace { "Aeron Driver [$driverId]: Creating publication [$logInfo] :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}, channel=${publication.channel()}" }
+            logger.trace("Aeron Driver [$driverId]: Creating publication [$logInfo] :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}, channel=${publication.channel()}")
         }
         return publication
     }
@@ -419,7 +419,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      */
     @Suppress("DEPRECATION")
     fun addExclusivePublication(
-        logger: KLogger,
+        logger: Logger,
         publicationUri: ChannelUriStringBuilder,
         streamId: Int,
         logInfo: String,
@@ -441,7 +441,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
-            logger.error { "Aeron Driver [$driverId]: Aeron is closed, error creating ex-publication $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+            logger.error("Aeron Driver [$driverId]: Aeron is closed, error creating ex-publication $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}")
 
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding an ex-publication to aeron")
@@ -454,7 +454,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         val publication: ExclusivePublication? = try {
             aeron1.addExclusivePublication(uri, streamId)
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Error creating ex-publication $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+            logger.error("Aeron Driver [$driverId]: Error creating ex-publication $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}", e)
 
             // this happens if the aeron media driver cannot actually establish connection... OR IF IT IS TOO FAST BETWEEN ADD AND REMOVE FOR THE SAME SESSION/STREAM ID!
             e.cleanAllStackTrace()
@@ -464,7 +464,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (publication == null) {
-            logger.error { "Aeron Driver [$driverId]: Error creating ex-publication (is null) $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+            logger.error("Aeron Driver [$driverId]: Error creating ex-publication (is null) $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}")
 
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding an ex-publication")
@@ -475,7 +475,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         var hasDelay = false
         while (publication.channelStatus() != ChannelEndpointStatus.ACTIVE || (!isIpc && publication.localSocketAddresses().isEmpty())) {
             if (publication.channelStatus() == ChannelEndpointStatus.ERRORED) {
-                logger.error { "Aeron Driver [$driverId]: Error creating ex-publication (has errors) $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+                logger.error("Aeron Driver [$driverId]: Error creating ex-publication (has errors) $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}")
 
                 // there was an error connecting to the aeron client or media driver.
                 val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding an ex-publication")
@@ -487,7 +487,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (!hasDelay) {
                 hasDelay = true
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Aeron Driver [$driverId]: Delaying creation of ex-publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+                    logger.debug("Aeron Driver [$driverId]: Delaying creation of ex-publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}")
                 }
             }
             // the publication has not ACTUALLY been created yet!
@@ -495,7 +495,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (hasDelay) {
-            logger.debug { "Aeron Driver [$driverId]: Delayed creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+            logger.debug("Aeron Driver [$driverId]: Delayed creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}")
         }
 
         registeredPublications.getAndIncrement()
@@ -504,7 +504,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (logger.isTraceEnabled) {
-            logger.trace { "Aeron Driver [$driverId]: Creating ex-publication $logInfo :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}, channel=${publication.channel()}" }
+            logger.trace("Aeron Driver [$driverId]: Creating ex-publication $logInfo :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}, channel=${publication.channel()}")
         }
         return publication
     }
@@ -520,7 +520,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      */
     @Suppress("DEPRECATION")
     fun addSubscription(
-        logger: KLogger,
+        logger: Logger,
         subscriptionUri: ChannelUriStringBuilder,
         streamId: Int,
         logInfo: String,
@@ -546,7 +546,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
-            logger.error { "Aeron Driver [$driverId]: Aeron is closed, error creating subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+            logger.error("Aeron Driver [$driverId]: Aeron is closed, error creating subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}")
 
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription to aeron")
@@ -556,7 +556,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         val subscription = try {
             aeron1.addSubscription(uri, streamId)
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Error creating subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+            logger.error("Aeron Driver [$driverId]: Error creating subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}")
 
             e.cleanAllStackTrace()
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription", e)  // maybe not retry? or not clientRetry?
@@ -565,7 +565,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (subscription == null) {
-            logger.error { "Aeron Driver [$driverId]: Error creating subscription (is null) [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+            logger.error("Aeron Driver [$driverId]: Error creating subscription (is null) [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}")
 
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription")
@@ -576,7 +576,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         var hasDelay = false
         while (subscription.channelStatus() != ChannelEndpointStatus.ACTIVE || (!isIpc && subscription.localSocketAddresses().isEmpty())) {
             if (subscription.channelStatus() == ChannelEndpointStatus.ERRORED) {
-                logger.error { "Aeron Driver [$driverId]: Error creating subscription (has errors) $logInfo :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+                logger.error("Aeron Driver [$driverId]: Error creating subscription (has errors) $logInfo :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}")
 
                 // there was an error connecting to the aeron client or media driver.
                 val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding an subscription")
@@ -587,7 +587,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (!hasDelay) {
                 hasDelay = true
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Aeron Driver [$driverId]: Delaying creation of subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+                    logger.debug("Aeron Driver [$driverId]: Delaying creation of subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}")
                 }
             }
             // the subscription has not ACTUALLY been created yet!
@@ -595,7 +595,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (hasDelay && logger.isDebugEnabled) {
-            logger.debug { "Aeron Driver [$driverId]: Delayed creation of subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+            logger.debug("Aeron Driver [$driverId]: Delayed creation of subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}")
         }
 
         registeredSubscriptions.getAndIncrement()
@@ -604,7 +604,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (logger.isTraceEnabled) {
-            logger.trace { "Aeron Driver [$driverId]: Creating subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscriptionUri.sessionId()}, streamId=${subscription.streamId()}, channel=${subscription.channel()}" }
+            logger.trace("Aeron Driver [$driverId]: Creating subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscriptionUri.sessionId()}, streamId=${subscription.streamId()}, channel=${subscription.channel()}")
         }
         return subscription
     }
@@ -612,7 +612,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     /**
      * Guarantee that the publication is closed AND the backing file is removed
      */
-    fun close(publication: Publication, logger: KLogger, logInfo: String) = stateLock.write {
+    fun close(publication: Publication, logger: Logger, logInfo: String) = stateLock.write {
         val name = if (publication is ConcurrentPublication) {
             "publication"
         } else {
@@ -622,7 +622,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         val registrationId = publication.registrationId()
 
         if (logger.isTraceEnabled) {
-            logger.trace { "Aeron Driver [$driverId]: Closing $name file [$logInfo] :: regId=$registrationId, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
+            logger.trace("Aeron Driver [$driverId]: Closing $name file [$logInfo] :: regId=$registrationId, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}")
         }
 
 
@@ -636,7 +636,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             // This can throw exceptions!
             publication.close()
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Unable to close [$logInfo] $name $publication" }
+            logger.error("Aeron Driver [$driverId]: Unable to close [$logInfo] $name $publication", e)
         }
 
         if (publication is ConcurrentPublication) {
@@ -664,9 +664,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     /**
      * Guarantee that the publication is closed AND the backing file is removed
      */
-    fun close(subscription: Subscription, logger: KLogger, logInfo: String) = stateLock.write {
+    fun close(subscription: Subscription, logger: Logger, logInfo: String) = stateLock.write {
         if (logger.isTraceEnabled) {
-            logger.trace { "Aeron Driver [$driverId]: Closing subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
+            logger.trace("Aeron Driver [$driverId]: Closing subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}")
         }
 
         val aeron1 = aeron
@@ -679,7 +679,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             // This can throw exceptions!
             subscription.close()
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Unable to close [$logInfo] subscription $subscription" }
+            logger.error("Aeron Driver [$driverId]: Unable to close [$logInfo] subscription $subscription")
         }
 
         // aeron is async. close() doesn't immediately close, it just submits the close command!
@@ -701,7 +701,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      *
      * @return true if the media driver is STOPPED.
      */
-    fun ensureStopped(timeoutMS: Long, intervalTimeoutMS: Long, logger: KLogger): Boolean {
+    fun ensureStopped(timeoutMS: Long, intervalTimeoutMS: Long, logger: Logger): Boolean {
         if (closed) {
             return true
         }
@@ -715,7 +715,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (!didLog) {
                 didLog = true
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Aeron Driver [$driverId]: Still running (${aeronDirectory}). Waiting for it to stop..." }
+                    logger.debug("Aeron Driver [$driverId]: Still running (${aeronDirectory}). Waiting for it to stop...")
                 }
             }
             Thread.sleep(intervalTimeoutMS)
@@ -741,11 +741,11 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         return context.isRunning()
     }
 
-    fun isInUse(endPoint: EndPoint<*>?, logger: KLogger): Boolean {
+    fun isInUse(endPoint: EndPoint<*>?, logger: Logger): Boolean {
         // as many "sort-cuts" as we can for checking if the current Aeron Driver/client is still in use
         if (!isRunning()) {
             if (logger.isTraceEnabled) {
-                logger.trace { "Aeron Driver [$driverId]: not running" }
+                logger.trace("Aeron Driver [$driverId]: not running")
             }
             return false
         }
@@ -755,10 +755,10 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 val elements = registeredPublicationsTrace.elements
                 val joined = elements.joinToString()
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Aeron Driver [$driverId]: has [$joined] publications (${registeredPublications.value} total)" }
+                    logger.debug("Aeron Driver [$driverId]: has [$joined] publications (${registeredPublications.value} total)")
                 }
             } else if (logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: has publications (${registeredPublications.value} total)" }
+                logger.debug("Aeron Driver [$driverId]: has publications (${registeredPublications.value} total)")
             }
             return true
         }
@@ -768,17 +768,17 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 val elements = registeredSubscriptionsTrace.elements
                 val joined = elements.joinToString()
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Aeron Driver [$driverId]: has [$joined] subscriptions (${registeredSubscriptions.value} total)" }
+                    logger.debug("Aeron Driver [$driverId]: has [$joined] subscriptions (${registeredSubscriptions.value} total)")
                 }
             } else if (logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: has subscriptions (${registeredSubscriptions.value} total)" }
+                logger.debug("Aeron Driver [$driverId]: has subscriptions (${registeredSubscriptions.value} total)")
             }
             return true
         }
 
         if (endPointUsages.size() > 1 && !endPointUsages.contains(endPoint)) {
             if (logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: still referenced by ${endPointUsages.size()} endpoints" }
+                logger.debug("Aeron Driver [$driverId]: still referenced by ${endPointUsages.size()} endpoints")
             }
             return true
         }
@@ -798,7 +798,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         while (count > 0 && currentUsage > 0) {
             if (logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: in use, double checking status" }
+                logger.debug("Aeron Driver [$driverId]: in use, double checking status")
             }
             delayLingerTimeout()
             currentUsage = driverBacklog()?.snapshot()?.size ?: 0
@@ -813,7 +813,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         count = 3
         while (count > 0 && currentUsage > 0) {
             if (logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: in use, double checking status (long)" }
+                logger.debug("Aeron Driver [$driverId]: in use, double checking status (long)")
             }
             delayDriverTimeout()
             currentUsage = driverBacklog()?.snapshot()?.size ?: 0
@@ -821,7 +821,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (currentUsage > 0 && logger.isDebugEnabled) {
-            logger.debug { "Aeron Driver [$driverId]: usage is: $currentUsage" }
+            logger.debug("Aeron Driver [$driverId]: usage is: $currentUsage")
         }
 
         return currentUsage > 0
@@ -835,13 +835,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
      *
      * @return true if the driver was successfully stopped.
      */
-    fun close(endPoint: EndPoint<*>?, logger: KLogger): Boolean = stateLock.write {
+    fun close(endPoint: EndPoint<*>?, logger: Logger): Boolean = stateLock.write {
         if (endPoint != null) {
             endPointUsages.remove(endPoint)
         }
 
         if (logger.isTraceEnabled) {
-            logger.trace { "Aeron Driver [$driverId]: Requested close... (${endPointUsages.size()} endpoints still in use)" }
+            logger.trace("Aeron Driver [$driverId]: Requested close... (${endPointUsages.size()} endpoints still in use)")
         }
 
         // ignore the extra driver checks, because in SOME situations, when trying to reconnect upon an error, the
@@ -851,7 +851,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             }
             else {
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Aeron Driver [$driverId]: in use, not shutting down this instance." }
+                    logger.debug("Aeron Driver [$driverId]: in use, not shutting down this instance.")
                 }
 
                 // reset our contextDefine value, so that this configuration can safely be reused
@@ -863,7 +863,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         val removed = AeronDriver.driverConfigurations[driverId]
         if (removed == null) {
             if (logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: already closed. Ignoring close request." }
+                logger.debug("Aeron Driver [$driverId]: already closed. Ignoring close request.")
             }
             // reset our contextDefine value, so that this configuration can safely be reused
             endPoint?.config?.contextDefined = false
@@ -871,7 +871,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (logger.isDebugEnabled) {
-            logger.debug { "Aeron Driver [$driverId]: Closing..." }
+            logger.debug("Aeron Driver [$driverId]: Closing...")
         }
 
         // we have to assign context BEFORE we close, because the `getter` for context will create it if necessary
@@ -884,7 +884,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (endPoint != null) {
                 endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error stopping", e))
             } else {
-                logger.error(e) { "Aeron Driver [$driverId]: Error stopping" }
+                logger.error("Aeron Driver [$driverId]: Error stopping", e)
             }
         }
 
@@ -893,7 +893,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         if (mediaDriver == null) {
             if (logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: No driver started, not stopping driver or context." }
+                logger.debug("Aeron Driver [$driverId]: No driver started, not stopping driver or context.")
             }
 
             // reset our contextDefine value, so that this configuration can safely be reused
@@ -902,7 +902,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         }
 
         if (logger.isDebugEnabled) {
-            logger.debug { "Aeron Driver [$driverId]: Stopping driver at '${driverDirectory}'..." }
+            logger.debug("Aeron Driver [$driverId]: Stopping driver at '${driverDirectory}'...")
         }
 
         // if we are the ones that started the media driver, then we must be the ones to close it
@@ -912,7 +912,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (endPoint != null) {
                 endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error closing", e))
             } else {
-                logger.error(e) { "Aeron Driver [$driverId]: Error closing" }
+                logger.error("Aeron Driver [$driverId]: Error closing", e)
             }
         }
 
@@ -933,13 +933,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             // wait for the media driver to actually stop
             var count = 10
             while (--count >= 0 && isRunning()) {
-                logger.warn { "Aeron Driver [$driverId]: still running at '${driverDirectory}'. Waiting for it to stop. Trying to close $count more times." }
+                logger.warn("Aeron Driver [$driverId]: still running at '${driverDirectory}'. Waiting for it to stop. Trying to close $count more times.")
                 Thread.sleep(timeout)
             }
         }
         catch (e: Exception) {
             if (!mustRestartDriverOnError) {
-                logger.error(e) { "Error while checking isRunning() state." }
+                logger.error("Error while checking isRunning() state.", e)
             }
         }
 
@@ -955,14 +955,14 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                 if (endPoint != null) {
                     endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory"))
                 } else {
-                    logger.error { "Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory" }
+                    logger.error("Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory")
                 }
             }
         } catch (e: Exception) {
             if (endPoint != null) {
                 endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory", e))
             } else {
-                logger.error(e) { "Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory" }
+                logger.error("Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory", e)
             }
         }
 
@@ -971,7 +971,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (endPoint != null) {
                 endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory"))
             } else {
-                logger.error { "Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory" }
+                logger.error("Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory")
             }
         }
 
@@ -983,7 +983,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         AeronDriver.driverConfigurations.remove(driverId)
 
         if (logger.isDebugEnabled) {
-            logger.debug { "Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'" }
+            logger.debug("Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'")
         }
         closed = true
 
@@ -1025,7 +1025,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     fun deleteLogFile(image: Image) {
         val file = getMediaDriverFile(image)
         if (driverLogger.isDebugEnabled) {
-            driverLogger.debug { "Deleting log file: $image" }
+            driverLogger.debug("Deleting log file: $image")
         }
         file.delete()
     }

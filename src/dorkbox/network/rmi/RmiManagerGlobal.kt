@@ -19,11 +19,11 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.messages.*
 import dorkbox.network.serialization.Serialization
 import kotlinx.coroutines.runBlocking
-import mu.KLogger
+import org.slf4j.Logger
 import java.lang.reflect.Proxy
 import java.util.*
 
-internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiObjectCache(logger) {
+internal class RmiManagerGlobal<CONNECTION: Connection>(logger: Logger) : RmiObjectCache(logger) {
 
     companion object {
         /**
@@ -95,7 +95,7 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
         message: Any,
         rmiConnectionSupport: RmiManagerConnections<CONNECTION>,
         responseManager: ResponseManager,
-        logger: KLogger
+        logger: Logger
     ) {
         when (message) {
             is ConnectionObjectCreateRequest -> {
@@ -139,7 +139,7 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
                 val sendResponse = rmiId != RemoteObjectStorage.ASYNC_RMI // async is always with a '1', and we should NOT send a message back if it is '1'
 
                 if (logger.isTraceEnabled) {
-                    logger.trace { "RMI received: $rmiId" }
+                    logger.trace("RMI received: $rmiId")
                 }
 
                 val implObject: Any? = if (isGlobal) {
@@ -163,32 +163,32 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
                 }
 
                 if (logger.isTraceEnabled) {
-                    logger.trace {
-                        var argString = ""
-                        if (args != null && args.isNotEmpty()) {
-                            // long byte arrays have SERIOUS problems!
-                            argString = Arrays.deepToString(args.map {
-                                if (it is ByteArray && it.size > 256) {
-                                    "ByteArray(length=${it.size})"
-                                }  else {
-                                    it
-                                }
-                            }.toTypedArray())
-                            argString = argString.substring(1, argString.length - 1)
-                        }
-
-                        val stringBuilder = StringBuilder(128)
-                        stringBuilder.append(connection.toString()).append(" received: ").append(implObject.javaClass.simpleName)
-                        stringBuilder.append(":").append(rmiObjectId)
-                        stringBuilder.append("#").append(cachedMethod.method.name)
-                        stringBuilder.append("(").append(argString).append(")")
-
-                        if (cachedMethod.overriddenMethod != null) {
-                            // did we override our cached method? THIS IS NOT COMMON.
-                            stringBuilder.append(" [Connection method override]")
-                        }
-                        stringBuilder.toString()
+                    var argString = ""
+                    if (args != null && args.isNotEmpty()) {
+                        // long byte arrays have SERIOUS problems!
+                        argString = Arrays.deepToString(args.map {
+                            if (it is ByteArray && it.size > 256) {
+                                "ByteArray(length=${it.size})"
+                            }  else {
+                                it
+                            }
+                        }.toTypedArray())
+                        argString = argString.substring(1, argString.length - 1)
                     }
+
+                    val stringBuilder = StringBuilder(128)
+                    stringBuilder.append(connection.toString()).append(" received: ").append(implObject.javaClass.simpleName)
+                    stringBuilder.append(":").append(rmiObjectId)
+                    stringBuilder.append("#").append(cachedMethod.method.name)
+                    stringBuilder.append("(").append(argString).append(")")
+
+                    if (cachedMethod.overriddenMethod != null) {
+                        // did we override our cached method? THIS IS NOT COMMON.
+                        stringBuilder.append(" [Connection method override]")
+                    }
+
+
+                    logger.trace(stringBuilder.toString())
                 }
 
                 var result: Any?
@@ -231,7 +231,7 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
                                 suspendResult = null
                             } else if (suspendResult is Throwable) {
                                 RmiUtils.cleanStackTraceForImpl(suspendResult, true)
-                                logger.error(suspendResult) { "Connection ${connection.id}" }
+                                logger.error("Connection ${connection.id}", suspendResult)
                             }
 
                             if (sendResponse) {
@@ -279,9 +279,9 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
         }
     }
 
-    private fun returnRmiMessage(message: MethodRequest, result: Any?, logger: KLogger): MethodResponse {
+    private fun returnRmiMessage(message: MethodRequest, result: Any?, logger: Logger): MethodResponse {
         if (logger.isTraceEnabled) {
-            logger.trace { "RMI return. Send: ${RmiUtils.unpackUnsignedRight(message.packedId)}" }
+            logger.trace("RMI return. Send: ${RmiUtils.unpackUnsignedRight(message.packedId)}")
         }
 
         val rmiMessage = MethodResponse()

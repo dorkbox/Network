@@ -40,10 +40,10 @@ import io.aeron.Image
 import io.aeron.Publication
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
-import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
 import org.agrona.DirectBuffer
+import org.slf4j.Logger
 import java.net.Inet4Address
 import java.util.concurrent.*
 
@@ -57,7 +57,7 @@ internal object ServerHandshakePollers {
     }
 
     class IpcProc<CONNECTION : Connection>(
-        val logger: KLogger,
+        val logger: Logger,
         val server: Server<CONNECTION>,
         val driver: AeronDriver,
         val handshake: ServerHandshake<CONNECTION>,
@@ -98,7 +98,7 @@ internal object ServerHandshakePollers {
                 if (msg !is HandshakeMessage) {
                     throw ServerHandshakeException("[$logInfo] Connection not allowed! unrecognized message: $msg")
                 } else if (logger.isTraceEnabled) {
-                    logger.trace { "[$logInfo] (${msg.connectKey}) received HS: $msg" }
+                    logger.trace("[$logInfo] (${msg.connectKey}) received HS: $msg")
                 }
                 msg
             } catch (e: Exception) {
@@ -225,7 +225,7 @@ internal object ServerHandshakePollers {
     }
 
     class UdpProc<CONNECTION : Connection>(
-        val logger: KLogger,
+        val logger: Logger,
         val server: Server<CONNECTION>,
         val driver: AeronDriver,
         val handshake: ServerHandshake<CONNECTION>,
@@ -319,7 +319,7 @@ internal object ServerHandshakePollers {
                 if (msg !is HandshakeMessage) {
                     throw ServerHandshakeException("[$logInfo] Connection not allowed! unrecognized message: $msg")
                 } else if (logger.isTraceEnabled) {
-                    logger.trace { "[$logInfo] (${msg.connectKey}) received HS: $msg" }
+                    logger.trace("[$logInfo] (${msg.connectKey}) received HS: $msg")
                 }
                 msg
             } catch (e: Exception) {
@@ -492,7 +492,7 @@ internal object ServerHandshakePollers {
                     delegate.close()
                     handler.clear()
                     driver.close()
-                    logger.info { "Closed IPC poller" }
+                    logger.info("Closed IPC poller")
                 }
 
                 override val info = "IPC ${driver.info}"
@@ -542,7 +542,7 @@ internal object ServerHandshakePollers {
                     delegate.close()
                     handler.clear()
                     driver.close()
-                    logger.info { "Closed IPv4 poller" }
+                    logger.info("Closed IPv4 poller")
                 }
 
                 override val info = "IPv4 ${driver.info}"
@@ -590,7 +590,7 @@ internal object ServerHandshakePollers {
                     delegate.close()
                     handler.clear()
                     driver.close()
-                    logger.info { "Closed IPv4 poller" }
+                    logger.info("Closed IPv4 poller")
                 }
 
                 override val info = "IPv6 ${driver.info}"
@@ -639,7 +639,7 @@ internal object ServerHandshakePollers {
                     delegate.close()
                     handler.clear()
                     driver.close()
-                    logger.info { "Closed IPv4+6 poller" }
+                    logger.info("Closed IPv4+6 poller")
                 }
 
                 override val info = "IPv4+6 ${driver.info}"

@@ -26,9 +26,9 @@ import dorkbox.network.exceptions.ServerHandshakeException
 import dorkbox.network.exceptions.ServerTimedoutException
 import dorkbox.network.exceptions.TransmitException
 import io.aeron.Publication
-import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
+import org.slf4j.Logger
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.*
@@ -95,7 +95,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         handshakePublication: Publication,
         message: HandshakeMessage,
         logInfo: String,
-        logger: KLogger
+        logger: Logger
     ): Boolean {
 
         // check to see if this sessionId is ALREADY in use by another connection!
@@ -131,7 +131,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
             // Server is the "source", client mirrors the server
             if (logger.isDebugEnabled) {
-                logger.debug { "[${existingConnection}] (${message.connectKey}) Connection done with handshake." }
+                logger.debug("[${existingConnection}] (${message.connectKey}) Connection done with handshake.")
             }
 
             existingConnection.setImage()
@@ -231,7 +231,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         message: HandshakeMessage,
         logInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
-        logger: KLogger
+        logger: Logger
     ): Boolean {
         val serialization = config.serialization
 
@@ -342,9 +342,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
-                logger.debug { "Creating new connection to $logInfo" }
+                logger.debug("Creating new connection to $logInfo")
             } else {
-                logger.info { "Creating new connection to $logInfo" }
+                logger.info("Creating new connection to $logInfo")
             }
 
             connection = connectionFunc(ConnectionParams(
@@ -384,7 +384,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             pendingConnections[message.connectKey] = connection
 
             if (logger.isDebugEnabled) {
-                logger.debug { "[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
+                logger.debug("[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello.")
             }
 
             // this tells the client all the info to connect.
@@ -423,7 +423,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         message: HandshakeMessage,
         logInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
-        logger: KLogger
+        logger: Logger
     ): Boolean {
         val serialization = config.serialization
 
@@ -571,9 +571,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
-                logger.debug { "Creating new connection to $logInfo" }
+                logger.debug("Creating new connection to $logInfo")
             } else {
-                logger.info { "Creating new connection to $logInfo" }
+                logger.info("Creating new connection to $logInfo")
             }
 
             connection = connectionFunc(ConnectionParams(publicKey, server, newConnectionDriver.pubSub, validateRemoteAddress, cryptoSecretKey))
@@ -623,7 +623,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             pendingConnections[message.connectKey] = connection
 
             if (logger.isDebugEnabled) {
-                logger.debug { "[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
+                logger.debug("[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello.")
             }
 
             // this tells the client all the info to connect.

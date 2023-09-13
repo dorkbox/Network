@@ -36,8 +36,6 @@ import io.aeron.driver.reports.LossReportReader
 import io.aeron.driver.reports.LossReportUtil
 import io.aeron.logbuffer.BufferClaim
 import io.aeron.protocol.DataHeaderFlyweight
-import mu.KLogger
-import mu.KotlinLogging
 import org.agrona.*
 import org.agrona.concurrent.AtomicBuffer
 import org.agrona.concurrent.IdleStrategy
@@ -46,12 +44,13 @@ import org.agrona.concurrent.errors.ErrorLogReader
 import org.agrona.concurrent.ringbuffer.RingBufferDescriptor
 import org.agrona.concurrent.status.CountersReader
 import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.concurrent.locks.*
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
@@ -67,7 +66,7 @@ fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, por
 /**
  * Class for managing the Aeron+Media drivers
  */
-class AeronDriver constructor(config: Configuration, val logger: KLogger, val endPoint: EndPoint<*>?) {
+class AeronDriver constructor(config: Configuration, val logger: Logger, val endPoint: EndPoint<*>?) {
 
     companion object {
         /**
@@ -117,7 +116,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
          *
          * @return true if the media driver is STOPPED.
          */
-        fun ensureStopped(configuration: Configuration, logger: KLogger, timeout: Long): Boolean {
+        fun ensureStopped(configuration: Configuration, logger: Logger, timeout: Long): Boolean {
             if (!isLoaded(configuration.copy(), logger)) {
                 return true
             }
@@ -140,7 +139,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
          *
          * @return true if the media driver is loaded.
          */
-        fun isLoaded(configuration: Configuration, logger: KLogger): Boolean {
+        fun isLoaded(configuration: Configuration, logger: Logger): Boolean {
             // not EVERYTHING is used for the media driver. For ** REUSING ** the media driver, only care about those specific settings
             val mediaDriverConfig = getDriverConfig(configuration, logger)
 
@@ -157,7 +156,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
          *
          * @return true if the media driver is active and running
          */
-        fun isRunning(configuration: Configuration, logger: KLogger): Boolean {
+        fun isRunning(configuration: Configuration, logger: Logger): Boolean {
             var running = false
             lock.read {
                 running = AeronDriver(configuration, logger, null).use {
@@ -171,15 +170,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
         /**
          * @return true if all JVM tracked Aeron drivers are closed, false otherwise
          */
-        fun areAllInstancesClosed(logger: Logger): Boolean {
-            val logger1 = KotlinLogging.logger(logger)
-            return areAllInstancesClosed(logger1)
-        }
-
-        /**
-         * @return true if all JVM tracked Aeron drivers are closed, false otherwise
-         */
-        fun areAllInstancesClosed(logger: KLogger = KotlinLogging.logger(AeronDriver::class.java.simpleName)): Boolean {
+        fun areAllInstancesClosed(logger: Logger = LoggerFactory.getLogger(AeronDriver::class.java.simpleName)): Boolean {
             return lock.read {
                 val traceEnabled = logger.isTraceEnabled
 
@@ -188,7 +179,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                     val closed = if (traceEnabled) driver.isInUse(null, logger) else driver.isRunning()
 
                     if (closed) {
-                        logger.error { "Aeron Driver [${driver.driverId}]: still running during check (${driver.aeronDirectory})" }
+                        logger.error( "Aeron Driver [${driver.driverId}]: still running during check (${driver.aeronDirectory})")
                         return@read false
                     }
                 }
@@ -198,7 +189,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                     driverConfigurations.forEach { entry ->
                         val driver = entry.value
                         if (driver.isInUse(null, logger)) {
-                            logger.error { "Aeron Driver [${driver.driverId}]: still in use during check (${driver.aeronDirectory})" }
+                            logger.error("Aeron Driver [${driver.driverId}]: still in use during check (${driver.aeronDirectory})")
                             return@read false
                         }
                     }
@@ -429,7 +420,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
 
 
 
-        internal fun getDriverConfig(config: Configuration, logger: KLogger): Configuration.MediaDriverConfig {
+        internal fun getDriverConfig(config: Configuration, logger: Logger): Configuration.MediaDriverConfig {
             val mediaDriverConfig = Configuration.MediaDriverConfig(config)
 
             // this happens more than once! (this is ok)
@@ -486,7 +477,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
         // however - the code that actually does stuff is a "singleton" in regard to an aeron configuration
         val driverId = mediaDriverConfig.mediaDriverId()
 
-        logger.info { "Aeron Driver [$driverId]: Initializing..." }
+        logger.info("Aeron Driver [$driverId]: Initializing...")
         val aeronDriver = driverConfigurations.get(driverId)
         if (aeronDriver == null) {
             val driver = AeronDriverInternal(endPoint, mediaDriverConfig, logger)
@@ -495,17 +486,17 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
 
             // register a logger so that we are notified when there is an error in Aeron
             driver.addError {
-                logger.error(this) { "Aeron Driver [$driverId]: error!" }
+                logger.error("Aeron Driver [$driverId]: error!", this)
             }
 
             if (logEverything && logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: Creating at '${driver.aeronDirectory}'" }
+                logger.debug("Aeron Driver [$driverId]: Creating at '${driver.aeronDirectory}'")
             }
 
             internal = driver
         } else {
             if (logEverything && logger.isDebugEnabled) {
-                logger.debug { "Aeron Driver [$driverId]: Reusing driver" }
+                logger.debug("Aeron Driver [$driverId]: Reusing driver")
             }
 
             // assign our endpoint to the driver
@@ -868,7 +859,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
             }
 
             if (internal.mustRestartDriverOnError) {
-                logger.error { "Critical error, not able to send data." }
+                logger.error("Critical error, not able to send data.")
                 // there were critical errors. Don't even try anything! we will reconnect automatically (on the client) when it shuts-down (the connection is closed immediately when an error of this type is encountered
 
                 // aeron will likely report this is as "BACK PRESSURE"
@@ -902,7 +893,7 @@ class AeronDriver constructor(config: Configuration, val logger: KLogger, val en
                     return false
                 }
                 else {
-                    logger.info { "[${publication.sessionId()}] Connection disconnected while sending data, closing connection." }
+                    logger.info("[${publication.sessionId()}] Connection disconnected while sending data, closing connection.")
                     internal.mustRestartDriverOnError = true
 
                     // publication was actually closed or the server was closed, so no bother throwing an error

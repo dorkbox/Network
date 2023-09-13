@@ -34,7 +34,7 @@ import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.util.Sys
 import io.aeron.CommonContext
 import io.aeron.Subscription
-import mu.KLogger
+import org.slf4j.Logger
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.*
@@ -65,19 +65,17 @@ internal class ClientHandshakeDriver(
             clientListenPort: Int,
             handshakeTimeoutNs: Long,
             reliable: Boolean,
-            logger: KLogger
+            logger: Logger
         ): ClientHandshakeDriver {
-            if (logger.isTraceEnabled) {
-                logger.trace { "Starting client handshake" }
-            }
+            logger.trace("Starting client handshake")
 
             var isUsingIPC = false
 
             if (autoChangeToIpc) {
                 if (remoteAddress == null) {
-                    logger.info { "IPC enabled" }
+                    logger.info("IPC enabled")
                 } else {
-                    logger.warn { "IPC for loopback enabled and aeron is already running. Auto-changing network connection from '$remoteAddressString' -> IPC" }
+                    logger.warn("IPC for loopback enabled and aeron is already running. Auto-changing network connection from '$remoteAddressString' -> IPC")
                 }
                 isUsingIPC = true
             }
@@ -116,7 +114,7 @@ internal class ClientHandshakeDriver(
                         logInfo = logInfo
                     )
                 } catch (exception: Exception) {
-                    logger.error(exception) { "Error initializing IPC connection" }
+                    logger.error("Error initializing IPC connection", exception)
 
                     // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
                     isUsingIPC = false

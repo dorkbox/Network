@@ -34,7 +34,7 @@ import dorkbox.network.handshake.ClientConnectionDriver
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.handshake.ClientHandshakeDriver
 import dorkbox.network.ping.Ping
-import mu.KotlinLogging
+import org.slf4j.LoggerFactory
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -132,7 +132,7 @@ open class Client<CONNECTION : Connection>(
         fun ensureStopped(configuration: Configuration): Boolean {
             val timeout = TimeUnit.SECONDS.toMillis(configuration.connectionCloseTimeoutInSeconds.toLong() * 2)
 
-            val logger = KotlinLogging.logger(Client::class.java.simpleName)
+            val logger = LoggerFactory.getLogger(Client::class.java.simpleName)
             return AeronDriver.ensureStopped(configuration.copy(), logger, timeout)
         }
 
@@ -144,7 +144,7 @@ open class Client<CONNECTION : Connection>(
          * @return true if the media driver is active and running
          */
         fun isRunning(configuration: Configuration): Boolean {
-            val logger = KotlinLogging.logger(Client::class.java.simpleName)
+            val logger = LoggerFactory.getLogger(Client::class.java.simpleName)
             return AeronDriver.isRunning(configuration.copy(), logger)
         }
 
@@ -225,9 +225,9 @@ open class Client<CONNECTION : Connection>(
     @Suppress("DuplicatedCode")
     fun reconnect() {
         if (connectionTimeoutSec == 0) {
-            logger.info { "Reconnecting..." }
+            logger.info("Reconnecting...")
         } else {
-            logger.info { "Reconnecting... (timeout in $connectionTimeoutSec seconds)" }
+            logger.info("Reconnecting... (timeout in $connectionTimeoutSec seconds)")
         }
 
         if (!isShutdown()) {
@@ -618,9 +618,9 @@ open class Client<CONNECTION : Connection>(
                 val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
 
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Creating new handshake to $logInfo" }
+                    logger.debug("Creating new handshake to $logInfo")
                 } else {
-                    logger.info { "Creating new handshake to $logInfo" }
+                    logger.info("Creating new handshake to $logInfo")
                 }
 
                 connect0(handshake, handshakeConnection, handshakeTimeoutNs)
@@ -643,9 +643,9 @@ open class Client<CONNECTION : Connection>(
                 }
 
                 if (logger.isTraceEnabled) {
-                    logger.trace(e) { message }
+                    logger.trace(message, e)
                 } else {
-                    logger.info { message }
+                    logger.info(message)
                 }
 
                 // maybe the aeron driver isn't running? (or isn't running correctly?)
@@ -805,9 +805,9 @@ open class Client<CONNECTION : Connection>(
         val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
 
         if (logger.isDebugEnabled) {
-            logger.debug { "Creating new connection to $logInfo" }
+            logger.debug("Creating new connection to $logInfo")
         } else {
-            logger.info { "Creating new connection to $logInfo" }
+            logger.info("Creating new connection to $logInfo")
         }
 
         val newConnection = connectionFunc(ConnectionParams(
@@ -820,7 +820,9 @@ open class Client<CONNECTION : Connection>(
 
         if (!handshakeConnection.pubSub.isIpc) {
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
-            logger.info { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) adding new signature for [$addressString] : ${connectionInfo.publicKey.toHexString()}" }
+            if (logger.isInfoEnabled) {
+                logger.info("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) adding new signature for [$addressString] : ${connectionInfo.publicKey.toHexString()}")
+            }
 
             storage.addRegisteredServerKey(address!!, connectionInfo.publicKey)
         }
@@ -845,7 +847,7 @@ open class Client<CONNECTION : Connection>(
         handshakeConnection.close()
 
         if (logger.isDebugEnabled) {
-            logger.debug { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] done with handshake." }
+            logger.debug("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] done with handshake.")
         }
 
         newConnection.setImage()
@@ -866,7 +868,7 @@ open class Client<CONNECTION : Connection>(
                 } else {
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                     if (logger.isDebugEnabled) {
-                        logger.debug { "[${connection}] connection expired (cleanup)" }
+                        logger.debug("[${connection}] connection expired (cleanup)")
                     }
 
                     // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
@@ -886,7 +888,7 @@ open class Client<CONNECTION : Connection>(
 
                 // this can be closed when the connection is remotely closed in ADDITION to manually closing
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Client event dispatch closing..." }
+                    logger.debug("Client event dispatch closing...")
                 }
 
                 // we only need to run shutdown methods if there was a network outage or D/C
@@ -907,7 +909,7 @@ open class Client<CONNECTION : Connection>(
 
 
                 if (mustRestartDriverOnError) {
-                    logger.error { "Critical driver error detected, reconnecting client" }
+                    logger.error("Critical driver error detected, reconnecting client")
 
                     EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
                         waitForEndpointShutdown()
@@ -922,8 +924,8 @@ open class Client<CONNECTION : Connection>(
 
                         reconnect()
                     }
-                } else if (logger.isDebugEnabled) {
-                    logger.debug { "Closed the Network Event Poller..." }
+                } else  {
+                    logger.debug("Closed the Network Event Poller...")
                 }
             }
         })
@@ -1006,7 +1008,7 @@ open class Client<CONNECTION : Connection>(
         val savedPublicKey = storage.getRegisteredServerKey(address)
         if (savedPublicKey != null) {
             if (logger.isDebugEnabled) {
-                logger.debug { "Deleting remote IP address key $address" }
+                logger.debug("Deleting remote IP address key $address")
             }
             storage.removeRegisteredServerKey(address)
         }

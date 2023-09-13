@@ -21,13 +21,13 @@ import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.actor
-import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
+import org.slf4j.LoggerFactory
 
 class RmiResponseManagerTest: BaseTest() {
     companion object {
-        private val logger =  KotlinLogging.logger("RmiResponseManagerTest")
+        private val logger = LoggerFactory.getLogger("RmiResponseManagerTest")
     }
 
     @Test
@@ -55,7 +55,6 @@ class RmiResponseManagerTest: BaseTest() {
     @OptIn(ObsoleteCoroutinesApi::class)
     private fun runTest(totalCount: Int, responseMangerSize: Int, expectedToPass: Boolean = true) {
         val counted: AtomicInt = atomic(totalCount)
-        val logger =  KotlinLogging.logger("RmiResponseManagerTest")
 
         try {
             val responseManager = ResponseManager(responseMangerSize)

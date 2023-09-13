@@ -17,8 +17,6 @@ package dorkbox.network
 
 import dorkbox.hex.toHexString
 import dorkbox.network.aeron.*
-import dorkbox.network.aeron.AeronPoller
-import dorkbox.network.aeron.EventActionOperator
 import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.IpListenType
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
@@ -28,7 +26,7 @@ import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.handshake.ServerHandshakePollers
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.rmi.RmiSupportServer
-import mu.KotlinLogging
+import org.slf4j.LoggerFactory
 import java.util.concurrent.*
 
 /**
@@ -130,7 +128,7 @@ open class Server<CONNECTION : Connection>(
         fun ensureStopped(configuration: ServerConfiguration): Boolean {
             val timeout = TimeUnit.SECONDS.toMillis(configuration.connectionCloseTimeoutInSeconds.toLong() * 2)
 
-            val logger = KotlinLogging.logger(Server::class.java.simpleName)
+            val logger = LoggerFactory.getLogger(Server::class.java.simpleName)
             return AeronDriver.ensureStopped(configuration.copy(), logger, timeout)
         }
 
@@ -142,7 +140,7 @@ open class Server<CONNECTION : Connection>(
          * @return true if the media driver is active and running
          */
         fun isRunning(configuration: ServerConfiguration): Boolean {
-            val logger = KotlinLogging.logger(Server::class.java.simpleName)
+            val logger = LoggerFactory.getLogger(Server::class.java.simpleName)
             return AeronDriver.isRunning(configuration.copy(), logger)
         }
 
@@ -186,15 +184,15 @@ open class Server<CONNECTION : Connection>(
      */
     fun bindIpc() {
         if (!config.enableIpc) {
-            logger.warn { "IPC explicitly requested, but not enabled. Enabling IPC..." }
+            logger.warn("IPC explicitly requested, but not enabled. Enabling IPC...")
             // we explicitly requested IPC, make sure it's enabled
             config.contextDefined = false
             config.enableIpc = true
             config.contextDefined = true
         }
 
-        if (config.enableIPv4) { logger.warn { "IPv4 is enabled, but only IPC will be used." }}
-        if (config.enableIPv6) { logger.warn { "IPv6 is enabled, but only IPC will be used." }}
+        if (config.enableIPv4) { logger.warn("IPv4 is enabled, but only IPC will be used.") }
+        if (config.enableIPv6) { logger.warn("IPv6 is enabled, but only IPC will be used.") }
 
         bind(0, 0, true)
     }
@@ -274,8 +272,8 @@ open class Server<CONNECTION : Connection>(
         }
 
 
-        logger.info { ipcPoller.info }
-        logger.info { ipPoller.info }
+        logger.info(ipcPoller.info)
+        logger.info(ipPoller.info)
 
         // if we shutdown/close before the poller starts, we don't want to block forever
         pollerClosedLatch = CountDownLatch(1)
@@ -298,7 +296,7 @@ open class Server<CONNECTION : Connection>(
                         } else {
                             // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                             if (logger.isDebugEnabled) {
-                                logger.debug { "[${connection}] connection expired (cleanup)" }
+                                logger.debug("[${connection}] connection expired (cleanup)")
                             }
 
                             // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
@@ -319,9 +317,7 @@ open class Server<CONNECTION : Connection>(
         onClose = object : EventCloseOperator {
             override fun invoke() {
                 val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
-                if (logger.isDebugEnabled) {
-                    logger.debug { "Server event dispatch closing..." }
-                }
+                logger.debug("Server event dispatch closing...")
 
                 ipcPoller.close()
                 ipPoller.close()
@@ -343,7 +339,7 @@ open class Server<CONNECTION : Connection>(
 
 
                 if (mustRestartDriverOnError) {
-                    logger.error { "Critical driver error detected, restarting server." }
+                    logger.error("Critical driver error detected, restarting server.")
 
                     EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
                         waitForEndpointShutdown()
@@ -372,9 +368,7 @@ open class Server<CONNECTION : Connection>(
                 endpointIsRunning.lazySet(false)
                 pollerClosedLatch.countDown()
 
-                if (logger.isDebugEnabled) {
-                    logger.debug { "Closed the Network Event Poller..." }
-                }
+                logger.debug("Closed the Network Event Poller...")
             }
         })
     }

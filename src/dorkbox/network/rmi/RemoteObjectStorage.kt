@@ -16,8 +16,8 @@
 package dorkbox.network.rmi
 
 import dorkbox.collections.LockFreeIntBiMap
-import mu.KLogger
 import org.agrona.collections.IntArrayList
+import org.slf4j.Logger
 import java.util.concurrent.locks.*
 import kotlin.concurrent.write
 
@@ -59,7 +59,7 @@ import kotlin.concurrent.write
  *
  * @author Nathan Robinson
  */
-internal class RemoteObjectStorage(val logger: KLogger) {
+internal class RemoteObjectStorage(val logger: Logger) {
 
     companion object {
         const val INVALID_RMI = 0
@@ -174,9 +174,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
     fun returnId(id: Int) {
         idLock.write {
             if (reservedObjectIds.contains(id)) {
-                logger.error {
-                    "Do not return a reserved ID ($id). Once an ID is reserved, it is permanent."
-                }
+                logger.error("Do not return a reserved ID ($id). Once an ID is reserved, it is permanent.")
                 return
             }
 
@@ -205,7 +203,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
             objectMap.put(nextObjectId, `object`)
 
             if (logger.isTraceEnabled) {
-                logger.trace { "Remote object <proxy:$nextObjectId> registered with .toString() = '${`object`}'" }
+                logger.trace("Remote object <proxy:$nextObjectId> registered with .toString() = '${`object`}'")
             }
         }
 
@@ -225,7 +223,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
         objectMap.put(objectId, `object`)
 
         if (logger.isTraceEnabled) {
-            logger.trace { "Remote object <proxy:$objectId> registered with .toString() = '${`object`}'" }
+            logger.trace("Remote object <proxy:$objectId> registered with .toString() = '${`object`}'")
         }
 
         return true
@@ -242,7 +240,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
         returnId(objectId)
 
         if (logger.isTraceEnabled) {
-            logger.trace { "Object <proxy #${objectId}> removed" }
+            logger.trace("Object <proxy #${objectId}> removed")
         }
         return rmiObject
     }
@@ -259,7 +257,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
             returnId(objectId)
 
             if (logger.isTraceEnabled) {
-                logger.trace { "Object '${remoteObject}' (ID: ${objectId}) removed from RMI system." }
+                logger.trace("Object '${remoteObject}' (ID: ${objectId}) removed from RMI system.")
             }
         }
     }

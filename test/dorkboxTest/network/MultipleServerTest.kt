@@ -182,11 +182,11 @@ class MultipleServerTest : BaseTest() {
             addEndPoint(server)
 
             server.onInit {
-                logger.warn { "INIT: $count" }
+                logger.warn("INIT: $count")
             }
 
             server.onConnect {
-                logger.warn { "CONNECT: $count" }
+                logger.warn("CONNECT: $count")
             }
 
             server.onMessage<String> { message ->
@@ -218,11 +218,11 @@ class MultipleServerTest : BaseTest() {
             addEndPoint(client)
 
             client.onInit {
-                logger.warn { "INIT: $count" }
+                logger.warn("INIT: $count")
             }
 
             client.onConnect {
-                logger.warn { "CONNECT: $count" }
+                logger.warn("CONNECT: $count")
                 didSend[count].set(true)
                 send("client_$count")
             }

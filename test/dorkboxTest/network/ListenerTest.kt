@@ -39,7 +39,6 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EventDispatcher
 import dorkbox.util.exceptions.InitializationException
 import dorkbox.util.exceptions.SecurityException
 import kotlinx.atomicfu.atomic
@@ -129,19 +128,19 @@ class ListenerTest : BaseTest() {
 
 
         client.onConnect {
-            logger.error { "client connect 1" }
+            logger.error("client connect 1")
             send(origString) // 20 a's
         }
 
         // standard connect check
         client.onConnect {
-            logger.error { "client connect 2" }
+            logger.error("client connect 2")
             clientConnect.lazySet(true)
         }
 
 
         client.onMessage<String> { message ->
-            logger.error { "client string message" }
+            logger.error("client string message")
             if (origString != message) {
                 checkFail2.lazySet(true)
                 System.err.println("original string not equal to the string received")

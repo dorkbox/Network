@@ -23,7 +23,7 @@ import dorkbox.netUtil.IPv6
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.storage.Storage
 import dorkbox.storage.serializer.SerializerBytes
-import mu.KLogger
+import org.slf4j.Logger
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -32,7 +32,7 @@ import java.net.InetAddress
  * This class provides a way for the network stack to use a database of some sort.
  */
 @Suppress("unused")
-class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : AutoCloseable {
+class SettingsStore(storageBuilder: Storage.Builder, val logger: Logger) : AutoCloseable {
     companion object {
         /**
          * Address 0.0.0.0 or ::0 may be used as a source address for this host on this network.

@@ -106,12 +106,6 @@
        Copyright 2023
          Jonathan Halterman
 
-     - kotlin-logging - Lightweight logging framework for Kotlin
-       [The Apache Software License, Version 2.0]
-       https://github.com/MicroUtils/kotlin-logging
-       Copyright 2023
-         Ohad Shai
-
      - Kotlin - 
        [The Apache Software License, Version 2.0]
        https://github.com/JetBrains/kotlin
@@ -1248,12 +1242,6 @@
          Dorkbox LLC
 
        Extra license information
-         - kotlin-logging - Lightweight logging framework for Kotlin
-           [The Apache Software License, Version 2.0]
-           https://github.com/MicroUtils/kotlin-logging
-           Copyright 2023
-             Ohad Shai
-
          - Kryo - Fast and efficient binary object graph serialization framework for Java
            [BSD 3-Clause License]
            https://github.com/EsotericSoftware/kryo

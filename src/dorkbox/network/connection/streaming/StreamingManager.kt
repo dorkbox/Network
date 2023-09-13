@@ -28,21 +28,20 @@ import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
-import dorkbox.network.exceptions.StreamingException
 import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
 import dorkbox.network.serialization.KryoWriter
 import dorkbox.os.OS
 import dorkbox.util.Sys
 import io.aeron.Publication
-import mu.KLogger
 import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
 import org.agrona.concurrent.UnsafeBuffer
+import org.slf4j.Logger
 import java.io.File
 import java.io.FileInputStream
 
-internal class StreamingManager<CONNECTION : Connection>(private val logger: KLogger, val config: Configuration) {
+internal class StreamingManager<CONNECTION : Connection>(private val logger: Logger, val config: Configuration) {
 
     companion object {
         private const val KILOBYTE = 1024
@@ -147,10 +146,14 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
 
                     val prettySize = Sys.getSizePretty(message.totalSize)
 
-                    endPoint.logger.info { "Saving $prettySize of streaming data [${streamId}] to: $tempFileLocation" }
+                    if (endPoint.logger.isInfoEnabled) {
+                        endPoint.logger.info("Saving $prettySize of streaming data [${streamId}] to: $tempFileLocation")
+                    }
                     streamingDataInMemory[streamId] = FileWriter(message.totalSize.toInt(), tempFileLocation)
                 } else {
-                    endPoint.logger.info { "Saving streaming data [${streamId}] in memory" }
+                    if (endPoint.logger.isInfoEnabled) {
+                        endPoint.logger.info("Saving streaming data [${streamId}] in memory")
+                    }
                     // .toInt is safe because we know the total size is < than maxStreamSizeInMemoryInBytes
                     streamingDataInMemory[streamId] = AeronWriter(message.totalSize.toInt())
                 }

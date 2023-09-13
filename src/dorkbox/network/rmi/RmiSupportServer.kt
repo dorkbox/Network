@@ -18,7 +18,7 @@ package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
-import mu.KLogger
+import org.slf4j.Logger
 
 /**
  * Only the server can create or delete a global object
@@ -30,7 +30,7 @@ import mu.KLogger
  *  Connection scope objects can be remotely created or deleted by either end of the connection. Only the server can create/delete a global scope object
  */
 class RmiSupportServer<CONNECTION : Connection> internal constructor(
-    private val logger: KLogger,
+    private val logger: Logger,
     private val rmiGlobalSupport: RmiManagerGlobal<CONNECTION>
 ) {
     /**

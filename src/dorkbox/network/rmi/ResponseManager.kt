@@ -15,18 +15,13 @@
  */
 package dorkbox.network.rmi
 
-import dorkbox.network.Configuration
 import dorkbox.network.connection.Connection
 import dorkbox.objectPool.ObjectPool
 import dorkbox.objectPool.Pool
-import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.*
-import mu.KLogger
-import mu.KotlinLogging
-import java.util.concurrent.*
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.util.concurrent.locks.*
-import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 /**
@@ -46,7 +41,7 @@ import kotlin.concurrent.write
 internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int = 2) {
     companion object {
         val TIMEOUT_EXCEPTION = Exception().apply { stackTrace = arrayOf<StackTraceElement>() }
-        private val logger: KLogger = KotlinLogging.logger(ResponseManager::class.java.simpleName)
+        private val logger: Logger = LoggerFactory.getLogger(ResponseManager::class.java.simpleName)
     }
 
     private val rmiWaitersInUse = atomic(0)
@@ -80,9 +75,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      * resume any pending remote object method invocations (if they are not async, or not manually waiting)
      * NOTE: async RMI will never call this (because async doesn't return a response)
      */
-    fun notifyWaiter(id: Int, result: Any?, logger: KLogger) {
+    fun notifyWaiter(id: Int, result: Any?, logger: Logger) {
         if (logger.isTraceEnabled) {
-            logger.trace { "[RM] notify: $id" }
+            logger.trace("[RM] notify: $id")
         }
 
         val previous = pendingLock.write {
@@ -94,7 +89,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         // if NULL, since either we don't exist (because we were async), or it was cancelled
         if (previous is ResponseWaiter) {
             if (logger.isTraceEnabled) {
-                logger.trace { "[RM] valid-notify: $id" }
+                logger.trace("[RM] valid-notify: $id")
             }
 
             // this means we were NOT timed out! (we cannot be timed out here)
@@ -107,9 +102,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      *
      * This is ONLY called when we want to get the data out of the stored entry, because we are operating ASYNC. (pure RMI async is different)
      */
-    fun <T> removeWaiterCallback(id: Int, logger: KLogger): T? {
+    fun <T> removeWaiterCallback(id: Int, logger: Logger): T? {
         if (logger.isTraceEnabled) {
-            logger.trace { "[RM] get-callback: $id" }
+            logger.trace("[RM] get-callback: $id")
         }
 
         val previous = pendingLock.write {
@@ -138,11 +133,11 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      *
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
-    fun prep(logger: KLogger): ResponseWaiter {
+    fun prep(logger: Logger): ResponseWaiter {
         val waiter = waiterCache.take()
         rmiWaitersInUse.getAndIncrement()
         if (logger.isTraceEnabled) {
-            logger.trace { "[RM] prep in-use: ${rmiWaitersInUse.value}" }
+            logger.trace("[RM] prep in-use: ${rmiWaitersInUse.value}")
         }
 
         // this will initialize the result
@@ -160,11 +155,11 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      *
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
-    fun prepWithCallback(logger: KLogger, function: Any): Int {
+    fun prepWithCallback(logger: Logger, function: Any): Int {
         val waiter = waiterCache.take()
         rmiWaitersInUse.getAndIncrement()
         if (logger.isTraceEnabled) {
-            logger.trace { "[RM] prep in-use: ${rmiWaitersInUse.value}" }
+            logger.trace("[RM] prep in-use: ${rmiWaitersInUse.value}")
         }
 
         // this will initialize the result
@@ -193,13 +188,13 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
     fun getReply(
         responseWaiter: ResponseWaiter,
         timeoutMillis: Long,
-        logger: KLogger,
+        logger: Logger,
         connection: Connection
     ): Any? {
         val id = RmiUtils.unpackUnsignedRight(responseWaiter.id)
 
         if (logger.isTraceEnabled) {
-            logger.trace { "[RM] get: $id" }
+            logger.trace("[RM] get: $id")
         }
 
         // deletes the entry in the map
@@ -216,7 +211,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
 
         if (resultOrWaiter is ResponseWaiter) {
             if (logger.isTraceEnabled) {
-                logger.trace { "[RM] timeout cancel ($timeoutMillis): $id" }
+                logger.trace("[RM] timeout cancel ($timeoutMillis): $id")
             }
 
             return if (connection.isClosed() || connection.isClosed()) {
@@ -232,7 +227,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
     fun close() {
         // technically, this isn't closing it, so much as it's cleaning it out
         if (logger.isDebugEnabled) {
-            logger.debug { "Closing the response manager for RMI" }
+            logger.debug("Closing the response manager for RMI")
         }
 
         // wait for responses, or wait for timeouts!

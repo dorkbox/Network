@@ -42,11 +42,11 @@ import dorkbox.os.OS
 import dorkbox.serializers.*
 import kotlinx.atomicfu.AtomicBoolean
 import kotlinx.atomicfu.atomic
-import mu.KLogger
-import mu.KotlinLogging
 import org.agrona.collections.Int2ObjectHashMap
 import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.StdInstantiatorStrategy
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.IOException
 import java.lang.reflect.Constructor
@@ -132,7 +132,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         }
     }
 
-    private lateinit var logger: KLogger
+    private lateinit var logger: Logger
 
     @Volatile
     private var maxMessageSize: Int = 500_000
@@ -459,10 +459,10 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      * This is to prevent (and recognize) out-of-order class/serializer registration. If an ID is already in use by a different type, an exception is thrown.
      */
     internal fun finishInit(type: Class<*>, maxMessageSize: Int) {
-        logger = KotlinLogging.logger(type.simpleName)
+        logger = LoggerFactory.getLogger(type.simpleName)
         this.maxMessageSize = maxMessageSize
 
-        logger.info { "UDP frame size: $maxMessageSize" }
+        logger.info("UDP frame size: $maxMessageSize")
 
         val firstInitialization = initialized.compareAndSet(expect = false, update = true)
 
@@ -479,7 +479,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
             classesToRegister.clear() // don't need to keep a reference, since this can never be reinitialized.
 
             if (logger.isTraceEnabled) {
-                logger.trace { "Registered classes for serialization:" }
+                logger.trace("Registered classes for serialization:")
 
                 // log the in-order output first
                 finalClassRegistrations.forEach { classRegistration ->
@@ -714,25 +714,25 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
                 when (typeId) {
                     0 -> {
                         if (logger.isTraceEnabled) {
-                            logger.trace { "REGISTRATION (0) ${clazz.name}" }
+                            logger.trace("REGISTRATION (0) ${clazz.name}")
                         }
                         newRegistrations.add(ClassRegistration0(clazz, maker.newInstantiatorOf(Class.forName(serializerName)).newInstance() as Serializer<Any>))
                     }
                     1 -> {
                         if (logger.isTraceEnabled) {
-                            logger.trace { "REGISTRATION (1) ${clazz.name} :: $id" }
+                            logger.trace("REGISTRATION (1) ${clazz.name} :: $id")
                         }
                         newRegistrations.add(ClassRegistration1(clazz, id))
                     }
                     2 -> {
                         if (logger.isTraceEnabled) {
-                            logger.trace { "REGISTRATION (2) ${clazz.name} :: $id" }
+                            logger.trace("REGISTRATION (2) ${clazz.name} :: $id")
                         }
                         newRegistrations.add(ClassRegistration2(clazz, maker.newInstantiatorOf(Class.forName(serializerName)).newInstance() as Serializer<Any>, id))
                     }
                     3 -> {
                         if (logger.isTraceEnabled) {
-                            logger.trace { "REGISTRATION (3) ${clazz.name}" }
+                            logger.trace("REGISTRATION (3) ${clazz.name}")
                         }
                         newRegistrations.add(ClassRegistration3(clazz))
                     }
@@ -755,13 +755,13 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
                         // NOTE: implClass can still be null!
 
                         if (logger.isTraceEnabled) {
-                            logger.trace {
+                            logger.trace(
                                 if (implClass != null) {
                                     "REGISTRATION (RMI-CLIENT) ${clazz.name} -> ${implClass.name}"
                                 } else {
                                     "REGISTRATION (RMI-CLIENT) ${clazz.name}"
                                 }
-                            }
+                            )
                         }
 
                         newRegistrations.add(ClassRegistrationForRmi(clazz, implClass, rmiSerializer))

@@ -23,7 +23,7 @@ import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
 import dorkbox.network.serialization.Serialization
-import mu.KLogger
+import org.slf4j.Logger
 
 /**
  * Only the server can create or delete a global object
@@ -34,20 +34,36 @@ import mu.KLogger
  *
  *  Connection scope objects can be remotely created or deleted by either end of the connection. Only the server can create/delete a global scope object
  */
-class RmiSupportConnection<CONNECTION: Connection> internal constructor(
-    private val logger: KLogger,
-    private val connection: CONNECTION,
-    private val responseManager: ResponseManager,
-    private val serialization: Serialization<CONNECTION>,
-    private val getGlobalAction: (connection: CONNECTION, objectId: Int, interfaceClass: Class<*>) -> Any
-) : RmiObjectCache(logger) {
+class RmiSupportConnection<CONNECTION: Connection> : RmiObjectCache {
 
+
+    private val logger: Logger
+    private val connection: CONNECTION
+    private val responseManager: ResponseManager
+    private val serialization: Serialization<CONNECTION>
+    private val getGlobalAction: (connection: CONNECTION, objectId: Int, interfaceClass: Class<*>) -> Any
+
+    internal constructor(
+        logger: Logger,
+        connection: CONNECTION,
+        responseManager: ResponseManager,
+        serialization: Serialization<CONNECTION>,
+        getGlobalAction: (connection: CONNECTION, objectId: Int, interfaceClass: Class<*>) -> Any
+    ) : super(logger) {
+        this.logger = logger
+        this.connection = connection
+        this.responseManager = responseManager
+        this.serialization = serialization
+        this.getGlobalAction = getGlobalAction
+        this.proxyObjects = LockFreeIntMap<RemoteObject<*>>()
+        this.remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
+    }
 
     // It is critical that all of the RMI proxy objects are unique, and are saved/cached PER CONNECTION. These cannot be shared between connections!
-    private val proxyObjects = LockFreeIntMap<RemoteObject<*>>()
+    private val proxyObjects: LockFreeIntMap<RemoteObject<*>>
 
     // callbacks for when a REMOTE object has been created
-    private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
+    private val remoteObjectCreationCallbacks: RemoteObjectStorage
 
     /**
      * Removes a proxy object from the system

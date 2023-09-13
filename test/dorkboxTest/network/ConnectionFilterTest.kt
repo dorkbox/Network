@@ -316,7 +316,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                logger.error { "STARTING TO CLOSE CLIENT" }
+                logger.error("STARTING TO CLOSE CLIENT")
                 stopEndPoints()
             }
 

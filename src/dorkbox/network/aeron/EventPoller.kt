@@ -23,12 +23,11 @@ import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.EventDispatcher
 import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.*
-import mu.KLogger
-import mu.KotlinLogging
 import org.agrona.concurrent.IdleStrategy
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.util.concurrent.*
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.concurrent.locks.*
 import kotlin.concurrent.write
 
 /**
@@ -44,7 +43,7 @@ internal class EventPoller {
     companion object {
         internal const val REMOVE = -1
 
-        val eventLogger = KotlinLogging.logger(EventPoller::class.java.simpleName)
+        val eventLogger = LoggerFactory.getLogger(EventPoller::class.java.simpleName)
 
 
         private val pollExecutor = Executors.newSingleThreadExecutor(
@@ -81,16 +80,16 @@ internal class EventPoller {
         return threadId == Thread.currentThread().id
     }
 
-    fun configure(logger: KLogger, config: Configuration, endPoint: EndPoint<*>) {
+    fun configure(logger: Logger, config: Configuration, endPoint: EndPoint<*>) {
         lock.write {
             if (logger.isDebugEnabled) {
-                logger.debug { "Initializing the Network Event Poller..." }
+                logger.debug("Initializing the Network Event Poller...")
             }
             configureEventsEndpoints.add(ByteArrayWrapper.wrap(endPoint.storage.publicKey))
 
             if (!configured) {
                 if (logger.isTraceEnabled) {
-                    logger.trace { "Configuring the Network Event Poller..." }
+                    logger.trace("Configuring the Network Event Poller...")
                 }
 
                 delayClose = false
@@ -129,7 +128,7 @@ internal class EventPoller {
                                     pollCount += poll
                                 }
                             } catch (e: Exception) {
-                                eventLogger.error(e) { "Unexpected error during Network Event Polling! Aborting event dispatch for it!" }
+                                eventLogger.error("Unexpected error during Network Event Polling! Aborting event dispatch for it!", e)
 
                                 // remove our event, it is no longer valid
                                 pollEvents.remove(this)
@@ -199,7 +198,7 @@ internal class EventPoller {
     /**
      * Waits for all events to finish running
      */
-    fun close(logger: KLogger, endPoint: EndPoint<*>) {
+    fun close(logger: Logger, endPoint: EndPoint<*>) {
         // make sure that we close on the CLOSE dispatcher if we run on the poll dispatcher!
         if (isDispatch()) {
             EventDispatcher.CLOSE.launch {
@@ -209,9 +208,7 @@ internal class EventPoller {
         }
 
         lock.write {
-            if (logger.isDebugEnabled) {
-                logger.debug { "Requesting close for the Network Event Poller..." }
-            }
+            logger.debug("Requesting close for the Network Event Poller...")
 
             // ONLY if there are no more poll-events do we ACTUALLY shut down.
             // when an endpoint closes its polling, it will automatically be removed from this datastructure.
@@ -226,42 +223,38 @@ internal class EventPoller {
             if (running && sEvents == 0 && cEvents == 0) {
                 when (pEvents) {
                     0 -> {
-                        if (logger.isDebugEnabled) {
-                            logger.debug { "Closing the Network Event Poller..." }
-                        }
+                        logger.debug("Closing the Network Event Poller...")
                         doClose(logger)
                     }
                     1 -> {
                         // this means we are trying to close on our poll event, and obviously it won't work.
-                        if (logger.isDebugEnabled) {
-                            logger.debug { "Delayed closing the Network Event Poller..." }
-                        }
+                        logger.debug("Delayed closing the Network Event Poller...")
                         delayClose = true
                     }
                     else -> {
                         if (logger.isDebugEnabled) {
-                            logger.debug { "Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)" }
+                            logger.debug("Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)")
                         }
                     }
                 }
             } else if (logger.isDebugEnabled) {
-                logger.debug { "Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)" }
+                logger.debug("Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)")
             }
         }
     }
 
-    private fun doClose(logger: KLogger) {
+    private fun doClose(logger: Logger) {
         val wasRunning = running
 
         running = false
         while (!shutdownLatch.await(500, TimeUnit.MILLISECONDS)) {
-            logger.error { "Waiting for Network Event Poller to close. It should not take this long" }
+            logger.error("Waiting for Network Event Poller to close. It should not take this long")
         }
         configured = false
 
         if (wasRunning) {
             pollExecutor.awaitTermination(200, TimeUnit.MILLISECONDS)
         }
-        logger.error { "Closed Network Event Poller: wasRunning=$wasRunning" }
+        logger.error("Closed Network Event Poller: wasRunning=$wasRunning")
     }
 }

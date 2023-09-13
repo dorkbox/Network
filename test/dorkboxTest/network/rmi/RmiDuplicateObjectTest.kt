@@ -108,7 +108,7 @@ class RmiDuplicateObjectTest : BaseTest() {
 
 
             server.onConnect {
-                logger.warn { "Starting to moo" }
+                logger.warn("Starting to moo")
                 // these are on separate threads (client.init) and this -- there can be race conditions, where the object doesn't exist yet!
                 val testCow = rmi.get<TestCow>(4)
                 testCow.moo()
@@ -130,7 +130,7 @@ class RmiDuplicateObjectTest : BaseTest() {
             addEndPoint(client)
 
             client.onInit {
-                logger.warn { "Initializing moo 4" }
+                logger.warn("Initializing moo 4")
                 rmi.save(TestCowImpl(4), 4)
             }
 
@@ -146,7 +146,7 @@ class RmiDuplicateObjectTest : BaseTest() {
 
 
             client.onInit {
-                logger.warn { "Initializing moo 5" }
+                logger.warn("Initializing moo 5")
                 rmi.save(TestCowImpl(5), 4) // both are saved as ID 4 (but internally are 4 and 5)
             }
 

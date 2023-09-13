@@ -176,7 +176,7 @@ dependencies {
     api("com.dorkbox:NetworkUtils:2.23")
     api("com.dorkbox:OS:1.8")
     api("com.dorkbox:Serializers:2.9")
-    api("com.dorkbox:Storage:1.10")
+    api("com.dorkbox:Storage:1.11")
     api("com.dorkbox:Updates:1.1")
     api("com.dorkbox:Utilities:1.46")
 
@@ -212,8 +212,8 @@ dependencies {
     api("net.jodah:expiringmap:0.5.10")
 
     // https://github.com/MicroUtils/kotlin-logging
-    api("io.github.microutils:kotlin-logging:3.0.5")
-    implementation("org.slf4j:slf4j-api:2.0.7")
+//    api("io.github.microutils:kotlin-logging:3.0.5")
+    implementation("org.slf4j:slf4j-api:2.0.9")
 
 
 

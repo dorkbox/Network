@@ -21,7 +21,7 @@ import dorkbox.network.exceptions.AeronDriverException
 import dorkbox.util.Sys
 import io.aeron.driver.MediaDriver
 import io.aeron.exceptions.DriverTimeoutException
-import mu.KLogger
+import org.slf4j.Logger
 import java.io.Closeable
 import java.io.File
 import java.util.concurrent.*
@@ -32,7 +32,7 @@ import java.util.concurrent.*
  * @throws IllegalStateException if the configuration has already been used to create a context
  * @throws IllegalArgumentException if the aeron media driver directory cannot be setup
  */
-internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLogger, aeronErrorHandler: (Throwable) -> Unit) : Closeable {
+internal class AeronContext(config: Configuration.MediaDriverConfig, logger: Logger, aeronErrorHandler: (Throwable) -> Unit) : Closeable {
     companion object {
         private fun create(config: Configuration.MediaDriverConfig, aeronErrorHandler: (Throwable) -> Unit): MediaDriver.Context {
             // LOW-LATENCY SETTINGS
@@ -204,7 +204,7 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, logger: KLo
 
             val timeoutInNs = TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong()) + context.publicationLingerTimeoutNs()
             val timeoutInMs = TimeUnit.NANOSECONDS.toMillis(timeoutInNs)
-            logger.warn { "Aeron is currently running, waiting ${Sys.getTimePrettyFull(timeoutInNs)} for it to close." }
+            logger.warn("Aeron is currently running, waiting ${Sys.getTimePrettyFull(timeoutInNs)} for it to close.")
 
             // wait for it to close! wait longer.
             val startTime = System.nanoTime()

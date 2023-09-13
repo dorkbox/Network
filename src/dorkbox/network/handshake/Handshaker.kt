@@ -28,12 +28,12 @@ import dorkbox.network.serialization.KryoWriter
 import dorkbox.network.serialization.Serialization
 import io.aeron.Publication
 import io.aeron.logbuffer.FrameDescriptor
-import mu.KLogger
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.IdleStrategy
+import org.slf4j.Logger
 
 internal class Handshaker<CONNECTION : Connection>(
-    private val logger: KLogger,
+    private val logger: Logger,
     config: Configuration,
     serialization: Serialization<CONNECTION>,
     private val listenerManager: ListenerManager<CONNECTION>,
@@ -70,7 +70,7 @@ internal class Handshaker<CONNECTION : Connection>(
     internal fun writeMessage(publication: Publication, logInfo: String, message: HandshakeMessage): Boolean {
         // The handshake sessionId IS NOT globally unique
         if (logger.isTraceEnabled) {
-            logger.trace { "[$logInfo] (${message.connectKey}) send HS: $message" }
+            logger.trace("[$logInfo] (${message.connectKey}) send HS: $message")
         }
 
         try {

@@ -61,7 +61,7 @@ class PingPongTest : BaseTest() {
             addEndPoint(server)
 
             server.onError { throwable ->
-                logger.error(throwable) { "Error during processing" }
+                logger.error("Error during processing", throwable)
                 stopEndPoints()
                 Assert.fail("Error during processing")
             }
@@ -90,7 +90,7 @@ class PingPongTest : BaseTest() {
             }
 
             client.onError { throwable ->
-                logger.error(throwable) { "Error during processing" }
+                logger.error("Error during processing", throwable)
                 stopEndPoints()
                 Assert.fail("Error during processing")
             }

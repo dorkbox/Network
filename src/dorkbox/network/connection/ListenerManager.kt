@@ -20,16 +20,15 @@ import dorkbox.classUtil.ClassHierarchy
 import dorkbox.collections.IdentityMap
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.os.OS
-import mu.KLogger
 import net.jodah.typetools.TypeResolver
-import java.util.concurrent.*
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import org.slf4j.Logger
+import java.util.concurrent.locks.*
 import kotlin.concurrent.write
 
 /**
  * Manages all of the different connect/disconnect/etc listeners
  */
-internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogger) {
+internal class ListenerManager<CONNECTION: Connection>(private val logger: Logger) {
     companion object {
         /**
          * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
@@ -551,9 +550,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      */
     fun close() {
         // we have to follow the single-writer principle!
-        if (logger.isDebugEnabled) {
-            logger.debug { "Closing the listener manager" }
-        }
+        logger.debug("Closing the listener manager")
 
         onConnectFilterLock.write {
             onConnectFilterList = Array(0) { { true } }

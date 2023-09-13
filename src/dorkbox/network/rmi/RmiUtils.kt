@@ -20,7 +20,7 @@ import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.reflectasm.MethodAccess
 import dorkbox.classUtil.ClassHelper
 import dorkbox.network.connection.Connection
-import mu.KLogger
+import org.slf4j.Logger
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.*
@@ -75,7 +75,7 @@ object RmiUtils {
         throw RuntimeException("Two methods with same signature! ('$o1Name', '$o2Name'")
     }
 
-    private fun getReflectAsmMethod(logger: KLogger, clazz: Class<*>): MethodAccess? {
+    private fun getReflectAsmMethod(logger: Logger, clazz: Class<*>): MethodAccess? {
         return try {
             val methodAccess = MethodAccess.get(clazz)
 
@@ -95,7 +95,7 @@ object RmiUtils {
      * @param iFace this is never null.
      * @param impl this is NULL on the rmi "client" side. This is NOT NULL on the "server" side (where the object lives)
      */
-    fun getCachedMethods(logger: KLogger, kryo: Kryo, asmEnabled: Boolean, iFace: Class<*>, impl: Class<*>?, classId: Int): Array<CachedMethod> {
+    fun getCachedMethods(logger: Logger, kryo: Kryo, asmEnabled: Boolean, iFace: Class<*>, impl: Class<*>?, classId: Int): Array<CachedMethod> {
         var ifaceAsmMethodAccess: MethodAccess? = null
         var implAsmMethodAccess: MethodAccess? = null
 

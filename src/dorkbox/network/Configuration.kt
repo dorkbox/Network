@@ -30,11 +30,10 @@ import io.aeron.driver.ThreadingMode
 import io.aeron.driver.exceptions.InvalidChannelException
 import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import mu.KLogger
-import mu.KotlinLogging
 import org.agrona.concurrent.AgentTerminationException
 import org.agrona.concurrent.BackoffIdleStrategy
 import org.agrona.concurrent.IdleStrategy
+import org.slf4j.Logger
 import org.slf4j.helpers.NOPLogger
 import java.io.File
 import java.net.BindException
@@ -98,7 +97,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         require(listenIpAddress.isNotBlank()) { "Blank listen IP address, cannot continue." }
     }
 
-    override fun initialize(logger: KLogger): dorkbox.network.ServerConfiguration {
+    override fun initialize(logger: Logger): dorkbox.network.ServerConfiguration {
         return super.initialize(logger) as dorkbox.network.ServerConfiguration
     }
 
@@ -170,7 +169,7 @@ class ClientConfiguration : dorkbox.network.Configuration() {
         }
     }
 
-    override fun initialize(logger: KLogger): dorkbox.network.ClientConfiguration {
+    override fun initialize(logger: Logger): dorkbox.network.ClientConfiguration {
         return super.initialize(logger) as dorkbox.network.ClientConfiguration
     }
 
@@ -208,7 +207,7 @@ abstract class Configuration protected constructor() {
          */
         const val version = "6.10"
 
-        internal val NOP_LOGGER = KotlinLogging.logger(NOPLogger.NOP_LOGGER)
+        internal val NOP_LOGGER = NOPLogger.NOP_LOGGER
 
         internal const val errorMessage = "Cannot set a property after the configuration context has been created!"
 
@@ -243,7 +242,7 @@ abstract class Configuration protected constructor() {
         /**
          * Depending on the OS, different base locations for the Aeron log directory are preferred.
          */
-        fun defaultAeronLogLocation(logger: KLogger = NOP_LOGGER): File {
+        fun defaultAeronLogLocation(logger: Logger = NOP_LOGGER): File {
             return when {
                 OS.isMacOsX -> {
                     // does the recommended location exist??
@@ -267,7 +266,7 @@ abstract class Configuration protected constructor() {
                             .enableRead()
                             .startBlocking(60, TimeUnit.SECONDS)
                             .output
-                            .string().trim().also {  if (logger.isTraceEnabled) { logger.trace { "Created new disk: $it" } } }
+                            .string().trim().also {  if (logger.isTraceEnabled) { logger.trace("Created new disk: $it") } }
 
                         // diskutil apfs createContainer /dev/disk4
                         val lines = dorkbox.executor.Executor()
@@ -276,7 +275,7 @@ abstract class Configuration protected constructor() {
                             .enableRead()
                             .startBlocking(60, TimeUnit.SECONDS)
                             .output
-                            .lines().onEach { line -> logger.trace { line } }
+                            .lines().onEach { line -> logger.trace(line) }
 
                         val newDiskLine = lines[lines.lastIndex-1]
                         val disk = newDiskLine.substring(newDiskLine.lastIndexOf(':')+1).trim()
@@ -288,7 +287,7 @@ abstract class Configuration protected constructor() {
                             .enableRead()
                             .startBlocking(60, TimeUnit.SECONDS)
                             .output
-                            .string().also {  if (logger.isTraceEnabled) { logger.trace { it } } }
+                            .string().also {  if (logger.isTraceEnabled) { logger.trace(it) } }
 
                         // diskutil mount nobrowse "DevShm"
                         dorkbox.executor.Executor()
@@ -297,7 +296,7 @@ abstract class Configuration protected constructor() {
                             .enableRead()
                             .startBlocking(60, TimeUnit.SECONDS)
                             .output
-                            .string().also {  if (logger.isTraceEnabled) { logger.trace { it } } }
+                            .string().also {  if (logger.isTraceEnabled) { logger.trace(it) } }
 
                         // touch /Volumes/RAMDisk/.metadata_never_index
                         File("${suggestedLocation}/.metadata_never_index").createNewFile()
@@ -791,7 +790,7 @@ abstract class Configuration protected constructor() {
         require(publicationTermBufferLength < 1_073_741_824) { "configuration publication term buffer must be < 1,073,741,824"}
     }
 
-    internal open fun initialize(logger: KLogger): dorkbox.network.Configuration  {
+    internal open fun initialize(logger: Logger): dorkbox.network.Configuration  {
         // explicitly don't set defaults if we already have the context defined!
         if (contextDefined) {
             return this
@@ -864,7 +863,7 @@ abstract class Configuration protected constructor() {
 
         if (dir != null) {
             if (forceAllowSharedAeronDriver) {
-                logger.warn { "Forcing the Aeron driver to be shared between processes. THIS IS DANGEROUS!" }
+                logger.warn("Forcing the Aeron driver to be shared between processes. THIS IS DANGEROUS!")
             } else if (!dir.absolutePath.endsWith(appId)) {
                 // we have defined an aeron directory
                 dir = File(dir.absolutePath + "_$appId")

@@ -39,7 +39,9 @@ import dorkbox.network.serialization.KryoReader
 import dorkbox.network.serialization.KryoWriter
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.serialization.SettingsStore
-import dorkbox.objectPool.*
+import dorkbox.objectPool.BoundedPoolObject
+import dorkbox.objectPool.ObjectPool
+import dorkbox.objectPool.Pool
 import dorkbox.os.OS
 import io.aeron.Publication
 import io.aeron.driver.ThreadingMode
@@ -48,11 +50,10 @@ import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.trySendBlocking
-import mu.KLogger
-import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.IdleStrategy
-import org.agrona.concurrent.SigInt
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.util.concurrent.*
 
 
@@ -100,10 +101,10 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         internal val lanAddress = IP.lanAddress()
     }
 
-    val logger: KLogger = KotlinLogging.logger(loggerName)
+    val logger: Logger = LoggerFactory.getLogger(loggerName)
 
     private val handler = CoroutineExceptionHandler { _, exception ->
-        logger.error { "Uncaught Coroutine Error: ${exception.stackTraceToString()}" }
+        logger.error("Uncaught Coroutine Error: ${exception.stackTraceToString()}")
     }
 
     // this is rather silly, BUT if there are more complex errors WITH the coroutine that occur, a regular try/catch WILL NOT catch it.
@@ -199,7 +200,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
     init {
         if (DEBUG_CONNECTIONS) {
-            logger.error { "DEBUG_CONNECTIONS is enabled. This should not happen in release!" }
+            logger.error("DEBUG_CONNECTIONS is enabled. This should not happen in release!")
         }
 
         // this happens more than once! (this is ok)
@@ -615,7 +616,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // IF we get this message in time, then we do not have to wait for the connection to expire before closing it
             is DisconnectMessage -> {
                 if (logger.isDebugEnabled) {
-                    logger.debug { "Received disconnect message from $otherTypeName" }
+                    logger.debug("Received disconnect message from $otherTypeName")
                 }
                 connection.close(sendDisconnectMessage = false,
                                  notifyDisconnect = true)
@@ -728,7 +729,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             val message = readKryo.read(buffer, offset, length, connection)
             if (logger.isTraceEnabled) {
                 // don't automatically create the lambda when trace is disabled! Because this uses 'outside' scoped info, it's a new lambda each time!
-                logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
+                logger.trace("[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message")
             }
             processMessage(message, connection, readKryo)
         } catch (e: Exception) {
@@ -886,7 +887,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         releaseWaitingThreads: Boolean)
     {
         if (logger.isDebugEnabled) {
-            logger.debug { "Requesting close: closeEverything=$closeEverything, releaseWaitingThreads=$releaseWaitingThreads" }
+            logger.debug("Requesting close: closeEverything=$closeEverything, releaseWaitingThreads=$releaseWaitingThreads")
         }
 
         // 1) endpoints can call close()
@@ -894,7 +895,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         val shutdownPreviouslyStarted = shutdownInProgress.getAndSet(true)
         if (closeEverything && shutdownPreviouslyStarted) {
             if (logger.isDebugEnabled) {
-                logger.debug { "Shutdown previously started, cleaning up..." }
+                logger.debug("Shutdown previously started, cleaning up...")
             }
             // this is only called when the client network event poller shuts down
             // if we have clientConnectionClosed, then run that logic (because it doesn't run on the client when the connection is closed remotely)
@@ -911,7 +912,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
         if (shutdownPreviouslyStarted) {
             if (logger.isDebugEnabled) {
-                logger.debug { "Shutdown previously started, ignoring..." }
+                logger.debug("Shutdown previously started, ignoring...")
             }
             return
         }
@@ -926,7 +927,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
         EventDispatcher.CLOSE.launch {
             if (logger.isDebugEnabled) {
-                logger.debug { "Shutting down endpoint..." }
+                logger.debug("Shutting down endpoint...")
             }
 
             // always do this. It is OK to run this multiple times
@@ -979,13 +980,11 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 shutdownInProgress.lazySet(false)
 
                 if (releaseWaitingThreads) {
-                    if (logger.isTraceEnabled) {
-                        logger.trace { "Counting down the close latch..." }
-                    }
+                    logger.trace("Counting down the close latch...")
                     closeLatch.countDown()
                 }
 
-                logger.info { "Done shutting down the endpoint." }
+                logger.info("Done shutting down the endpoint.")
             }
         }
     }
