@@ -895,28 +895,25 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (logger.isDebugEnabled) {
                 logger.debug("Aeron Driver [$driverId]: No driver started, not stopping driver or context.")
             }
-
-            // reset our contextDefine value, so that this configuration can safely be reused
-            endPoint?.config?.contextDefined = false
-            return@write false
-        }
-
-        if (logger.isDebugEnabled) {
-            logger.debug("Aeron Driver [$driverId]: Stopping driver at '${driverDirectory}'...")
-        }
-
-        // if we are the ones that started the media driver, then we must be the ones to close it
-        try {
-            mediaDriver!!.close()
-        } catch (e: Exception) {
-            if (endPoint != null) {
-                endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error closing", e))
-            } else {
-                logger.error("Aeron Driver [$driverId]: Error closing", e)
+        } else {
+            if (logger.isDebugEnabled) {
+                logger.debug("Aeron Driver [$driverId]: Stopping driver at '${driverDirectory}'...")
             }
+
+            // if we are the ones that started the media driver, then we must be the ones to close it
+            try {
+                mediaDriver!!.close()
+            } catch (e: Exception) {
+                if (endPoint != null) {
+                    endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error closing", e))
+                } else {
+                    logger.error("Aeron Driver [$driverId]: Error closing", e)
+                }
+            }
+
+            mediaDriver = null
         }
 
-        mediaDriver = null
 
         // it can actually close faster, if everything is ideal.
         val timeout = (aeronContext.driverTimeout + AERON_PUBLICATION_LINGER_TIMEOUT) / 4
