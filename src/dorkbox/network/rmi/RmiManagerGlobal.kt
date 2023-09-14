@@ -164,13 +164,14 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: Logger) : RmiObj
 
                 if (logger.isTraceEnabled) {
                     var argString = ""
-                    if (args != null && args.isNotEmpty()) {
+                    if (!args.isNullOrEmpty()) {
                         // long byte arrays have SERIOUS problems!
                         argString = Arrays.deepToString(args.map {
-                            if (it is ByteArray && it.size > 256) {
-                                "ByteArray(length=${it.size})"
-                            }  else {
-                                it
+                            when (it) {
+                                is ByteArray -> { "${it::class.java.simpleName}(length=${it.size})"}
+                                is Array<*>  -> { "${it::class.java.simpleName}(length=${it.size})"}
+                                is Collection<*>  -> { "${it::class.java.simpleName}(length=${it.size})"}
+                                else    -> { it }
                             }
                         }.toTypedArray())
                         argString = argString.substring(1, argString.length - 1)
