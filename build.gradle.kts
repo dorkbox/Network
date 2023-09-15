@@ -178,7 +178,7 @@ dependencies {
     api("com.dorkbox:Serializers:2.9")
     api("com.dorkbox:Storage:1.11")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.46")
+    api("com.dorkbox:Utilities:1.47")
 
 
     // how we bypass using reflection/jpms to access fields for java17+
