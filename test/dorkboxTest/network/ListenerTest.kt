@@ -74,9 +74,12 @@ class ListenerTest : BaseTest() {
     @Test
     @Throws(SecurityException::class, InitializationException::class, IOException::class, InterruptedException::class)
     fun listener() {
-        val server: Server<TestConnectionA> = Server(serverConfig()) {
-            TestConnectionA(it)
+        val server = object : Server<TestConnectionA>(serverConfig()) {
+            override fun newConnection(connectionParameters: ConnectionParams<TestConnectionA>): TestConnectionA {
+                return TestConnectionA(connectionParameters)
+            }
         }
+
         addEndPoint(server)
 
         // has session/stream count errors!
@@ -121,9 +124,12 @@ class ListenerTest : BaseTest() {
 
 
         // ----
-        val client: Client<TestConnectionA> = Client(clientConfig()) {
-            TestConnectionA(it)
+        val client = object : Client<TestConnectionA>(clientConfig()) {
+            override fun newConnection(connectionParameters: ConnectionParams<TestConnectionA>): TestConnectionA {
+                return TestConnectionA(connectionParameters)
+            }
         }
+
         addEndPoint(client)
 
 

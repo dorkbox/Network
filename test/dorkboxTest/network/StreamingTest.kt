@@ -20,6 +20,7 @@ import dorkbox.bytes.sha256
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.ConnectionParams
 import dorkbox.util.Sys
 import org.agrona.ExpandableDirectByteBuffer
 import org.junit.Assert
@@ -56,9 +57,12 @@ class StreamingTest : BaseTest() {
         val client = run {
             val config = clientConfig()
 
-            val client: Client<Connection> = Client(config) {
-                Connection(it)
+            val client = object : Client<Connection>(config) {
+                override fun newConnection(connectionParameters: ConnectionParams<Connection>): Connection {
+                    return Connection(connectionParameters)
+                }
             }
+
             addEndPoint(client)
 
             client.onConnect {
@@ -103,9 +107,7 @@ class StreamingTest : BaseTest() {
         val client = run {
             val config = clientConfig()
 
-            val client: Client<Connection> = Client(config) {
-                Connection(it)
-            }
+            val client = Client<Connection>(config)
             addEndPoint(client)
 
             client.onConnect {
@@ -147,9 +149,7 @@ class StreamingTest : BaseTest() {
         val client = run {
             val config = clientConfig()
 
-            val client: Client<Connection> = Client(config) {
-                Connection(it)
-            }
+            val client = Client<Connection>(config)
             addEndPoint(client)
 
             client.onConnect {
