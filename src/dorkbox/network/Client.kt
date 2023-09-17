@@ -45,74 +45,11 @@ import java.util.concurrent.*
  * ASYNC.
  *
  * @param config these are the specific connection options
- * @param connectionFunc allows for custom connection implementations defined as a unit function
  * @param loggerName allows for a custom logger name for this endpoint (for when there are multiple endpoints)
  */
 @Suppress("unused")
-open class Client<CONNECTION : Connection>(
-        config: ClientConfiguration = ClientConfiguration(),
-        connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
-        loggerName: String = Client::class.java.simpleName)
-    : EndPoint<CONNECTION>(config, connectionFunc, loggerName) {
-
-    /**
-     * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
-     * ASYNC.
-     *
-     * @param config these are the specific connection options
-     * @param loggerName allows for a custom logger name for this endpoint (for when there are multiple endpoints)
-     * @param connectionFunc allows for custom connection implementations defined as a unit function
-     */
-    constructor(config: ClientConfiguration,
-                loggerName: String,
-                connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION)
-            : this(config, connectionFunc, loggerName)
-
-
-    /**
-     * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
-     * ASYNC.
-     *
-     * @param config these are the specific connection options
-     * @param connectionFunc allows for custom connection implementations defined as a unit function
-     */
-    constructor(config: ClientConfiguration,
-                connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION)
-            : this(config, connectionFunc, Client::class.java.simpleName)
-
-
-    /**
-     * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
-     * ASYNC.
-     *
-     * @param config these are the specific connection options
-     * @param loggerName allows for a custom logger name for this endpoint (for when there are multiple endpoints)
-     */
-    constructor(config: ClientConfiguration,
-                loggerName: String)
-            : this(config,
-                   {
-                       @Suppress("UNCHECKED_CAST")
-                       Connection(it) as CONNECTION
-                   },
-                   loggerName)
-
-
-    /**
-     * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
-     * ASYNC.
-     *
-     * @param config these are the specific connection options
-     */
-    constructor(config: ClientConfiguration)
-            : this(config,
-                   {
-                       @Suppress("UNCHECKED_CAST")
-                       Connection(it) as CONNECTION
-                   },
-                   Client::class.java.simpleName)
-
-
+open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientConfiguration(), loggerName: String = Client::class.java.simpleName)
+    : EndPoint<CONNECTION>(config, loggerName) {
 
     companion object {
         /**
@@ -810,7 +747,7 @@ open class Client<CONNECTION : Connection>(
             logger.info("Creating new connection to $logInfo")
         }
 
-        val newConnection = connectionFunc(ConnectionParams(
+        val newConnection = newConnection(ConnectionParams(
             connectionInfo.publicKey,
             this,
             clientConnection.connectionInfo,

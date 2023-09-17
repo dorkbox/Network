@@ -73,21 +73,15 @@ import java.util.concurrent.*
  *
  *  @throws SecurityException if unable to initialize/generate ECC keys
 */
-abstract class EndPoint<CONNECTION : Connection> private constructor(val type: Class<*>,
-                     val config: Configuration,
-                     internal val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
-                     loggerName: String)
-    {
+abstract class EndPoint<CONNECTION : Connection> private constructor(val type: Class<*>, val config: Configuration, loggerName: String) {
 
     protected constructor(config: Configuration,
-                          connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                           loggerName: String)
-        : this(Client::class.java, config, connectionFunc, loggerName)
+        : this(Client::class.java, config, loggerName)
 
     protected constructor(config: ServerConfiguration,
-                          connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                           loggerName: String)
-        : this(Server::class.java, config, connectionFunc, loggerName)
+        : this(Server::class.java, config, loggerName)
 
     companion object {
         // connections are extremely difficult to diagnose when the connection timeout is short
@@ -392,6 +386,14 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         } else {
             aeronDriver.closeIfSingle()
         }
+    }
+
+    /**
+     * This is called whenever a new connection is made. By overriding this, it is possible to customize the Connection type.
+     */
+    open fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION {
+        @Suppress("UNCHECKED_CAST")
+        return Connection(connectionParameters) as CONNECTION
     }
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable

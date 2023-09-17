@@ -16,22 +16,15 @@
 
 package dorkboxTest.network
 
-import dorkbox.bytes.sha256
-import dorkbox.executor.Executor.Companion.log
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
-import dorkbox.util.Sys
+import dorkbox.network.connection.ConnectionParams
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import org.agrona.ExpandableDirectByteBuffer
-import org.agrona.concurrent.SigInt
-import org.junit.Assert
 import org.junit.Test
-import java.io.File
-import java.security.SecureRandom
 
 class ShutdownWhileInBadStateTest : BaseTest() {
 
@@ -42,9 +35,12 @@ class ShutdownWhileInBadStateTest : BaseTest() {
         val client = run {
             val config = clientConfig()
 
-            val client: Client<Connection> = Client(config) {
-                Connection(it)
+            val client = object : Client<Connection>(config) {
+                override fun newConnection(connectionParameters: ConnectionParams<Connection>): Connection {
+                    return Connection(connectionParameters)
+                }
             }
+
             addEndPoint(client)
 
             client

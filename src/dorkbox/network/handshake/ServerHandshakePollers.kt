@@ -26,7 +26,6 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.IpInfo
 import dorkbox.network.exceptions.ServerException
@@ -60,8 +59,7 @@ internal object ServerHandshakePollers {
         val logger: Logger,
         val server: Server<CONNECTION>,
         val driver: AeronDriver,
-        val handshake: ServerHandshake<CONNECTION>,
-        val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION
+        val handshake: ServerHandshake<CONNECTION>
     ): FragmentHandler {
 
         private val isReliable = server.config.isReliable
@@ -163,7 +161,6 @@ internal object ServerHandshakePollers {
                             publicKey = message.publicKey!!,
                             message = message,
                             logInfo = logInfo,
-                            connectionFunc = connectionFunc,
                             logger = logger
                         )
 
@@ -229,7 +226,6 @@ internal object ServerHandshakePollers {
         val server: Server<CONNECTION>,
         val driver: AeronDriver,
         val handshake: ServerHandshake<CONNECTION>,
-        val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         val isReliable: Boolean
     ): FragmentHandler {
         companion object {
@@ -392,7 +388,6 @@ internal object ServerHandshakePollers {
                             isReliable = isReliable,
                             message = message,
                             logInfo = logInfo,
-                            connectionFunc = connectionFunc,
                             logger = logger
                         )
 
@@ -460,7 +455,6 @@ internal object ServerHandshakePollers {
 
     fun <CONNECTION : Connection> ipc(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
         val logger = server.logger
-        val connectionFunc = server.connectionFunc
         val config = server.config as ServerConfiguration
 
         val poller = try {
@@ -481,7 +475,7 @@ internal object ServerHandshakePollers {
                 //   - re-entrant with the client
                 val subscription = driver.subscription
 
-                val delegate = IpcProc(logger, server, server.aeronDriver, handshake, connectionFunc)
+                val delegate = IpcProc(logger, server, server.aeronDriver, handshake)
                 val handler = FragmentAssembler(delegate)
 
                 override fun poll(): Int {
@@ -509,7 +503,6 @@ internal object ServerHandshakePollers {
 
     fun <CONNECTION : Connection> ip4(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
         val logger = server.logger
-        val connectionFunc = server.connectionFunc
         val config = server.config
         val isReliable = config.isReliable
 
@@ -531,7 +524,7 @@ internal object ServerHandshakePollers {
                 //   - re-entrant with the client
                 val subscription = driver.subscription
 
-                val delegate = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
+                val delegate = UdpProc(logger, server, server.aeronDriver, handshake, isReliable)
                 val handler = FragmentAssembler(delegate)
 
                 override fun poll(): Int {
@@ -557,7 +550,6 @@ internal object ServerHandshakePollers {
 
     fun <CONNECTION : Connection> ip6(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
         val logger = server.logger
-        val connectionFunc = server.connectionFunc
         val config = server.config
         val isReliable = config.isReliable
 
@@ -579,7 +571,7 @@ internal object ServerHandshakePollers {
                 //   - re-entrant with the client
                 val subscription = driver.subscription
 
-                val delegate = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
+                val delegate = UdpProc(logger, server, server.aeronDriver, handshake, isReliable)
                 val handler = FragmentAssembler(delegate)
 
                 override fun poll(): Int {
@@ -606,7 +598,6 @@ internal object ServerHandshakePollers {
     fun <CONNECTION : Connection> ip6Wildcard(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
 
         val logger = server.logger
-        val connectionFunc = server.connectionFunc
         val config = server.config
         val isReliable = config.isReliable
 
@@ -628,7 +619,7 @@ internal object ServerHandshakePollers {
                 //   - re-entrant with the client
                 val subscription = driver.subscription
 
-                val delegate = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
+                val delegate = UdpProc(logger, server, server.aeronDriver, handshake, isReliable)
                 val handler = FragmentAssembler(delegate)
 
                 override fun poll(): Int {

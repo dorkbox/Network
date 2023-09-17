@@ -230,7 +230,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
         publicKey: ByteArray,
         message: HandshakeMessage,
         logInfo: String,
-        connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: Logger
     ): Boolean {
         val serialization = config.serialization
@@ -347,7 +346,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 logger.info("Creating new connection to $logInfo")
             }
 
-            connection = connectionFunc(ConnectionParams(
+            connection = server.newConnection(ConnectionParams(
                 publicKey,
                 server,
                 newConnectionDriver.pubSub,
@@ -422,7 +421,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
         isReliable: Boolean,
         message: HandshakeMessage,
         logInfo: String,
-        connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: Logger
     ): Boolean {
         val serialization = config.serialization
@@ -576,7 +574,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 logger.info("Creating new connection to $logInfo")
             }
 
-            connection = connectionFunc(ConnectionParams(publicKey, server, newConnectionDriver.pubSub, validateRemoteAddress, cryptoSecretKey))
+            connection = server.newConnection(ConnectionParams(publicKey, server, newConnectionDriver.pubSub, validateRemoteAddress, cryptoSecretKey))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             val permitConnection = listenerManager.notifyFilter(connection)
