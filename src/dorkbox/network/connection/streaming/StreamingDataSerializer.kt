@@ -20,26 +20,8 @@ import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 
-class StreamingControlSerializer: Serializer<StreamingControl>() {
-    override fun write(kryo: Kryo, output: Output, data: StreamingControl) {
-        output.writeByte(data.state.ordinal)
-        output.writeBoolean(data.isFile)
-        output.writeVarInt(data.streamId, true)
-        output.writeVarLong(data.totalSize, true)
-    }
 
-    override fun read(kryo: Kryo, input: Input, type: Class<out StreamingControl>): StreamingControl {
-        val stateOrdinal = input.readByte().toInt()
-        val isFile = input.readBoolean()
-        val state = StreamingState.entries.first { it.ordinal == stateOrdinal }
-        val streamId = input.readVarInt(true)
-        val totalSize = input.readVarLong(true)
-
-        return StreamingControl(state, isFile, streamId, totalSize)
-    }
-}
-
-class StreamingDataSerializer: Serializer<StreamingData>() {
+internal class StreamingDataSerializer: Serializer<StreamingData>() {
     override fun write(kryo: Kryo, output: Output, data: StreamingData) {
         output.writeVarInt(data.streamId, true)
         // we re-use this data when streaming data to the remote endpoint, so we don't write out the payload here, we do it in another place

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 
-class MethodResponseSerializer() : Serializer<MethodResponse>() {
+internal class MethodResponseSerializer() : Serializer<MethodResponse>() {
     override fun write(kryo: Kryo, output: Output, response: MethodResponse) {
         output.writeInt(response.packedId)
         kryo.writeClassAndObject(output, response.result)

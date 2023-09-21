@@ -51,7 +51,7 @@ import java.lang.reflect.Method
  * Internal message to invoke methods remotely.
  */
 @Suppress("ConstantConditionIf")
-class MethodRequestSerializer<CONNECTION: Connection>(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>) : Serializer<MethodRequest>() {
+internal class MethodRequestSerializer<CONNECTION: Connection>(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>) : Serializer<MethodRequest>() {
     override fun write(kryo: Kryo, output: Output, methodRequest: MethodRequest) {
         val method = methodRequest.cachedMethod
 

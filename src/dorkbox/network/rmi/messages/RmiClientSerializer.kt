@@ -56,7 +56,7 @@ import java.lang.reflect.Proxy
  *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
 @Suppress("UNCHECKED_CAST")
-class RmiClientSerializer<CONNECTION: Connection>: Serializer<Any>() {
+internal class RmiClientSerializer<CONNECTION: Connection>: Serializer<Any>() {
     override fun write(kryo: Kryo, output: Output, proxyObject: Any) {
         val handler = Proxy.getInvocationHandler(proxyObject) as RmiClient
         output.writeBoolean(handler.isGlobal)

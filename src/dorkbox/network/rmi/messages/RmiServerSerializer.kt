@@ -75,7 +75,7 @@ import dorkbox.network.serialization.KryoWriter
  *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
 @Suppress("UNCHECKED_CAST")
-class RmiServerSerializer<CONNECTION: Connection> : Serializer<Any>(false) {
+internal class RmiServerSerializer<CONNECTION: Connection> : Serializer<Any>(false) {
 
     override fun write(kryo: Kryo, output: Output, `object`: Any) {
         val kryoExtra = kryo as KryoWriter<CONNECTION>

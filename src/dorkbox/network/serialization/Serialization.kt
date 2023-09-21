@@ -182,6 +182,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     private val streamingControlSerializer = StreamingControlSerializer()
     private val streamingDataSerializer = StreamingDataSerializer()
     private val pingSerializer = PingSerializer()
+    private val disconnectSerializer = DisconnectSerializer()
 
     internal val fileContentsSerializer = FileContentsSerializer<CONNECTION>()
 
@@ -434,7 +435,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
         kryo.register(Ping::class.java, pingSerializer)
         kryo.register(HandshakeMessage::class.java)
-        kryo.register(DisconnectMessage::class.java)
+        kryo.register(DisconnectMessage::class.java, disconnectSerializer)
 
 
         @Suppress("UNCHECKED_CAST")
