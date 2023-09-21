@@ -21,6 +21,7 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.connection.*
+import dorkbox.network.connection.session.SessionConnection
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerHandshakeException
 import dorkbox.network.exceptions.ServerTimedoutException
@@ -45,8 +46,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
     private val listenerManager: ListenerManager<CONNECTION>,
     val aeronDriver: AeronDriver
 ) {
-
-
 
     // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
     private val pendingConnections = ExpiringMap.builder()
@@ -123,24 +122,33 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
         // check to see if this is a pending connection
         if (message.state == HandshakeMessage.DONE) {
-            val existingConnection = pendingConnections.remove(message.connectKey)
-            if (existingConnection == null) {
+            val newConnection = pendingConnections.remove(message.connectKey)
+            if (newConnection == null) {
                 listenerManager.notifyError(ServerHandshakeException("[?????] (${message.connectKey}) Error! Pending connection from client was null, and cannot complete handshake!"))
                 return true
             }
 
             // Server is the "source", client mirrors the server
             if (logger.isDebugEnabled) {
-                logger.debug("[${existingConnection}] (${message.connectKey}) Connection done with handshake.")
+                logger.debug("[${newConnection}] (${message.connectKey}) Connection done with handshake.")
             }
 
-            existingConnection.setImage()
+            newConnection.setImage()
 
-            // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
-            listenerManager.notifyInit(existingConnection)
+            // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
+            var newSession = true
+            if (server.sessionManager.enabled()) {
+                newSession = server.sessionManager.onInit(newConnection as SessionConnection)
+            }
+
+            // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
+            if (newSession) {
+                listenerManager.notifyInit(newConnection)
+            }
+
 
             // this enables the connection to start polling for messages
-            server.addConnection(existingConnection)
+            server.addConnection(newConnection)
 
             // now tell the client we are done
             try {
@@ -148,9 +156,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
                                         logInfo,
                                         HandshakeMessage.doneToClient(message.connectKey))
 
-                listenerManager.notifyConnect(existingConnection)
+                if (newSession) {
+                    listenerManager.notifyConnect(newConnection)
+                } else {
+                    (newConnection as SessionConnection).sendPendingMessages()
+                }
             } catch (e: Exception) {
-                listenerManager.notifyError(existingConnection, TransmitException("[$existingConnection] Handshake error", e))
+                listenerManager.notifyError(newConnection, TransmitException("[$newConnection] Handshake error", e))
             }
 
             return false
@@ -371,11 +383,14 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
             // now create the encrypted payload, using no crypto
             successMessage.registrationData = server.crypto.nocrypt(
-                connectionSessionIdPub,
-                connectionSessionIdSub,
-                connectionStreamIdPub,
-                connectionStreamIdSub,
-                serialization.getKryoRegistrationDetails())
+                sessionIdPub = connectionSessionIdPub,
+                sessionIdSub = connectionSessionIdSub,
+                streamIdPub = connectionStreamIdPub,
+                streamIdSub = connectionStreamIdSub,
+                enableSession = config.enableSessionManagement,
+                sessionTimeout = config.sessionTimeoutSeconds,
+                kryoRegDetails = serialization.getKryoRegistrationDetails()
+            )
 
             successMessage.publicKey = server.crypto.publicKeyBytes
 
@@ -612,6 +627,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
+                enableSession = config.enableSessionManagement,
+                sessionTimeout = config.sessionTimeoutSeconds,
                 kryoRegDetails = serialization.getKryoRegistrationDetails()
             )
 

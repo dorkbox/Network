@@ -59,7 +59,7 @@ import kotlin.concurrent.write
  *
  * @author Nathan Robinson
  */
-internal class RemoteObjectStorage(val logger: Logger) {
+class RemoteObjectStorage(val logger: Logger) {
 
     companion object {
         const val INVALID_RMI = 0
@@ -77,14 +77,7 @@ internal class RemoteObjectStorage(val logger: Logger) {
     //   2) specifically request a number
     // To solve this, we use 3 data structures, because it's also possible to RETURN no-longer needed object ID's (like when a connection closes)
     private var objectIdCounter: Int = 1
-    private val reservedObjectIds = IntArrayList(1, INVALID_RMI)
     private val objectIds = IntArrayList(16, INVALID_RMI)
-
-    init {
-        (0..8).forEach { _ ->
-            objectIds.addInt(objectIdCounter++)
-        }
-    }
 
     private fun validate(objectId: Int) {
         require(objectId > 0) { "The ID must be greater than 0" }
@@ -92,92 +85,33 @@ internal class RemoteObjectStorage(val logger: Logger) {
     }
 
     /**
-     * @return the next ID or 0 (INVALID_RMI, if it's invalid)
-     */
-    private fun unsafeNextId(): Int {
-        val id = if (objectIds.size > 0) {
-            objectIds.removeAt(objectIds.size - 1)
-        } else {
-            objectIdCounter++
-        }
-
-        if (objectIdCounter > 65535) {
-            // basically, it's a short (but collections are a LOT easier to deal with if it's an int)
-            val msg = "Max ID size is 65535, because of how we pack the bytes when sending RMI messages. FATAL ERROR! (too many objects)"
-            logger.error(msg)
-            return INVALID_RMI
-        }
-
-        return id
-    }
-
-    /**
      * @return the next possible RMI object ID. Either one that is next available, or 0 (INVALID_RMI) if it was invalid
      */
     fun nextId(): Int {
         idLock.write {
-            var idToReturn = unsafeNextId()
-            while (reservedObjectIds.contains(idToReturn)) {
-                idToReturn = unsafeNextId()
-            }
-
-            return idToReturn
-        }
-    }
-
-
-    /**
-     * Reserves an ID so that other requests for ID's will never return this ID. The number must be > 0 and < 65535
-     *
-     * Reservations are permanent and it will ALWAYS be reserved!  You cannot "un-reserve" an ID.
-     *
-     * If you care about memory and performance, use the ID from "nextId()" instead.
-     *
-     * @return false if this ID was not able to be reserved
-     */
-    fun reserveId(id: Int): Boolean {
-        validate(id)
-
-        idLock.write {
-            val contains = objectIds.remove(id)
-            if (contains) {
-                // this id is available for us to use (and was temporarily used before)
-                return true
-            }
-
-            if (reservedObjectIds.contains(id)) {
-                // this id is ALREADY used by something else
-                return false
-            }
-
-            if (objectIdCounter < id) {
-                // this id is ALREADY used by something else
-                return false
-            }
-
-            if (objectIdCounter == id) {
-                // we are available via the counter, so make sure the counter increments
+            val id = if (objectIds.size > 0) {
+                objectIds.removeAt(objectIds.size - 1)
+            } else {
                 objectIdCounter++
-                // we still want to mark this as reserved, so fall through
             }
 
-            // this means that the counter is LARGER than the id (maybe even a LOT larger)
-            // we just stuff this requested number in a small array and check it whenever we get a new number
-            reservedObjectIds.add(id)
-            return true
+            if (objectIdCounter > 65535) {
+                // basically, it's a short (but collections are a LOT easier to deal with if it's an int)
+                val msg = "Max ID size is 65535, because of how we pack the bytes when sending RMI messages. FATAL ERROR! (too many objects)"
+                logger.error(msg)
+                return INVALID_RMI
+            }
+
+            return id
         }
     }
+
 
     /**
      * @return an ID to be used again. Reserved IDs will not be allowed to be returned
      */
     fun returnId(id: Int) {
         idLock.write {
-            if (reservedObjectIds.contains(id)) {
-                logger.error("Do not return a reserved ID ($id). Once an ID is reserved, it is permanent.")
-                return
-            }
-
             val shortCheck: Int = (id + 1)
             if (shortCheck == objectIdCounter) {
                 objectIdCounter--
@@ -188,9 +122,6 @@ internal class RemoteObjectStorage(val logger: Logger) {
         }
     }
 
-
-
-
     /**
      * Automatically registers an object with the next available ID to allow a remote connection to access this object via the returned ID
      *
@@ -200,7 +131,7 @@ internal class RemoteObjectStorage(val logger: Logger) {
         // this will return INVALID_RMI if there are too many in the ObjectSpace
         val nextObjectId = nextId()
         if (nextObjectId != INVALID_RMI) {
-            objectMap.put(nextObjectId, `object`)
+            objectMap[nextObjectId] = `object`
 
             if (logger.isTraceEnabled) {
                 logger.trace("Remote object <proxy:$nextObjectId> registered with .toString() = '${`object`}'")
@@ -220,7 +151,7 @@ internal class RemoteObjectStorage(val logger: Logger) {
     fun register(`object`: Any, objectId: Int): Boolean {
         validate(objectId)
 
-        objectMap.put(objectId, `object`)
+        objectMap[objectId] = `object`
 
         if (logger.isTraceEnabled) {
             logger.trace("Remote object <proxy:$objectId> registered with .toString() = '${`object`}'")
@@ -277,6 +208,36 @@ internal class RemoteObjectStorage(val logger: Logger) {
     fun <T: Any> getId(remoteObject: T): Int {
         // Find an ID with the object.
         return objectMap.inverse()[remoteObject]
+    }
+
+
+    /**
+     * @return all the saved RMI implementation objects along with their RMI ID. This is so we can restore these later on
+     */
+    fun getAll(): List<Pair<Int, Any>> {
+        return objectMap.entries.map { it -> Pair(it.key, it.value) }.toList()
+    }
+
+    /**
+     * @return all the saved RMI implementation objects along with their RMI ID. This is so we can restore these later on
+     */
+    fun restoreAll(implObjects: List<Pair<Int, Any>>) {
+        idLock.write {
+            // this is a bit slow, but we have to re-inject objects. THIS happens before the connection is initialized, so we know
+            // these RMI ids are available
+
+            implObjects.forEach {
+                objectMap.remove(it.first)
+            }
+
+            objectIdCounter += implObjects.size
+        }
+
+
+        // now we have to put our items back into the backing map.
+        implObjects.forEach {
+            objectMap[it.first] = it.second
+        }
     }
 
     fun close() {

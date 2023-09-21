@@ -24,6 +24,8 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
 import dorkbox.network.aeron.EventPoller
+import dorkbox.network.connection.session.SessionConnection
+import dorkbox.network.connection.session.SessionManager
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -177,6 +179,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
     private val streamingManager = StreamingManager<CONNECTION>(logger, config)
+
+    internal lateinit var sessionManager: SessionManager<SessionConnection>
+
 
     /**
      * The primary machine port that the server will listen for connections on
@@ -520,7 +525,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         sendIdleStrategy.reset()
 
         // A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
-        return try {
+        val success = try {
             // since ANY thread can call 'send', we have to take kryo instances in a safe way
             val kryo = serialization.take()
             try {
@@ -575,6 +580,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
             false
         }
+
+        return success
     }
 
     /**
@@ -618,10 +625,11 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // IF we get this message in time, then we do not have to wait for the connection to expire before closing it
             is DisconnectMessage -> {
                 if (logger.isDebugEnabled) {
-                    logger.debug("Received disconnect message from $otherTypeName")
+                    logger.debug("Received disconnect message from: $otherTypeName")
                 }
                 connection.close(sendDisconnectMessage = false,
-                                 notifyDisconnect = true)
+                                 notifyDisconnect = true,
+                                 closeEverything = message.closeEverything)
             }
 
             // streaming message. This is used when the published data is too large for a single Aeron message.
@@ -937,7 +945,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
             connections.forEach {
                 it.closeImmediately(sendDisconnectMessage = true,
-                                    notifyDisconnect = notifyDisconnect)
+                                    notifyDisconnect = notifyDisconnect,
+                                    closeEverything = closeEverything)
             }
 
 

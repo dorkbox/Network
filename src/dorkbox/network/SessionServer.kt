@@ -13,18 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.handshake
 
-import javax.crypto.spec.SecretKeySpec
+package dorkbox.network
 
-internal class ClientConnectionInfo(
-    val sessionIdPub: Int = 0,
-    val sessionIdSub: Int = 0,
-    val streamIdPub: Int,
-    val streamIdSub: Int = 0,
-    val publicKey: ByteArray = ByteArray(0),
-    val enableSession: Boolean,
-    val sessionTimeout: Long,
-    val kryoRegistrationDetails: ByteArray,
-    val secretKey: SecretKeySpec
-)
+import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.session.SessionConnection
+
+class SessionServer<CONNECTION: SessionConnection>(config: ServerConfiguration = ServerConfiguration(), loggerName: String = Server::class.java.simpleName):
+    Server<CONNECTION>(config, loggerName) {
+    override fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION {
+        @Suppress("UNCHECKED_CAST")
+        return SessionConnection(connectionParameters) as CONNECTION
+    }
+}

@@ -217,7 +217,7 @@ internal class RmiClient(val isGlobal: Boolean,
                     return null
                 }
 
-                else -> throw Exception("Invocation handler could not find RemoteObject method for ${method.name}")
+                else -> throw RmiException("Invocation handler could not find RemoteObject method for ${method.name}")
             }
         } else {
             when (method) {
@@ -237,6 +237,8 @@ internal class RmiClient(val isGlobal: Boolean,
                 }
             }
         }
+
+        val connection = connection
 
         // setup the RMI request
         val invokeMethod = MethodRequest()
@@ -269,7 +271,12 @@ internal class RmiClient(val isGlobal: Boolean,
             // If we are async, we ignore the response (don't invoke the response manager at all)....
             invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, RemoteObjectStorage.ASYNC_RMI)
 
-            connection.send(invokeMethod)
+            val success = connection.send(invokeMethod)
+            if (!success) {
+                if (!connection.endPoint.sessionManager.enabled()) {
+                    throw RmiException("Unable to send async message, an error occurred during the send process")
+                }
+            }
 
             // if we are async then we return immediately (but must return the correct type!)
             // If you want the response value, disable async!
@@ -290,17 +297,23 @@ internal class RmiClient(val isGlobal: Boolean,
             return null
         }
 
+        val logger = connection.logger
 
         //
         // this is all SYNC code
         //
 
         // The response, even if there is NOT one (ie: not void) will always return a thing (so our code execution is in lockstep -- unless it is ASYNC)
-        val responseWaiter = responseManager.prep(connection.logger)
+        val responseWaiter = responseManager.prep(logger)
         invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, responseWaiter.id)
 
-        connection.send(invokeMethod)
-
+        val success = connection.send(invokeMethod)
+        if (!success) {
+            if (!connection.endPoint.sessionManager.enabled()) {
+                responseManager.abort(responseWaiter, logger)
+                throw RmiException("Unable to send message, an error occurred during the send process")
+            }
+        }
 
 
         // if a 'suspend' function is called, then our last argument is a 'Continuation' object
@@ -341,7 +354,7 @@ internal class RmiClient(val isGlobal: Boolean,
                     responseWaiter.doWait()
                 }
 
-                responseManager.getReply(responseWaiter, timeoutMillis, connection.logger, connection)
+                responseManager.getReply(responseWaiter, timeoutMillis, logger, connection)
             }
 
             // function suspension works differently. THIS IS A TRAMPOLINE TO CALL SUSPEND !!
@@ -395,7 +408,7 @@ internal class RmiClient(val isGlobal: Boolean,
                 responseWaiter.doWait()
             }
 
-            val any = responseManager.getReply(responseWaiter, timeoutMillis, connection.logger, connection)
+            val any = responseManager.getReply(responseWaiter, timeoutMillis, logger, connection)
             when (any) {
                 ResponseManager.TIMEOUT_EXCEPTION -> {
                     val fancyName = RmiUtils.makeFancyMethodName(method)

@@ -66,7 +66,7 @@ fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, por
 /**
  * Class for managing the Aeron+Media drivers
  */
-class AeronDriver constructor(config: Configuration, val logger: Logger, val endPoint: EndPoint<*>?) {
+class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPoint<*>?) {
 
     companion object {
         /**
@@ -869,22 +869,21 @@ class AeronDriver constructor(config: Configuration, val logger: Logger, val end
             /**
              * Since the publication is not connected, we weren't able to send data to the remote endpoint.
              */
+            val endPoint = endPoint!!
             if (result == Publication.NOT_CONNECTED) {
                 if (abortEarly) {
-                    val exception = endPoint!!.newException(
-                        "[${publication.sessionId()}] Unable to send message. (Connection in non-connected state, aborted attempt! ${
-                            AeronDriver.errorCodeName(result)
-                        })"
+                    val exception = endPoint.newException(
+                        "[${publication.sessionId()}] Unable to send message. (Connection in non-connected state, aborted attempt! ${errorCodeName(result)})"
                     )
                     listenerManager.notifyError(exception)
                     return false
                 }
                 else if (publication.isConnected) {
                     // more critical error sending the message. we shouldn't retry or anything.
-                    val errorMessage = "[${publication.sessionId()}] Error sending message. (Connection in non-connected state longer than linger timeout. ${AeronDriver.errorCodeName(result)})"
+                    val errorMessage = "[${publication.sessionId()}] Error sending message. (Connection in non-connected state longer than linger timeout. ${errorCodeName(result)})"
 
                     // either client or server. No other choices. We create an exception, because it's more useful!
-                    val exception = endPoint!!.newException(errorMessage)
+                    val exception = endPoint.newException(errorMessage)
 
                     // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                     // where we see who is calling "send()"
@@ -897,8 +896,12 @@ class AeronDriver constructor(config: Configuration, val logger: Logger, val end
                     internal.mustRestartDriverOnError = true
 
                     // publication was actually closed or the server was closed, so no bother throwing an error
-                    connection.closeImmediately(sendDisconnectMessage = false,
-                                                notifyDisconnect = true)
+                    connection.closeImmediately(
+                        sendDisconnectMessage = false,
+                        notifyDisconnect = true,
+                        closeEverything = false
+                    )
+
                     return false
                 }
             }
@@ -926,21 +929,22 @@ class AeronDriver constructor(config: Configuration, val logger: Logger, val end
                 // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
                 // send the message.
 
-                if (!endPoint!!.shutdownInProgress.value) {
+                if (!endPoint.shutdownInProgress.value && !endPoint.sessionManager.enabled()) {
                     // we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
+                    // additionally, if we are managing pending messages, don't show an error (since the message will be queued to send again)
                     val exception = endPoint.newException(
                         "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${errorCodeName(result)})"
-                    )
+                    ).cleanStackTrace(5)
                     listenerManager.notifyError(exception)
                 }
                 return false
             }
 
             // more critical error sending the message. we shouldn't retry or anything.
-            val errorMessage = "[${publication.sessionId()}] Error sending message. (${AeronDriver.errorCodeName(result)})"
+            val errorMessage = "[${publication.sessionId()}] Error sending message. (${errorCodeName(result)})"
 
             // either client or server. No other choices. We create an exception, because it's more useful!
-            val exception = endPoint!!.newException(errorMessage)
+            val exception = endPoint.newException(errorMessage)
 
             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
             // where we see who is calling "send()"
@@ -990,11 +994,12 @@ class AeronDriver constructor(config: Configuration, val logger: Logger, val end
              * According to Aeron Docs, Pubs and Subs can "come and go", whatever that means. We just want to make sure that we
              * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
              */
+            val endPoint = endPoint!!
             if (result == Publication.NOT_CONNECTED) {
                 if (publication.isConnected) {
                     // more critical error sending the message. we shouldn't retry or anything.
                     // this exception will be a ClientException or a ServerException
-                    val exception = endPoint!!.newException(
+                    val exception = endPoint.newException(
                         "[$logInfo] Error sending message. (Connection in non-connected state longer than linger timeout. ${errorCodeName(result)})",
                         null
                     )
@@ -1027,10 +1032,13 @@ class AeronDriver constructor(config: Configuration, val logger: Logger, val end
             }
 
             if (result == Publication.CLOSED) {
+                // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
+                // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
+                // send the message.
 
-                if (!endPoint!!.shutdownInProgress.value) {
+                if (!endPoint.shutdownInProgress.value && !endPoint.sessionManager.enabled()) {
                     // we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
-
+                    // additionally, if we are managing pending messages, don't show an error (since the message will be queued to send again)
                     val exception = endPoint.newException(
                         "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${errorCodeName(result)})"
                     )
@@ -1043,7 +1051,7 @@ class AeronDriver constructor(config: Configuration, val logger: Logger, val end
             val errorMessage = "[${publication.sessionId()}] Error sending message. (${errorCodeName(result)})"
 
             // either client or server. No other choices. We create an exception, because it's more useful!
-            val exception = endPoint!!.newException(errorMessage)
+            val exception = endPoint.newException(errorMessage)
 
             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
             // where we see who is calling "send()"

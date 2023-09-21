@@ -224,6 +224,24 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         return resultOrWaiter
     }
 
+    fun abort(responseWaiter: ResponseWaiter, logger: Logger) {
+        val id = RmiUtils.unpackUnsignedRight(responseWaiter.id)
+
+        if (logger.isTraceEnabled) {
+            logger.trace("[RM] abort: $id")
+        }
+
+        // deletes the entry in the map
+        pendingLock.write {
+            pending[id] = null
+        }
+
+        // always return the waiter to the cache
+        responseWaiter.result = null
+        waiterCache.put(responseWaiter)
+        rmiWaitersInUse.getAndDecrement()
+    }
+
     fun close() {
         // technically, this isn't closing it, so much as it's cleaning it out
         if (logger.isDebugEnabled) {

@@ -20,6 +20,7 @@ import dorkbox.network.aeron.*
 import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.IpListenType
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
+import dorkbox.network.connection.session.SessionManager
 import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
@@ -103,6 +104,17 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     private val string0: String by lazy {
         "EndPoint [Server: ${storage.publicKey.toHexString()}]"
     }
+
+    init {
+        sessionManager = if (config.enableSessionManagement) {
+            SessionManager(config, aeronDriver, config.sessionTimeoutSeconds)
+        }
+        else {
+            // this is a NO-OP version! We do not want if/else checks for every message!
+            SessionManager.Companion.NoOp(config, aeronDriver)
+        }
+    }
+
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
         // +2 because we do not want to see the stack for the abstract `newException`

@@ -18,6 +18,7 @@ package dorkbox.network.connection
 import dorkbox.network.Client
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
+import dorkbox.network.connection.session.SessionConnection
 import dorkbox.network.ping.Ping
 import dorkbox.network.rmi.RmiSupportConnection
 import io.aeron.Image
@@ -195,7 +196,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      *  @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    internal fun send(message: Any, abortEarly: Boolean): Boolean {
+    internal open fun send(message: Any, abortEarly: Boolean): Boolean {
         if (logger.isTraceEnabled) {
             // The handshake sessionId IS NOT globally unique
             // don't automatically create the lambda when trace is disabled! Because this uses 'outside' scoped info, it's a new lambda each time!
@@ -316,13 +317,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     fun close() {
         close(sendDisconnectMessage = true,
-              notifyDisconnect = true)
+              notifyDisconnect = true,
+              closeEverything = true)
     }
 
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    internal fun close(sendDisconnectMessage: Boolean, notifyDisconnect: Boolean) {
+    internal fun close(sendDisconnectMessage: Boolean, notifyDisconnect: Boolean, closeEverything: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
@@ -331,14 +333,17 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         // make sure that EVERYTHING before "close()" runs before we do
         EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
-            closeImmediately(sendDisconnectMessage, notifyDisconnect)
+            closeImmediately(
+                sendDisconnectMessage = sendDisconnectMessage,
+                notifyDisconnect = notifyDisconnect,
+                closeEverything = closeEverything)
         }
     }
 
 
     // connection.close() -> this
     // endpoint.close() -> connection.close() -> this
-    internal fun closeImmediately(sendDisconnectMessage: Boolean, notifyDisconnect: Boolean) {
+    internal fun closeImmediately(sendDisconnectMessage: Boolean, notifyDisconnect: Boolean, closeEverything: Boolean) {
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (!isClosed.compareAndSet(expect = false, update = true)) {
             return
@@ -346,6 +351,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         if (logger.isDebugEnabled) {
             logger.debug("[$toString0] connection closing")
+        }
+
+        // make sure to save off the RMI objects for session management
+        if (!closeEverything && endPoint.sessionManager.enabled()) {
+            endPoint.sessionManager.onDisconnect(this as SessionConnection)
         }
 
         // on close, we want to make sure this file is DELETED!
@@ -359,7 +369,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             }
 
             // sometimes the remote end has already disconnected, THERE WILL BE ERRORS if this happens (but they are ok)
-            send(DisconnectMessage.INSTANCE, true)
+            if (closeEverything) {
+                send(DisconnectMessage.CLOSE_EVERYTHING, true)
+            } else {
+                send(DisconnectMessage.CLOSE_FOR_SESSION, true)
+            }
         }
 
         // on close, we want to make sure this file is DELETED!

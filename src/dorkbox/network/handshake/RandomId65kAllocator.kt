@@ -53,6 +53,7 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
         maxAssignments = (max - min).coerceIn(1, max65k)
 
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
+        // Boxing the Ints here is OK, because they are boxed in the cache as well (so it doesn't matter).
         val ids = ArrayList<Int>(maxAssignments)
         for (id in min until min + maxAssignments) {
             ids.add(id)

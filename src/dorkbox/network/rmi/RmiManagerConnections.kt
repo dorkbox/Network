@@ -92,7 +92,7 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
 
         // this should be executed on a NEW coroutine!
         try {
-            callback(proxyObject)
+            callback(proxyObject, rmiId)
         } catch (exception: Exception) {
             exception.cleanStackTrace()
             val newException = RMIException(exception)

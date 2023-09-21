@@ -23,7 +23,7 @@ import org.slf4j.Logger
  * The impl/proxy objects CANNOT be stored in the same data structure, because their IDs are not tied to the same ID source (and there
  * would be conflicts in the data structure)
  */
-open class RmiObjectCache(logger: Logger) {
+open class RmiObjectCache(val logger: Logger) {
 
     private val implObjects = RemoteObjectStorage(logger)
 
@@ -63,5 +63,23 @@ open class RmiObjectCache(logger: Logger) {
      */
     internal fun <T: Any> getId(implObject: T): Int {
         return implObjects.getId(implObject)
+    }
+
+
+    /**
+     * @return all the saved RMI implementation objects along with their RMI ID. This is used by session management in order to preserve RMI functionality.
+     */
+    internal fun getAllImplObjects(): List<Pair<Int, Any>> {
+        return implObjects.getAll()
+    }
+
+    /**
+     * @return all the saved RMI implementation objects along with their RMI ID. This is used by session management in order to preserve RMI functionality.
+     */
+    internal fun restoreAllImplObjects(implObjects: List<Pair<Int, Any>>) {
+        implObjects.forEach {
+            logger.error("RESTORED: ${it.first}")
+        }
+        this.implObjects.restoreAll(implObjects)
     }
 }

@@ -29,6 +29,8 @@ import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.formatCommonAddress
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
+import dorkbox.network.connection.session.SessionConnection
+import dorkbox.network.connection.session.SessionManager
 import dorkbox.network.exceptions.*
 import dorkbox.network.handshake.ClientConnectionDriver
 import dorkbox.network.handshake.ClientHandshake
@@ -138,6 +140,10 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
     // is valid when there is a connection to the server, otherwise it is null
     @Volatile
     private var connection0: CONNECTION? = null
+
+
+    @Volatile
+    private var pendingMessagesAssigned = false
 
     private val string0: String by lazy {
         "EndPoint [Client: ${storage.publicKey.toHexString()}]"
@@ -695,6 +701,21 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         // is rogue, we do not want to carelessly provide info.
 
 
+
+        // should we queue messages during a reconnect? This is important if the client/server connection is unstable
+        if (!pendingMessagesAssigned) {
+            sessionManager = if (connectionInfo.enableSession) {
+                pendingMessagesAssigned = true
+                SessionManager(config, aeronDriver, connectionInfo.sessionTimeout)
+            }
+            else {
+                pendingMessagesAssigned = true
+                // this is a NO-OP version! We do not want if/else checks for every message!
+                SessionManager.Companion.NoOp(config, aeronDriver)
+            }
+        }
+
+
         ///////////////
         ////   RMI
         ///////////////
@@ -755,6 +776,12 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             connectionInfo.secretKey
         ))
 
+
+        if (sessionManager.enabled()) {
+            require(newConnection is SessionConnection) { "The new connection does not inherit a SessionConnection, unable to continue. " }
+        }
+
+
         if (!handshakeConnection.pubSub.isIpc) {
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
             if (logger.isInfoEnabled) {
@@ -789,8 +816,16 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         newConnection.setImage()
 
+        // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
+        var newSession = true
+        if (sessionManager.enabled()) {
+            newSession = sessionManager.onInit(newConnection as SessionConnection)
+        }
+
         // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
-        listenerManager.notifyInit(newConnection)
+        if (newSession) {
+            listenerManager.notifyInit(newConnection)
+        }
 
 
         // if we shutdown/close before the poller starts, we don't want to block forever
@@ -867,7 +902,11 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             }
         })
 
-        listenerManager.notifyConnect(newConnection)
+        if (newSession) {
+            listenerManager.notifyConnect(newConnection)
+        } else {
+            (newConnection as SessionConnection).sendPendingMessages()
+        }
     }
 
     /**

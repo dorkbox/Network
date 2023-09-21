@@ -13,18 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.handshake
+package dorkbox.network.rmi
 
-import javax.crypto.spec.SecretKeySpec
-
-internal class ClientConnectionInfo(
-    val sessionIdPub: Int = 0,
-    val sessionIdSub: Int = 0,
-    val streamIdPub: Int,
-    val streamIdSub: Int = 0,
-    val publicKey: ByteArray = ByteArray(0),
-    val enableSession: Boolean,
-    val sessionTimeout: Long,
-    val kryoRegistrationDetails: ByteArray,
-    val secretKey: SecretKeySpec
-)
+/**
+ * Thrown when there is a generic RMI error (for example, if the RMI message could not be sent, or there is an action on an RMI object that is invalid
+ */
+class RmiException : Exception {
+    constructor() : super() {}
+    constructor(message: String?, cause: Throwable?) : super(message, cause) {}
+    constructor(message: String?) : super(message) {}
+    constructor(cause: Throwable?) : super(cause) {}
+}

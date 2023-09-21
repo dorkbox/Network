@@ -3,6 +3,7 @@ module dorkbox.network {
     exports dorkbox.network.aeron;
     exports dorkbox.network.connection;
     exports dorkbox.network.connection.streaming;
+    exports dorkbox.network.connection.session;
     exports dorkbox.network.connectionType;
     exports dorkbox.network.exceptions;
     exports dorkbox.network.handshake;
@@ -11,7 +12,7 @@ module dorkbox.network {
     exports dorkbox.network.rmi;
     exports dorkbox.network.serialization;
 
-    requires transitive dorkbox.bytes;
+    requires transitive dorkbox.byteUtils;
     requires transitive dorkbox.classUtils;
     requires transitive dorkbox.collections;
     requires transitive dorkbox.dns;
@@ -25,23 +26,21 @@ module dorkbox.network {
     requires transitive dorkbox.objectpool;
     requires transitive dorkbox.os;
 
-    // requires transitive expiringmap;
+    requires transitive expiringmap;
     requires transitive com.esotericsoftware.kryo;
     requires transitive com.esotericsoftware.reflectasm;
     requires transitive org.objenesis;
 
-    requires transitive io.aeron.all;
-    // requires io.aeron.driver;
-    // requires io.aeron.client;
-    // requires org.agrona.core;
+    // requires transitive io.aeron.all; // only needed when debugging builds
+    requires io.aeron.driver;
+    requires io.aeron.client;
+    requires org.agrona.core;
 
     requires transitive org.slf4j;
-    requires transitive io.github.microutils.kotlinlogging;
 
     requires transitive kotlinx.atomicfu;
 
     requires kotlin.stdlib;
-    requires kotlin.stdlib.jdk8;
     requires kotlinx.coroutines.core;
 
     // requires kotlinx.coroutines.core.jvm;
