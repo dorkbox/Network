@@ -23,10 +23,10 @@
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "3.17"
-    id("com.dorkbox.Licensing") version "2.26"
+    id("com.dorkbox.GradleUtils") version "3.18"
+    id("com.dorkbox.Licensing") version "2.28"
     id("com.dorkbox.VersionUpdate") version "2.8"
-    id("com.dorkbox.GradlePublish") version "1.18"
+    id("com.dorkbox.GradlePublish") version "1.19"
 
     id("com.github.johnrengelman.shadow") version "8.1.1"
 
@@ -58,7 +58,6 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
     // enable the use of inline classes. see https://kotlinlang.org/docs/reference/inline-classes.html
     freeCompilerArgs = listOf("-Xinline-classes")
 }
-GradleUtils.jpms(JavaVersion.VERSION_11) // this is a bit of a hack to workaround JPMS support with a kotlin-only build.
 
 
 //val kotlin = project.extensions.getByType(org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension::class.java).sourceSets.getByName("main").kotlin
@@ -168,7 +167,7 @@ dependencies {
     // https://github.com/dorkbox
     api("com.dorkbox:ByteUtilities:2.0")
     api("com.dorkbox:ClassUtils:1.3")
-    api("com.dorkbox:Collections:2.5")
+    api("com.dorkbox:Collections:2.6")
     api("com.dorkbox:HexUtilities:1.1")
     api("com.dorkbox:JNA:1.2")
     api("com.dorkbox:MinLog:2.5")
