@@ -20,6 +20,7 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.rmi.RemoteObject
 import kotlinx.atomicfu.atomic
 import org.junit.Assert
@@ -284,6 +285,10 @@ class DisconnectReconnectTest : BaseTest() {
 
     @Test
     fun reconnectWithFallbackClient() {
+        if (EndPoint.DEBUG_CONNECTIONS) {
+            throw RuntimeException("DEBUG_CONNECTIONS is enabled. This will cause the test to run forever!!")
+        }
+
         val latch = CountDownLatch(reconnects+1)
         val reconnectCount = atomic(0)
 

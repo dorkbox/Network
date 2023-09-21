@@ -28,7 +28,6 @@ import dorkbox.storage.Storage
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.RmiCommonTest
 import dorkboxTest.network.rmi.cows.TestCow
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.slf4j.LoggerFactory
 
@@ -79,10 +78,8 @@ object TestClient {
             logger.error("Starting test for: Client -> Server")
 
             rmi.getGlobal<TestCow>(12123).apply {
-                runBlocking {
-                    RmiCommonTest.runTests(this@onConnect, this@apply, 12123)
-                    logger.error("DONE")
-                }
+                RmiCommonTest.runTests(this@onConnect, this@apply, 12123)
+                logger.error("DONE")
 
                 // now send this remote object ACROSS the wire to the server (on the server, this is where the IMPLEMENTATION lives)
                 send(this)
