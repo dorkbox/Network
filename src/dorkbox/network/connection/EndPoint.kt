@@ -299,16 +299,12 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             }
         }
 
-    internal fun ifServer(function: Server<CONNECTION>.() -> Unit) {
-        if (type == Server::class.java) {
-            function(this as Server<CONNECTION>)
-        }
+    internal fun isServer(): Boolean {
+        return type === Server::class.java
     }
 
-    internal fun ifClient(function: Client<CONNECTION>.() -> Unit) {
-        if (type == Client::class.java) {
-            function(this as Client<CONNECTION>)
-        }
+    internal fun isClient(): Boolean {
+        return type === Client::class.java
     }
 
     /**

@@ -18,10 +18,10 @@ package dorkboxTest.network
 
 import dorkbox.network.Client
 import dorkbox.network.Server
-import dorkbox.network.SessionClient
-import dorkbox.network.SessionServer
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.session.SessionClient
 import dorkbox.network.connection.session.SessionConnection
+import dorkbox.network.connection.session.SessionServer
 import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow

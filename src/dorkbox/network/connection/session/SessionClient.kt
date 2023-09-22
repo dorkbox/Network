@@ -14,16 +14,21 @@
  * limitations under the License.
  */
 
-package dorkbox.network
+package dorkbox.network.connection.session
 
+import dorkbox.network.Client
+import dorkbox.network.ClientConfiguration
 import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.session.SessionConnection
 
-class SessionClient<CONNECTION: SessionConnection>(config: ClientConfiguration = ClientConfiguration(), loggerName: String = Client::class.java.simpleName):
+open class SessionClient<CONNECTION: SessionConnection>(config: ClientConfiguration = ClientConfiguration(), loggerName: String = Client::class.java.simpleName):
     Client<CONNECTION>(config, loggerName) {
 
     override fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION {
         @Suppress("UNCHECKED_CAST")
         return SessionConnection(connectionParameters) as CONNECTION
+    }
+
+    open fun newSession(): Session<CONNECTION> {
+        return Session()
     }
 }

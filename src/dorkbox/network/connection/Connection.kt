@@ -16,6 +16,7 @@
 package dorkbox.network.connection
 
 import dorkbox.network.Client
+import dorkbox.network.Server
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.connection.session.SessionConnection
@@ -390,7 +391,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
 
         val connection = this
-        endPoint.ifServer {
+        if (endPoint.isServer()) {
             // clean up the resources associated with this connection when it's closed
             if (logger.isDebugEnabled) {
                 logger.debug("[${connection}] freeing resources")
@@ -403,7 +404,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
             if (remoteAddress != null) {
                 // unique for UDP endpoints
-                handshake.connectionsPerIpCounts.decrementSlow(remoteAddress)
+                (endPoint as Server).handshake.connectionsPerIpCounts.decrementSlow(remoteAddress)
             }
         }
 

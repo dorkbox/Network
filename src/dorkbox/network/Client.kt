@@ -791,8 +791,12 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             storage.addRegisteredServerKey(address!!, connectionInfo.publicKey)
         }
 
-        connection0 = newConnection
-        addConnection(newConnection)
+        // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
+        var newSession = true
+        if (sessionManager.enabled()) {
+            newSession = sessionManager.onInit(newConnection as SessionConnection)
+        }
+       
 
         // tell the server our connection handshake is done, and the connection can now listen for data.
         // also closes the handshake (will also throw connect timeout exception)
@@ -816,17 +820,13 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         newConnection.setImage()
 
-        // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
-        var newSession = true
-        if (sessionManager.enabled()) {
-            newSession = sessionManager.onInit(newConnection as SessionConnection)
-        }
-
         // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
         if (newSession) {
             listenerManager.notifyInit(newConnection)
         }
 
+        connection0 = newConnection
+        addConnection(newConnection)
 
         // if we shutdown/close before the poller starts, we don't want to block forever
         pollerClosedLatch = CountDownLatch(1)

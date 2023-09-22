@@ -76,10 +76,7 @@ open class RmiObjectCache(val logger: Logger) {
     /**
      * @return all the saved RMI implementation objects along with their RMI ID. This is used by session management in order to preserve RMI functionality.
      */
-    internal fun restoreAllImplObjects(implObjects: List<Pair<Int, Any>>) {
-        implObjects.forEach {
-            logger.error("RESTORED: ${it.first}")
-        }
+    internal fun restoreImplObjects(implObjects: List<Pair<Int, Any>>) {
         this.implObjects.restoreAll(implObjects)
     }
 }

@@ -116,7 +116,6 @@ class RmiSupportConnection<CONNECTION: Connection> : RmiObjectCache {
                 iface
             )
 
-            logger.error("RESTORED: $rmiId")
             saveProxyObject(rmiId, proxyObject)
         }
     }

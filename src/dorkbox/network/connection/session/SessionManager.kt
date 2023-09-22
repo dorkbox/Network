@@ -108,14 +108,21 @@ internal open class SessionManager<CONNECTION: SessionConnection>(config: Config
                     existing
                 } else {
                     isNewSession = true
-                    val newSession = Session<CONNECTION>(aeronDriver)
+
+                    @Suppress("UNCHECKED_CAST")
+                    val newSession: Session<CONNECTION> = if (connection.endPoint.isServer()) {
+                        (connection.endPoint as SessionServer).newSession() as Session<CONNECTION>
+                    } else {
+                        (connection.endPoint as SessionClient).newSession() as Session<CONNECTION>
+                    }
+
                     sessions[publicKeyWrapped] = newSession
                     newSession
                 }
             }
         }
 
-        connection.manager = session
+        connection.session = session
         session.restore(connection)
 
         return isNewSession

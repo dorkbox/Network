@@ -21,20 +21,24 @@ import dorkbox.network.connection.ConnectionParams
 
 open class SessionConnection(connectionParameters: ConnectionParams<*>): Connection(connectionParameters) {
     @Volatile
-    internal lateinit var manager: Session<*>
+    lateinit var session: Session<*>
 
     override fun send(message: Any, abortEarly: Boolean): Boolean {
         val success = super.send(message, abortEarly)
         if (!success) {
-            return manager.queueMessage(this, message, abortEarly)
+            session.queueMessage(this, message, abortEarly)
         }
 
         return success
     }
 
     fun sendPendingMessages() {
-        manager.pendingMessagesQueue.forEach {
-            send(it, false)
+        // now send all pending messages
+        if (logger.isTraceEnabled) {
+            logger.trace("Sending pending messages: ${session.pendingMessagesQueue.size}")
+        }
+        session.pendingMessagesQueue.forEach {
+            super.send(it, false)
         }
     }
 }
