@@ -15,12 +15,10 @@
  */
 package dorkbox.network.rmi
 
-import dorkbox.network.connection.Connection
 import dorkbox.objectPool.ObjectPool
 import dorkbox.objectPool.Pool
 import kotlinx.atomicfu.atomic
 import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import java.util.concurrent.locks.*
 import kotlin.concurrent.write
 
@@ -41,7 +39,6 @@ import kotlin.concurrent.write
 internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int = 2) {
     companion object {
         val TIMEOUT_EXCEPTION = Exception().apply { stackTrace = arrayOf<StackTraceElement>() }
-        private val logger: Logger = LoggerFactory.getLogger(ResponseManager::class.java.simpleName)
     }
 
     private val rmiWaitersInUse = atomic(0)
@@ -77,7 +74,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      */
     fun notifyWaiter(id: Int, result: Any?, logger: Logger) {
         if (logger.isTraceEnabled) {
-            logger.trace("[RM] notify: $id")
+            logger.trace("[RM] notify: [$id]")
         }
 
         val previous = pendingLock.write {
@@ -89,7 +86,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         // if NULL, since either we don't exist (because we were async), or it was cancelled
         if (previous is ResponseWaiter) {
             if (logger.isTraceEnabled) {
-                logger.trace("[RM] valid-notify: $id")
+                logger.trace("[RM] valid-notify: [$id]")
             }
 
             // this means we were NOT timed out! (we cannot be timed out here)
@@ -104,7 +101,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      */
     fun <T> removeWaiterCallback(id: Int, logger: Logger): T? {
         if (logger.isTraceEnabled) {
-            logger.trace("[RM] get-callback: $id")
+            logger.trace("[RM] get-callback: [$id]")
         }
 
         val previous = pendingLock.write {
@@ -137,7 +134,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         val waiter = waiterCache.take()
         rmiWaitersInUse.getAndIncrement()
         if (logger.isTraceEnabled) {
-            logger.trace("[RM] prep in-use: ${rmiWaitersInUse.value}")
+            logger.trace("[RM] prep in-use: [${waiter.id}] ${rmiWaitersInUse.value}")
         }
 
         // this will initialize the result
@@ -159,7 +156,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         val waiter = waiterCache.take()
         rmiWaitersInUse.getAndIncrement()
         if (logger.isTraceEnabled) {
-            logger.trace("[RM] prep in-use: ${rmiWaitersInUse.value}")
+            logger.trace("[RM] prep in-use: [${waiter.id}]  ${rmiWaitersInUse.value}")
         }
 
         // this will initialize the result
@@ -185,16 +182,11 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      *
      * @return the result (can be null) or timeout exception
      */
-    fun getReply(
-        responseWaiter: ResponseWaiter,
-        timeoutMillis: Long,
-        logger: Logger,
-        connection: Connection
-    ): Any? {
+    fun getReply(responseWaiter: ResponseWaiter, timeoutMillis: Long, logger: Logger): Any? {
         val id = RmiUtils.unpackUnsignedRight(responseWaiter.id)
 
         if (logger.isTraceEnabled) {
-            logger.trace("[RM] get: $id")
+            logger.trace("[RM] get: [$id]")
         }
 
         // deletes the entry in the map
@@ -211,7 +203,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
 
         if (resultOrWaiter is ResponseWaiter) {
             if (logger.isTraceEnabled) {
-                logger.trace("[RM] timeout cancel ($timeoutMillis): $id")
+                logger.trace("[RM] timeout cancel: [$id] ($timeoutMillis)")
             }
 
             return if (connection.isClosed() || connection.isClosed()) {
@@ -228,7 +220,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         val id = RmiUtils.unpackUnsignedRight(responseWaiter.id)
 
         if (logger.isTraceEnabled) {
-            logger.trace("[RM] abort: $id")
+            logger.trace("[RM] abort: [$id]")
         }
 
         // deletes the entry in the map
@@ -242,7 +234,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         rmiWaitersInUse.getAndDecrement()
     }
 
-    fun close() {
+    fun close(logger: Logger) {
         // technically, this isn't closing it, so much as it's cleaning it out
         if (logger.isDebugEnabled) {
             logger.debug("Closing the response manager for RMI")

@@ -171,7 +171,11 @@ class RemoteObjectStorage(val logger: Logger) {
         returnId(objectId)
 
         if (logger.isTraceEnabled) {
-            logger.trace("Object <proxy #${objectId}> removed")
+            if (rmiObject is RemoteObject<*>) {
+                logger.trace("Object <proxy #${objectId}> removed")
+            } else {
+                logger.trace("Object <proxy-impl #${objectId}> removed")
+            }
         }
         return rmiObject
     }
@@ -212,7 +216,7 @@ class RemoteObjectStorage(val logger: Logger) {
 
 
     /**
-     * @return all the saved RMI implementation objects along with their RMI ID. This is so we can restore these later on
+     * @return all the saved objects along with their RMI ID. This is so we can restore these later on
      */
     fun getAll(): List<Pair<Int, Any>> {
         return objectMap.entries.map { it -> Pair(it.key, it.value) }.toList()
