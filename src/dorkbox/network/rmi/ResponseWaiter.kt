@@ -24,6 +24,9 @@ data class ResponseWaiter(val id: Int) {
     private val lock = ReentrantLock()
     private val condition = lock.newCondition()
 
+    @Volatile
+    private var signalled = false
+
     // holds the RMI result or callback. This is ALWAYS accessed from within a lock (so no synchronize/volatile/etc necessary)!
     @Volatile
     var result: Any? = null
@@ -33,6 +36,7 @@ data class ResponseWaiter(val id: Int) {
      */
     fun prep() {
         result = null
+        signalled = false
     }
 
     /**
@@ -41,6 +45,7 @@ data class ResponseWaiter(val id: Int) {
     fun doNotify() {
         try {
             lock.withLock {
+                signalled = true
                 condition.signal()
             }
         } catch (ignored: Throwable) {
@@ -53,6 +58,9 @@ data class ResponseWaiter(val id: Int) {
     fun doWait() {
         try {
             lock.withLock {
+                if (signalled) {
+                    return
+                }
                 condition.await()
             }
         } catch (ignored: Throwable) {
@@ -62,12 +70,18 @@ data class ResponseWaiter(val id: Int) {
     /**
      * Waits a specific amount of time until another thread invokes "doNotify"
      */
-    fun doWait(timeout: Long) {
-        try {
+    fun doWait(timeout: Long): Boolean {
+        return try {
             lock.withLock {
-                condition.await(timeout, TimeUnit.MILLISECONDS)
+                if (signalled) {
+                    true
+                } else {
+                    condition.await(timeout, TimeUnit.MILLISECONDS)
+                }
             }
         } catch (ignored: Throwable) {
+            // we were interrupted BEFORE the timeout, so technically, the timeout did not elapse.
+            true
         }
     }
 }
