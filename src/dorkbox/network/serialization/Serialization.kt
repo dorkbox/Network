@@ -424,7 +424,6 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         kryo.register(ConnectionObjectCreateRequest::class.java)
         kryo.register(ConnectionObjectCreateResponse::class.java)
         kryo.register(ConnectionObjectDeleteRequest::class.java)
-        kryo.register(ConnectionObjectDeleteResponse::class.java)
 
         kryo.register(MethodRequest::class.java, methodRequestSerializer)
         kryo.register(MethodResponse::class.java, methodResponseSerializer)

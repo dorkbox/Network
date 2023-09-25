@@ -83,6 +83,8 @@ class RmiSimpleActionsTest : BaseTest() {
     }
 
     fun rmiConnectionDelete(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
+        var RMI_ID = 0
+
         val server = run {
             val configuration = serverConfig()
             configuration.enableIPv4 = isIpv4
@@ -109,10 +111,14 @@ class RmiSimpleActionsTest : BaseTest() {
 
                 server.logger.error("Finished test for: Client -> Server")
 
-                rmi.delete(23)
-                // `object` is still a reference to the object!
-                // so we don't want to pass that back -- so pass back a new one
-                send(MessageWithTestCow(TestCowImpl(1)))
+                rmi.delete(RMI_ID)
+
+                val newID = RMI_ID+123
+                val testCow = TestCowImpl(newID)
+                // we must manually save the object -- because if we don't we'll auto-create it when it gets sent across the network.
+                // this happens BECAUSE `TestCow` is an RMI object!!
+                rmi.save(testCow, newID)
+                send(MessageWithTestCow(testCow))
             }
 
             server
@@ -126,17 +132,25 @@ class RmiSimpleActionsTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
+
+
             client.onConnect {
                 rmi.create<TestCow>(23) {
+                    RMI_ID = it
                     client.logger.error("Running test for: Client -> Server")
-                    RmiCommonTest.runTests(this@onConnect, this@create, 23)
+//                    RmiCommonTest.runTests(this@onConnect, this@create, 23)
+                    val m = MessageWithTestCow(this)
+                    m.number = 678
+                    m.text = "sometext"
+                    this@onConnect.send(m)
+
                     client.logger.error("Done with test for: Client -> Server")
                 }
             }
 
             client.onMessage<MessageWithTestCow> { _ ->
                 // check if 23 still exists (it should not)
-                val obj = rmi.get<TestCow>(23)
+                val obj = rmi.get<TestCow>(RMI_ID)
 
                 try {
                     obj.id()
@@ -159,6 +173,8 @@ class RmiSimpleActionsTest : BaseTest() {
 
     @Test
     fun rmiReconnectPersistence() {
+        var RMI_ID = 0
+
         val server = run {
             val configuration = serverConfig()
 
@@ -182,10 +198,14 @@ class RmiSimpleActionsTest : BaseTest() {
 
                 server.logger.error("Finished test for: Client -> Server")
 
-                rmi.delete(23)
-                // `object` is still a reference to the object!
-                // so we don't want to pass that back -- so pass back a new one
-                send(MessageWithTestCow(TestCowImpl(1)))
+                rmi.delete(RMI_ID)
+
+                val newID = RMI_ID+123
+                val testCow = TestCowImpl(newID)
+                // we must manually save the object -- because if we don't we'll auto-create it when it gets sent across the network.
+                // this happens BECAUSE `TestCow` is an RMI object!!
+                rmi.save(testCow, newID)
+                send(MessageWithTestCow(testCow))
             }
 
             server
@@ -199,21 +219,29 @@ class RmiSimpleActionsTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
+
             client.onConnect {
                 rmi.create<TestCow>(23) {
+                    RMI_ID = it
                     client.logger.error("Running test for: Client -> Server")
-                    RmiCommonTest.runTests(this@onConnect, this@create, 23)
+//                    RmiCommonTest.runTests(this@onConnect, this@create, 23)
+
+                    val m = MessageWithTestCow(this)
+                    m.number = 678
+                    m.text = "sometext"
+                    this@onConnect.send(m)
+
                     client.logger.error("Done with test for: Client -> Server")
                 }
             }
 
             client.onMessage<MessageWithTestCow> { _ ->
                 // check if 23 still exists (it should not)
-                val obj = rmi.get<TestCow>(23)
+                val obj = rmi.get<TestCow>(RMI_ID)
 
                 try {
                     obj.id()
-                    Assert.fail(".id() should throw an exception, the backing RMI object doesn't exist!")
+                    Assert.fail(".id() should throw a timeout/exception, the backing RMI object doesn't exist!")
                 } catch (e: Exception) {
                     // this is expected
                 }

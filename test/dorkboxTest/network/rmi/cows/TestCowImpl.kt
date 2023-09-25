@@ -34,15 +34,14 @@ open class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
     override fun moo(value: String) {
         throw RuntimeException("Should never be executed!")
     }
+    fun moo(connection: Connection, value: String) {
+        moos += 2
+        connection.logger.error("Moo! $moos: $value")
+    }
 
     override fun mooTwo(value: String): String {
 //        println(value)
         return "moo-two: $value"
-    }
-
-    fun moo(connection: Connection, value: String) {
-        moos += 2
-        connection.logger.error("Moo! $moos: $value")
     }
 
     override fun moo(value: String, delay: Long) {

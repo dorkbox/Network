@@ -28,26 +28,26 @@ object RmiCommonTest {
 
         remoteObject.responseTimeout = 1000
         try {
-            test.moo("You should see this two seconds before...", 2000)
+            test.moo("A You should see this two seconds before...", 2000)
             Assert.fail("We should be throwing a timeout exception!")
         } catch (ignored: Exception) {
         }
 
         try {
-            test.moo("You should see this two seconds before...", 200)
+            test.moo("B You should see this two seconds before...", 200)
         } catch (ignored: Exception) {
             Assert.fail("We should NOT be throwing a timeout exception!")
         }
 
         runBlocking {
             try {
-                test.mooSuspend("You should see this two seconds before...", 2000)
+                test.mooSuspend("C You should see this two seconds before...", 2000)
                 Assert.fail("We should be throwing a timeout exception!")
             } catch (ignored: Exception) {
             }
 
             try {
-                test.mooSuspend("You should see this two seconds before...", 200)
+                test.mooSuspend("D You should see this two seconds before...", 200)
             } catch (ignored: Exception) {
                 Assert.fail("We should NOT be throwing a timeout exception!")
             }

@@ -23,7 +23,6 @@ import dorkbox.network.connection.session.SessionClient
 import dorkbox.network.connection.session.SessionConnection
 import dorkbox.network.connection.session.SessionServer
 import dorkbox.network.rmi.RemoteObject
-import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
 import kotlinx.coroutines.GlobalScope
@@ -32,6 +31,9 @@ import kotlinx.coroutines.launch
 import org.junit.Assert
 import org.junit.Test
 
+
+class MessageToContinue
+
 class SessionReconnectTest: BaseTest() {
     @Test
     fun rmiReconnectSessions() {
@@ -39,7 +41,7 @@ class SessionReconnectTest: BaseTest() {
             val configuration = serverConfig()
 
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
-            configuration.serialization.register(MessageWithTestCow::class.java)
+            configuration.serialization.register(MessageToContinue::class.java)
             configuration.serialization.register(UnsupportedOperationException::class.java)
 
             // for Client -> Server RMI
@@ -50,22 +52,8 @@ class SessionReconnectTest: BaseTest() {
 
             addEndPoint(server)
 
-            server.onMessage<MessageWithTestCow> { m ->
-                server.logger.error("Received finish signal for test for: Client -> Server")
-
-                val `object` = m.testCow
-                val id = `object`.id()
-
-                Assert.assertEquals(23, id)
-
-                server.logger.error("Finished test for: Client -> Server")
-
-                // we are going to try to remotely access this again!
-//                rmi.delete(23)
-
-                // `object` is still a reference to the object!
-                // so we don't want to pass that back -- so pass back a new one
-                send(MessageWithTestCow(TestCowImpl(1)))
+            server.onMessage<MessageToContinue> { m ->
+                send(MessageToContinue())
             }
 
             server
@@ -88,20 +76,18 @@ class SessionReconnectTest: BaseTest() {
                     rmiId = it
                     moo("Client -> Server")
 
-                    val m = MessageWithTestCow(this)
-                    m.number = 678
-                    m.text = "sometext"
-                    this@onConnect.send(m)
+                    this@onConnect.send(MessageToContinue())
                 }
             }
 
-            client.onMessage<MessageWithTestCow> { _ ->
-                val obj = rmi.get<TestCow>(rmiId)
+            client.onMessage<MessageToContinue> { _ ->
+                val get = rmi.get<TestCow>(rmiId)
+                RemoteObject.cast(get).responseTimeout = 50_000
 
                 GlobalScope.launch {
                     delay(4000)
 
-                    obj.moo("DELAYED AND NOT CRASHED!")
+                    get.moo("DELAYED AND NOT CRASHED!")
 
                     stopEndPoints()
                 }
@@ -125,7 +111,7 @@ class SessionReconnectTest: BaseTest() {
             val configuration = serverConfig()
 
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
-            configuration.serialization.register(MessageWithTestCow::class.java)
+            configuration.serialization.register(MessageToContinue::class.java)
             configuration.serialization.register(UnsupportedOperationException::class.java)
 
             // for Client -> Server RMI
@@ -136,22 +122,8 @@ class SessionReconnectTest: BaseTest() {
 
             addEndPoint(server)
 
-            server.onMessage<MessageWithTestCow> { m ->
-                server.logger.error("Received finish signal for test for: Client -> Server")
-
-                val `object` = m.testCow
-                val id = `object`.id()
-
-                Assert.assertEquals(23, id)
-
-                server.logger.error("Finished test for: Client -> Server")
-
-                // we are going to try to remotely access this again!
-//                rmi.delete(23)
-
-                // `object` is still a reference to the object!
-                // so we don't want to pass that back -- so pass back a new one
-                send(MessageWithTestCow(TestCowImpl(1)))
+            server.onMessage<MessageToContinue> { m ->
+                send(MessageToContinue())
             }
 
             server
@@ -174,29 +146,41 @@ class SessionReconnectTest: BaseTest() {
                     rmiId = it
                     moo("Client -> Server")
 
-                    val m = MessageWithTestCow(this)
-                    m.number = 678
-                    m.text = "sometext"
-                    this@onConnect.send(m)
+                    this@onConnect.send(MessageToContinue())
                 }
             }
 
-            client.onMessage<MessageWithTestCow> { _ ->
+            client.onMessage<MessageToContinue> { _ ->
+                logger.error("Starting reconnect bits")
                 val obj = rmi.get<TestCow>(rmiId)
 
+                // closing client
                 client.close(false)
+                client.waitForClose()
 
-                RemoteObject.cast(obj).responseTimeout = 50_000
+                logger.error("Getting object again. it should be the cached version")
+                val cast = RemoteObject.cast(obj)
+                cast.responseTimeout = 50_000
 
                 GlobalScope.launch {
                     delay(1000) // must be shorter than the RMI timeout for our tests
 
                     client.connectIpc()
+
+                    delay(1000) // give some time for the messages to go! If we close instantly, the return RMI message will fail
                     stopEndPoints()
                 }
 
                 // this is SYNC, so it waits for a response!
-                obj.moo("DELAYED AND NOT CRASHED!")
+                try {
+                    cast.async = false
+                    obj.moo("DELAYED AND NOT CRASHED!") // will wait for a response
+                }
+                catch (e: Exception) {
+                    e.printStackTrace()
+                    e.cause?.printStackTrace()
+                    Assert.fail(".moo() should not throw an exception, because it will succeed before the timeout")
+                }
             }
 
             client
@@ -210,14 +194,13 @@ class SessionReconnectTest: BaseTest() {
 
     @Test
     fun rmiReconnectSessionsFail() {
-
         var rmiId = 0
 
         val server = run {
             val configuration = serverConfig()
 
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
-            configuration.serialization.register(MessageWithTestCow::class.java)
+            configuration.serialization.register(MessageToContinue::class.java)
             configuration.serialization.register(UnsupportedOperationException::class.java)
 
             // for Client -> Server RMI
@@ -228,23 +211,11 @@ class SessionReconnectTest: BaseTest() {
 
             addEndPoint(server)
 
-            server.onMessage<MessageWithTestCow> { m ->
-                server.logger.error("Received finish signal for test for: Client -> Server")
-
-                val `object` = m.testCow
-                val id = `object`.id()
-
-                Assert.assertEquals(23, id)
-
-                server.logger.error("Finished test for: Client -> Server")
-
-
+            server.onMessage<MessageToContinue> { m ->
                 rmi.delete(rmiId)
 
-
-                // `object` is still a reference to the object!
-                // so we don't want to pass that back -- so pass back a new one
-                send(MessageWithTestCow(TestCowImpl(1)))
+                // NOTE: if we send an RMI object, it will automatically be saved!
+                send(MessageToContinue())
             }
 
             server
@@ -267,26 +238,22 @@ class SessionReconnectTest: BaseTest() {
                     rmi.create<TestCow>(23) {
                         rmiId = it
                         moo("Client -> Server")
-
-                        val m = MessageWithTestCow(this)
-                        m.number = 678
-                        m.text = "sometext"
-                        this@onConnect.send(m)
+                        this@onConnect.send(MessageToContinue())
                     }
                 }
             }
 
-            client.onMessage<MessageWithTestCow> { _ ->
+            client.onMessage<MessageToContinue> { _ ->
                 val obj = rmi.get<TestCow>(rmiId)
+                val o2 = RemoteObject.cast(obj)
 
                 GlobalScope.launch {
                     delay(4000)
 
                     try {
-                        val o2 = RemoteObject.cast(obj)
                         o2.sync {
                             obj.moo("DELAYED AND NOT CRASHED!")
-                            Assert.fail(".moo() should throw an exception, the backing RMI object doesn't exist!")
+                            Assert.fail(".moo() should throw an timeout exception, the backing RMI object doesn't exist!")
                         }
                     }
                     catch (ignored: Exception) {
@@ -317,7 +284,7 @@ class SessionReconnectTest: BaseTest() {
             val configuration = serverConfig()
 
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
-            configuration.serialization.register(MessageWithTestCow::class.java)
+            configuration.serialization.register(MessageToContinue::class.java)
             configuration.serialization.register(UnsupportedOperationException::class.java)
 
             // for Client -> Server RMI
@@ -327,23 +294,11 @@ class SessionReconnectTest: BaseTest() {
 
             addEndPoint(server)
 
-            server.onMessage<MessageWithTestCow> { m ->
-                server.logger.error("Received finish signal for test for: Client -> Server")
-
-                val `object` = m.testCow
-                val id = `object`.id()
-
-                Assert.assertEquals(23, id)
-
-                server.logger.error("Finished test for: Client -> Server")
-
-
+            server.onMessage<MessageToContinue> { m ->
                 rmi.delete(rmiId)
 
-
-                // `object` is still a reference to the object!
-                // so we don't want to pass that back -- so pass back a new one
-                send(MessageWithTestCow(TestCowImpl(1)))
+                // NOTE: if we send an RMI object, it will automatically be saved!
+                send(MessageToContinue())
             }
 
             server
@@ -368,25 +323,23 @@ class SessionReconnectTest: BaseTest() {
                         rmiId = it
                         moo("Client -> Server")
 
-                        val m = MessageWithTestCow(this)
-                        m.number = 678
-                        m.text = "sometext"
-                        this@onConnect.send(m)
+                        this@onConnect.send(MessageToContinue())
                     }
                 }
             }
 
-            client.onMessage<MessageWithTestCow> { _ ->
+            client.onMessage<MessageToContinue> { _ ->
                 val obj = rmi.get<TestCow>(rmiId)
+                val o2 = RemoteObject.cast(obj)
+                o2.responseTimeout = 50_000
 
                 GlobalScope.launch {
                     delay(4000)
 
                     try {
-                        val o2 = RemoteObject.cast(obj)
                         o2.sync {
                             obj.moo("CRASHED!")
-                            Assert.fail(".moo() should throw an exception, the backing RMI object doesn't exist!")
+                            Assert.fail(".moo() should throw an timeout exception, the backing RMI object doesn't exist!")
                         }
                     }
                     catch (e: Exception) {
