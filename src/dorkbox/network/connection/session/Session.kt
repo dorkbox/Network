@@ -22,10 +22,13 @@ import kotlinx.atomicfu.locks.withLock
 import java.util.concurrent.*
 
 open class Session<CONNECTION: SessionConnection> {
+
+
     // the RMI objects are saved when the connection is removed, and restored BEFORE the connection is initialized, so there are no concerns
     // regarding the collision of RMI IDs and objects
     private val lock = ReentrantLock()
     private var oldProxyObjects: List<RemoteObject<*>>? = null
+    private var oldProxyCallbacks: List<Pair<Int, Any.(Int) -> Unit>>? = null
     private var oldImplObjects: List<Pair<Int, Any>>? = null
 
     /**
@@ -33,14 +36,23 @@ open class Session<CONNECTION: SessionConnection> {
      */
     val pendingMessagesQueue: LinkedTransferQueue<Any> = LinkedTransferQueue()
 
+    @Volatile lateinit var connection: CONNECTION
+
 
     fun restore(connection: CONNECTION) {
+        this.connection = connection
+        connection.logger.debug("restoring connection")
+
         lock.withLock {
             // this is called, even on a brand-new session, so we must have extra checks in place.
             val rmi = connection.rmi
             if (oldProxyObjects != null) {
                 rmi.recreateProxyObjects(oldProxyObjects!!)
                 oldProxyObjects = null
+            }
+            if (oldProxyCallbacks != null) {
+                rmi.restoreCallbacks(oldProxyCallbacks!!)
+                oldProxyCallbacks = null
             }
             if (oldImplObjects != null) {
                 rmi.restoreImplObjects(oldImplObjects!!)
@@ -50,30 +62,49 @@ open class Session<CONNECTION: SessionConnection> {
     }
 
     fun save(connection: CONNECTION) {
+        connection.logger.debug("saving connection")
         val allProxyObjects = connection.rmi.getAllProxyObjects()
+        val allProxyCallbacks = connection.rmi.getAllCallbacks()
         val allImplObjects = connection.rmi.getAllImplObjects()
 
         // we want to save all the connection RMI objects, so they can be recreated on connect
         lock.withLock {
             oldProxyObjects = allProxyObjects
+            oldProxyCallbacks = allProxyCallbacks
             oldImplObjects = allImplObjects
         }
     }
 
-    fun queueMessage(connection: SessionConnection, message: Any, abortEarly: Boolean) {
+    fun queueMessage(connection: SessionConnection, message: Any, abortEarly: Boolean): Boolean {
+        if (this.connection != connection) {
+            // we received a message on an OLD connection (which is no longer connected ---- BUT we have a NEW connection that is connected)
+            // this can happen on RMI object that are old
+            val success = this.connection.send(message, abortEarly)
+            if (success) {
+                connection.logger.error("successfully resent message")
+                return true
+            }
+        }
+
         if (!abortEarly) {
             // this was a "normal" send (instead of the disconnect message).
             pendingMessagesQueue.put(message)
+            connection.logger.error("queueing message")
         }
         else if (connection.endPoint.aeronDriver.internal.mustRestartDriverOnError) {
             // the only way we get errors, is if the connection is bad OR if we are sending so fast that the connection cannot keep up.
 
             // don't restart/reconnect -- there was an internal network error
             pendingMessagesQueue.put(message)
+            connection.logger.error("queueing message")
         }
         else if (!connection.isConnected()) {
             // there was an issue - the connection should automatically reconnect
             pendingMessagesQueue.put(message)
+            connection.logger.error("queueing message")
         }
+
+        connection.logger.error("NOT NOT NOT queueing message")
+        return false
     }
 }

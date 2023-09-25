@@ -14,11 +14,4 @@
  * limitations under the License.
  */
 
-package dorkbox.network.connection.session
-
-interface SessionManager<CONNECTION : SessionConnection> {
-
-    fun enabled(): Boolean
-    fun onInit(connection: CONNECTION): Boolean
-    fun onDisconnect(connection: CONNECTION)
-}
+package dorkbox.network.connection.session;

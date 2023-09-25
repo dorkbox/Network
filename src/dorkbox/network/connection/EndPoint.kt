@@ -26,6 +26,7 @@ import dorkbox.network.aeron.BacklogStat
 import dorkbox.network.aeron.EventPoller
 import dorkbox.network.connection.session.SessionConnection
 import dorkbox.network.connection.session.SessionManager
+import dorkbox.network.connection.session.SessionManagerNoOp
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -180,7 +181,12 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
     private val streamingManager = StreamingManager<CONNECTION>(logger, config)
 
-    internal lateinit var sessionManager: SessionManager<SessionConnection>
+    /**
+     * By default, this is a NO-OP version! We do not want if/else checks for every message!
+     * this can change of the lifespan of the CLIENT, depending on which/what server a single client connects to.
+     */
+    @Volatile
+    internal var sessionManager: SessionManager<SessionConnection> = SessionManagerNoOp()
 
 
     /**
@@ -959,11 +965,18 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // when an endpoint closes, the poll-loop shuts down, and removes itself from the list of poll actions that need to be performed.
             networkEventPoller.close(logger, this)
 
-
             // Connections MUST be closed first, because we want to make sure that no RMI messages can be received
             // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
-            // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via an RMI method)
-            responseManager.close()
+            // IF CLOSED VIA RMI: this will wait for RMI timeouts if there are RMI in-progress.
+            if (sessionManager.enabled()) {
+                if (closeEverything) {
+                    // only close out RMI if we are using session management AND we are closing everything!
+                    responseManager.close(logger)
+                }
+            } else {
+                // no session management, so always clear this out.
+                responseManager.close(logger)
+            }
 
             // don't do these things if we are "closed" from a client connection disconnect
             // if there are any events going on, we want to schedule them to run AFTER all other events for this endpoint are done

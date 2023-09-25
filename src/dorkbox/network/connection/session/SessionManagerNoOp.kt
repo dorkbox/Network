@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,13 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.rmi.messages
 
-/**
- * @param rmiId which rmi object was deleted
- */
-data class ConnectionObjectDeleteResponse(val rmiId: Int) : RmiMessage {
-    override fun toString(): String {
-        return "ConnectionObjectDeleteResponse(id: $rmiId)"
+package dorkbox.network.connection.session
+
+class SessionManagerNoOp<CONNECTION : SessionConnection>: SessionManager<CONNECTION> {
+    override fun enabled(): Boolean {
+        return false
+    }
+
+    override fun onInit(connection: CONNECTION): Boolean {
+        // do nothing
+        return true
+    }
+
+    override fun onDisconnect(connection: CONNECTION) {
+        // do nothing
     }
 }

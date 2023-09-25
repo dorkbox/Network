@@ -26,10 +26,10 @@ open class SessionConnection(connectionParameters: ConnectionParams<*>): Connect
     override fun send(message: Any, abortEarly: Boolean): Boolean {
         val success = super.send(message, abortEarly)
         if (!success) {
-            session.queueMessage(this, message, abortEarly)
+            return session.queueMessage(this, message, abortEarly)
         }
 
-        return success
+        return true
     }
 
     fun sendPendingMessages() {
