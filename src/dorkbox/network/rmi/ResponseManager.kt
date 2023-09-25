@@ -206,11 +206,8 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
                 logger.trace("[RM] timeout cancel: [$id] ($timeoutMillis)")
             }
 
-            return if (connection.isClosed() || connection.isClosed()) {
-                null
-            } else {
-                TIMEOUT_EXCEPTION
-            }
+            // always throw an exception if we timeout. EVEN if the connection is closed, we want to make sure to raise awareness!
+            return TIMEOUT_EXCEPTION
         }
 
         return resultOrWaiter

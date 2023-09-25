@@ -18,6 +18,7 @@ package dorkbox.network.rmi
 import com.conversantmedia.util.collection.FixedStack
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.rmi.ResponseManager.Companion.TIMEOUT_EXCEPTION
 import dorkbox.network.rmi.messages.MethodRequest
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.runBlocking
@@ -325,7 +326,7 @@ internal class RmiClient(val isGlobal: Boolean,
             val continuation = suspendCoroutineArg as Continuation<Any?>
 
             val suspendFunction: suspend () -> Any? = {
-                // NOTE: once something `ELSE` is suspending, we can remove the `yield`
+                // NOTE: once something ELSE is suspending, we can remove the `yield`
                 yield()  // if this is not here, it will not work (something must actually suspend!)
 
                 // NOTE: this is blocking!
@@ -341,10 +342,15 @@ internal class RmiClient(val isGlobal: Boolean,
                     // if no response yet, it will wait for:
                     //   A) get response
                     //   B) timeout
-                    responseWaiter.doWait(timeoutMillis)
+                    if (!responseWaiter.doWait(timeoutMillis)) {
+                        // if we timeout, it doesn't matter since we'll be removing the waiter from the array anyways,
+                        // so no signal can occur, or a signal won't matter
+                        responseManager.abort(responseWaiter, logger)
+                        TIMEOUT_EXCEPTION
+                    } else {
+                        responseManager.getReply(responseWaiter, timeoutMillis, logger)
+                    }
 
-                    // if we timeout, it doesn't matter since we'll be removing the waiter from the array anyways,
-                    // so no signal can occur, or a signal won't matter
                 } else {
                     // wait for the response --- THIS WAITS FOREVER (there is no timeout)!
                     //
@@ -352,16 +358,15 @@ internal class RmiClient(val isGlobal: Boolean,
                     // if no response yet, it will wait for one
                     //   A) get response
                     responseWaiter.doWait()
+                    responseManager.getReply(responseWaiter, timeoutMillis, logger)
                 }
-
-                responseManager.getReply(responseWaiter, timeoutMillis, logger, connection)
             }
 
             // function suspension works differently. THIS IS A TRAMPOLINE TO CALL SUSPEND !!
             return (suspendFunction as Function1<Continuation<Any?>, Any?>).invoke(Continuation(continuation.context) {
                     val any = it.getOrNull()
                     when (any) {
-                        ResponseManager.TIMEOUT_EXCEPTION -> {
+                        TIMEOUT_EXCEPTION -> {
                             val fancyName = RmiUtils.makeFancyMethodName(method)
                             val exception = TimeoutException("Response timed out: $fancyName")
                             // from top down, clean up the coroutine stack
@@ -395,10 +400,13 @@ internal class RmiClient(val isGlobal: Boolean,
                 // if no response yet, it will wait for:
                 //   A) get response
                 //   B) timeout
-                responseWaiter.doWait(timeoutMillis)
+                if (!responseWaiter.doWait(timeoutMillis)) {
+                    // if we timeout, it doesn't matter since we'll be removing the waiter from the array anyways,
+                    // so no signal can occur, or a signal won't matter
+                    responseManager.abort(responseWaiter, logger)
+                    throw TIMEOUT_EXCEPTION
+                }
 
-                // if we timeout, it doesn't matter since we'll be removing the waiter from the array anyways,
-                // so no signal can occur, or a signal won't matter
             } else {
                 // wait for the response --- THIS WAITS FOREVER (there is no timeout)!
                 //
@@ -408,9 +416,9 @@ internal class RmiClient(val isGlobal: Boolean,
                 responseWaiter.doWait()
             }
 
-            val any = responseManager.getReply(responseWaiter, timeoutMillis, logger, connection)
+            val any = responseManager.getReply(responseWaiter, timeoutMillis, logger)
             when (any) {
-                ResponseManager.TIMEOUT_EXCEPTION -> {
+                TIMEOUT_EXCEPTION -> {
                     val fancyName = RmiUtils.makeFancyMethodName(method)
                     val exception = TimeoutException("Response timed out: $fancyName")
                     // from top down, clean up the coroutine stack
