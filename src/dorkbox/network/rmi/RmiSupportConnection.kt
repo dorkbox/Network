@@ -313,6 +313,14 @@ class RmiSupportConnection<CONNECTION: Connection> : RmiObjectCache {
     }
 
 
+    /**
+     * Casts this remote object (specified by it's RMI ID) to the "RemoteObject" type, so that those methods can more easily be called
+     */
+    inline fun <reified T> cast(rmiId: Int): RemoteObject<T> {
+        val obj = get<T>(rmiId)
+        @Suppress("UNCHECKED_CAST")
+        return obj as RemoteObject<T>
+    }
 
 
     /**
