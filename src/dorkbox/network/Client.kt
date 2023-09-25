@@ -825,9 +825,10 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             listenerManager.notifyInit(newConnection)
         }
 
-        connection0 = newConnection
+        // this enables the connection to start polling for messages
         addConnection(newConnection)
-
+        connection0 = newConnection
+        
         // if we shutdown/close before the poller starts, we don't want to block forever
         pollerClosedLatch = CountDownLatch(1)
         networkEventPoller.submit(

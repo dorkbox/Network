@@ -146,7 +146,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 listenerManager.notifyInit(newConnection)
             }
 
-
             // this enables the connection to start polling for messages
             server.addConnection(newConnection)
 
