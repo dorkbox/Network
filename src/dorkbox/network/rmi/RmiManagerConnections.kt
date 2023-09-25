@@ -23,7 +23,6 @@ import dorkbox.network.exceptions.RMIException
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
-import dorkbox.network.rmi.messages.ConnectionObjectDeleteResponse
 import dorkbox.network.serialization.Serialization
 import org.slf4j.Logger
 
@@ -90,10 +89,9 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
         // create the client-side proxy object, if possible.  This MUST be an object that is saved for the connection
         val proxyObject = rmi.getProxyObject(false, connection, rmiId, interfaceClass)
 
-        // this should be executed on a NEW coroutine!
         try {
             callback(proxyObject, rmiId)
-        } catch (exception: Exception) {
+        } catch (exception: Throwable) {
             exception.cleanStackTrace()
             val newException = RMIException(exception)
             listenerManager.notifyError(connection, newException)
@@ -109,28 +107,6 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
         // we only delete the impl object if the RMI id is valid!
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
             val newException = RMIException("Unable to delete RMI object, invalid RMI ID")
-            listenerManager.notifyError(connection, newException)
-            return
-        }
-
-        // it DOESN'T matter which "side" we are, just delete both (RMI id's must always represent the same object on both sides)
-        connection.rmi.removeProxyObject(rmiId)
-        connection.rmi.removeImplObject<Any?>(rmiId)
-
-        // tell the "other side" to delete the proxy/impl object
-        connection.send(ConnectionObjectDeleteResponse(rmiId))
-    }
-
-
-    /**
-     * called on "client" or "server"
-     */
-    fun onConnectionObjectDeleteResponse(connection: CONNECTION, message: ConnectionObjectDeleteResponse) {
-        val rmiId = message.rmiId
-
-        // we only create the proxy + execute the callback if the RMI id is valid!
-        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-            val newException = RMIException("Unable to create RMI object, invalid RMI ID")
             listenerManager.notifyError(connection, newException)
             return
         }

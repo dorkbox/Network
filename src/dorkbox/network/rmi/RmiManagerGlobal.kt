@@ -116,12 +116,6 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: Logger) : RmiObj
                  */
                 rmiConnectionSupport.onConnectionObjectDeleteRequest(connection, message)
             }
-            is ConnectionObjectDeleteResponse -> {
-                /**
-                 * called on "client" or "server"
-                 */
-                rmiConnectionSupport.onConnectionObjectDeleteResponse(connection, message)
-            }
             is MethodRequest -> {
                 /**
                  * Invokes the method on the object and, sends the result back to the connection that made the invocation request.

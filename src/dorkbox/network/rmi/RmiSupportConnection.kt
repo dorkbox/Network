@@ -88,6 +88,15 @@ class RmiSupportConnection<CONNECTION: Connection> : RmiObjectCache {
         return remoteObjectCreationCallbacks.remove(callbackId)!!
     }
 
+    internal fun getAllCallbacks(): List<Pair<Int, Any.(Int) -> Unit>> {
+        @Suppress("UNCHECKED_CAST")
+        return remoteObjectCreationCallbacks.getAll() as List<Pair<Int, Any.(Int) -> Unit>>
+    }
+
+    internal fun restoreCallbacks(oldProxyCallbacks: List<Pair<Int, Any.(Int) -> Unit>>) {
+        remoteObjectCreationCallbacks.restoreAll(oldProxyCallbacks)
+    }
+
     /**
      * @return all the RMI proxy objects used by this connection. This is used by session management in order to preserve RMI functionality.
      */
@@ -250,6 +259,12 @@ class RmiSupportConnection<CONNECTION: Connection> : RmiObjectCache {
             logger.error("RMI error connection ${connection.id}", exception)
             return
         }
+
+
+        // it DOESN'T matter which "side" we are, just delete both (RMI id's must always represent the same object on both sides)
+        removeProxyObject(rmiObjectId)
+        removeImplObject<Any?>(rmiObjectId)
+
 
         // ALWAYS send a message because we don't know if we are the "client" or the "server" - and we want ALL sides cleaned up
         connection.send(ConnectionObjectDeleteRequest(rmiObjectId))
