@@ -28,6 +28,10 @@ open class RmiObjectCache(val logger: Logger) {
     private val implObjects = RemoteObjectStorage(logger)
 
     /**
+     * This object will be saved again if we send the object "over the wire", automatically!
+     *
+     * So if we DELETE the object (on side A), and then later on side A sends the object to side B, then side A will save it again when it sends.
+     *
      * @return the newly registered RMI ID for this object. [RemoteObjectStorage.INVALID_RMI] means it was invalid (an error log will be emitted)
      */
     internal fun saveImplObject(rmiObject: Any): Int {
@@ -50,7 +54,7 @@ open class RmiObjectCache(val logger: Logger) {
     }
 
     /**
-     * Removes the object using the ID registered.
+     * Removes the object using the registered ID.
      *
      * @return the object or null if not found
      */
@@ -74,7 +78,7 @@ open class RmiObjectCache(val logger: Logger) {
     }
 
     /**
-     * @return all the saved RMI implementation objects along with their RMI ID. This is used by session management in order to preserve RMI functionality.
+     * all the saved RMI implementation objects along with their RMI ID. This is used by session management in order to preserve RMI functionality.
      */
     internal fun restoreImplObjects(implObjects: List<Pair<Int, Any>>) {
         this.implObjects.restoreAll(implObjects)
