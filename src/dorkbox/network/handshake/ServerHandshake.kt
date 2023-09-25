@@ -138,6 +138,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
             var newSession = true
             if (server.sessionManager.enabled()) {
+                // we want to restore RMI objects BEFORE the connection is fully setup!
                 newSession = server.sessionManager.onInit(newConnection as SessionConnection)
             }
 
