@@ -53,7 +53,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
     init {
         require(maxValuesInCache <= 65535) { "The maximum size for the values in the response manager is 65535"}
         require(maxValuesInCache > minimumValue) { "< $minimumValue (0 and 1 for RMI) are reserved"}
-        require(minimumValue > 0) { "The minimum value $minimumValue must be > 0"}
+        require(minimumValue > 1) { "The minimum value $minimumValue must be > 1"}
 
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
         val ids = mutableListOf<ResponseWaiter>()
