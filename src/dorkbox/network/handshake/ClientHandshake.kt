@@ -18,6 +18,7 @@ package dorkbox.network.handshake
 import dorkbox.network.Client
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.*
@@ -176,7 +177,11 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    fun hello(handshakeConnection: ClientHandshakeDriver, handshakeTimeoutNs: Long) : ClientConnectionInfo {
+    fun hello(
+        endPoint: EndPoint<CONNECTION>,
+        handshakeConnection: ClientHandshakeDriver,
+        handshakeTimeoutNs: Long
+    ) : ClientConnectionInfo {
         val pubSub = handshakeConnection.pubSub
 
         // is our pub still connected??
@@ -198,7 +203,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                                         portSub = pubSub.portSub
                                     ))
         } catch (e: Exception) {
-            handshakeConnection.close()
+            handshakeConnection.close(endPoint)
             throw TransmitException("$handshakeConnection Handshake message error!", e)
         }
 
@@ -219,14 +224,14 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         val failedEx = failedException
         if (failedEx != null) {
-            handshakeConnection.close()
+            handshakeConnection.close(endPoint)
 
             failedEx.cleanStackTraceInternal()
             throw failedEx
         }
 
         if (connectionHelloInfo == null) {
-            handshakeConnection.close()
+            handshakeConnection.close(endPoint)
 
             val exception = ClientTimedOutException("$handshakeConnection Waiting for registration response from server for more than ${Sys.getTimePrettyFull(handshakeTimeoutNs)}")
             throw exception
@@ -238,6 +243,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
     fun done(
+        endPoint: EndPoint<CONNECTION>,
         handshakeConnection: ClientHandshakeDriver,
         clientConnection: ClientConnectionDriver,
         handshakeTimeoutNs: Long,
@@ -260,7 +266,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                                         streamIdSub = handshakePubSub.streamIdSub
                                     ))
         } catch (e: Exception) {
-            handshakeConnection.close()
+            handshakeConnection.close(endPoint)
             throw TransmitException("$handshakeConnection Handshake message error!", e)
         }
 
@@ -291,14 +297,14 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         val failedEx = failedException
         if (failedEx != null) {
-            handshakeConnection.close()
+            handshakeConnection.close(endPoint)
 
             throw failedEx
         }
 
         if (!connectionDone) {
             // since this failed, close everything
-            handshakeConnection.close()
+            handshakeConnection.close(endPoint)
 
             val exception = ClientTimedOutException("Timed out waiting for registration response from server: ${Sys.getTimePrettyFull(handshakeTimeoutNs)}")
             throw exception

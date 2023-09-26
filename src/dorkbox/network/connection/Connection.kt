@@ -360,7 +360,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         // on close, we want to make sure this file is DELETED!
-        endPoint.aeronDriver.close(subscription, toString0)
+        try {
+            // we might not be able to close this connection!!
+            endPoint.aeronDriver.close(subscription, toString0)
+        }
+        catch (e: Exception) {
+            endPoint.listenerManager.notifyError(e)
+        }
+
 
         // notify the remote endPoint that we are closing
         // we send this AFTER we close our subscription (so that no more messages will be received, when the remote end ping-pong's this message back)
@@ -378,7 +385,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         // on close, we want to make sure this file is DELETED!
-        endPoint.aeronDriver.close(publication, toString0)
+
+        try {
+            // we might not be able to close this connection.
+            endPoint.aeronDriver.close(publication, toString0)
+        }
+        catch (e: Exception) {
+            endPoint.listenerManager.notifyError(e)
+        }
 
         // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
         // NOTE: notifyDisconnect() is called inside closeAction()!!

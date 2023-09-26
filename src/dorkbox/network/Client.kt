@@ -673,6 +673,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         // throws(ConnectTimedOutException::class, ClientRejectedException::class, ClientException::class)
         val connectionInfo = handshake.hello(
+            endPoint = this,
             handshakeConnection = handshakeConnection,
             handshakeTimeoutNs = handshakeTimeoutNs
         )
@@ -685,7 +686,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         }
 
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
-            handshakeConnection.close()
+            handshakeConnection.close(this)
 
             val exception = ClientRejectedException("Connection to [$addressString] not allowed! Public key mismatch.")
             listenerManager.notifyError(exception)
@@ -714,7 +715,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             // only have ot do one
             serialization.finishClientConnect(connectionInfo.kryoRegistrationDetails)
         } catch (e: Exception) {
-            handshakeConnection.close()
+            handshakeConnection.close(this)
 
             // because we are getting the class registration details from the SERVER, this should never be the case.
             // It is still and edge case where the reconstruction of the registration details fails (maybe because of custom serializers)
@@ -785,9 +786,11 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         // also closes the handshake (will also throw connect timeout exception)
 
         try {
-            handshake.done(handshakeConnection, clientConnection,
-                           handshakeTimeoutNs = handshakeTimeoutNs,
-                           logInfo = handshakeConnection.details
+            handshake.done(
+                endPoint = this,
+                handshakeConnection, clientConnection,
+                handshakeTimeoutNs = handshakeTimeoutNs,
+                logInfo = handshakeConnection.details
             )
         } catch (e: Exception) {
             listenerManager.notifyError(ClientHandshakeException("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] error during handshake", e))
@@ -795,7 +798,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         }
 
         // finished with the handshake, so always close these!
-        handshakeConnection.close()
+        handshakeConnection.close(this)
 
         if (logger.isDebugEnabled) {
             logger.debug("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] done with handshake.")

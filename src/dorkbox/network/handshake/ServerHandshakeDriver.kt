@@ -18,6 +18,7 @@ package dorkbox.network.handshake
 
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.IpInfo
 import io.aeron.ChannelUriStringBuilder
 import io.aeron.CommonContext
@@ -62,8 +63,14 @@ internal class ServerHandshakeDriver(
         }
     }
 
-    fun close() {
-        aeronDriver.close(subscription, logInfo)
+    fun close(endPoint: EndPoint<*>) {
+        try {
+            // we might not be able to close this connection.
+            aeronDriver.close(subscription, logInfo)
+        }
+        catch (e: Exception) {
+            endPoint.listenerManager.notifyError(e)
+        }
     }
 
     override fun toString(): String {

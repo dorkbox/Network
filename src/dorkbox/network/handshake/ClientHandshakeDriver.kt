@@ -329,7 +329,7 @@ internal class ClientHandshakeDriver(
         }
     }
 
-    fun close() {
+    fun close(endpoint: EndPoint<*>) {
         // only the subs are allocated on the client!
 //        sessionIdAllocator.free(pubSub.sessionIdPub)
 //        sessionIdAllocator.free(sessionIdSub)
@@ -337,7 +337,19 @@ internal class ClientHandshakeDriver(
         streamIdAllocator.free(pubSub.streamIdSub)
 
         // on close, we want to make sure this file is DELETED!
-        aeronDriver.close(pubSub.sub, logInfo)
-        aeronDriver.close(pubSub.pub, logInfo)
+
+        // we might not be able to close these connections.
+        try {
+            aeronDriver.close(pubSub.sub, logInfo)
+        }
+        catch (e: Exception) {
+            endpoint.listenerManager.notifyError(e)
+        }
+        try {
+            aeronDriver.close(pubSub.pub, logInfo)
+        }
+        catch (e: Exception) {
+            endpoint.listenerManager.notifyError(e)
+        }
     }
 }

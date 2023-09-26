@@ -73,7 +73,14 @@ internal object ServerHandshakePollers {
             }
             .expirationPolicy(ExpirationPolicy.CREATED)
             .expirationListener<Long, Publication> { connectKey, publication ->
-                driver.close(publication, "Server IPC Handshake ($connectKey)")
+                try {
+                    // we might not be able to close this connection.
+                    driver.close(publication, "Server IPC Handshake ($connectKey)")
+                }
+                catch (e: Exception) {
+                    server.listenerManager.notifyError(e)
+                }
+
             }
             .build<Long, Publication>()
 
@@ -167,14 +174,27 @@ internal object ServerHandshakePollers {
                         if (success) {
                             publications[connectKey] = publication
                         } else {
-                            driver.close(publication, logInfo)
+                            try {
+                                // we might not be able to close this connection.
+                                driver.close(publication, logInfo)
+                            }
+                            catch (e: Exception) {
+                                server.listenerManager.notifyError(e)
+                            }
                         }
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
                         driver.deleteLogFile(image)
 
-                        driver.close(publication, logInfo)
+                        try {
+                            // we might not be able to close this connection.
+                            driver.close(publication, logInfo)
+                        }
+                        catch (e: Exception) {
+                            server.listenerManager.notifyError(e)
+                        }
+
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error processing IPC handshake", e))
                     }
                 } else {
@@ -207,7 +227,13 @@ internal object ServerHandshakePollers {
                     // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
                     driver.deleteLogFile(image)
 
-                    driver.close(publication, logInfo)
+                    try {
+                        // we might not be able to close this connection.
+                        driver.close(publication, logInfo)
+                    }
+                    catch (e: Exception) {
+                        server.listenerManager.notifyError(e)
+                    }
                 }
             }
         }
@@ -215,7 +241,13 @@ internal object ServerHandshakePollers {
         fun close() {
             publications.forEach { (connectKey, publication) ->
                 AeronDriver.sessionIdAllocator.free(publication.sessionId())
-                driver.close(publication, "Server Handshake ($connectKey)")
+                try {
+                    // we might not be able to close this connection.
+                    driver.close(publication, "Server Handshake ($connectKey)")
+                }
+                catch (e: Exception) {
+                    server.listenerManager.notifyError(e)
+                }
             }
             publications.clear()
         }
@@ -250,7 +282,13 @@ internal object ServerHandshakePollers {
             }
             .expirationPolicy(ExpirationPolicy.CREATED)
             .expirationListener<Long, Publication> { connectKey, publication ->
-                driver.close(publication, "Server UDP Handshake ($connectKey)")
+                try {
+                    // we might not be able to close this connection.
+                    driver.close(publication, "Server UDP Handshake ($connectKey)")
+                }
+                catch (e: Exception) {
+                    server.listenerManager.notifyError(e)
+                }
             }
             .build<Long, Publication>()
 
@@ -398,14 +436,27 @@ internal object ServerHandshakePollers {
                             // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
                             driver.deleteLogFile(image)
 
-                            driver.close(publication, logInfo)
+                            try {
+                                // we might not be able to close this connection.
+                                driver.close(publication, logInfo)
+                            }
+                            catch (e: Exception) {
+                                server.listenerManager.notifyError(e)
+                            }
                         }
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
                         driver.deleteLogFile(image)
 
-                        driver.close(publication, logInfo)
+                        try {
+                            // we might not be able to close this connection.
+                            driver.close(publication, logInfo)
+                        }
+                        catch (e: Exception) {
+                            driver.close(publication, logInfo)
+                        }
+
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error processing IPC handshake", e))
                     }
                 } else {
@@ -435,7 +486,13 @@ internal object ServerHandshakePollers {
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error processing IPC handshake", e))
                     }
 
-                    driver.close(publication, logInfo)
+                    try {
+                        // we might not be able to close this connection.
+                        driver.close(publication, logInfo)
+                    }
+                    catch (e: Exception) {
+                        server.listenerManager.notifyError(e)
+                    }
 
                     // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                     // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
@@ -447,7 +504,14 @@ internal object ServerHandshakePollers {
         fun close() {
             publications.forEach { (connectKey, publication) ->
                 AeronDriver.sessionIdAllocator.free(publication.sessionId())
-                driver.close(publication, "Server Handshake ($connectKey)")
+
+                try {
+                    // we might not be able to close this connection.
+                    driver.close(publication, "Server Handshake ($connectKey)")
+                }
+                catch (e: Exception) {
+                    server.listenerManager.notifyError(e)
+                }
             }
             publications.clear()
         }
@@ -485,7 +549,7 @@ internal object ServerHandshakePollers {
                 override fun close() {
                     delegate.close()
                     handler.clear()
-                    driver.close()
+                    driver.close(server)
                     logger.info("Closed IPC poller")
                 }
 
@@ -534,7 +598,7 @@ internal object ServerHandshakePollers {
                 override fun close() {
                     delegate.close()
                     handler.clear()
-                    driver.close()
+                    driver.close(server)
                     logger.info("Closed IPv4 poller")
                 }
 
@@ -581,7 +645,7 @@ internal object ServerHandshakePollers {
                 override fun close() {
                     delegate.close()
                     handler.clear()
-                    driver.close()
+                    driver.close(server)
                     logger.info("Closed IPv4 poller")
                 }
 
@@ -629,7 +693,7 @@ internal object ServerHandshakePollers {
                 override fun close() {
                     delegate.close()
                     handler.clear()
-                    driver.close()
+                    driver.close(server)
                     logger.info("Closed IPv4+6 poller")
                 }
 

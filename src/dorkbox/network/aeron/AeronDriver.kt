@@ -544,9 +544,16 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
             Thread.sleep(200L)
         }
 
-        close(publication, logInfo)
+        var closeException: Exception? = null
+        try {
+            // we might not be able to close this connection.
+            close(publication, logInfo)
+        }
+        catch (e: Exception) {
+            closeException = e
+        }
 
-        val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Publication timed out in ${Sys.getTimePrettyFull(handshakeTimeoutNs)} while waiting for connection state: ${publication.channel()} streamId=${publication.streamId()}"))
+        val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Publication timed out in ${Sys.getTimePrettyFull(handshakeTimeoutNs)} while waiting for connection state: ${publication.channel()} streamId=${publication.streamId()}", closeException))
         exception.cleanAllStackTrace()
         throw exception
     }
@@ -574,9 +581,16 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
             Thread.sleep(200L)
         }
 
-        close(subscription, logInfo)
+        var closeException: Exception? = null
+        try {
+            // we might not be able to close this connection.
+            close(subscription, logInfo)
+        }
+        catch (e: Exception) {
+            closeException = e
+        }
 
-        val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Subscription timed out in ${Sys.getTimePrettyFull(handshakeTimeoutNs)} while waiting for connection state: ${subscription.channel()} streamId=${subscription.streamId()}"))
+        val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Subscription timed out in ${Sys.getTimePrettyFull(handshakeTimeoutNs)} while waiting for connection state: ${subscription.channel()} streamId=${subscription.streamId()}", closeException))
         exception.cleanAllStackTrace()
         throw exception
     }
