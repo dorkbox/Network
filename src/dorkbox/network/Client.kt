@@ -804,8 +804,6 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             logger.debug("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] done with handshake.")
         }
 
-        newConnection.setImage()
-
         // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
         var newSession = true
         if (sessionManager.enabled()) {
@@ -813,6 +811,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             newSession = sessionManager.onInit(newConnection as SessionConnection)
         }
 
+        newConnection.setImage()
 
         // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
         if (newSession) {
