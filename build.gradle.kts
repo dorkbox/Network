@@ -171,7 +171,7 @@ dependencies {
     api("com.dorkbox:HexUtilities:1.1")
     api("com.dorkbox:JNA:1.2")
     api("com.dorkbox:MinLog:2.5")
-    api("com.dorkbox:NetworkDNS:2.15")
+    api("com.dorkbox:NetworkDNS:2.16")
     api("com.dorkbox:NetworkUtils:2.23")
     api("com.dorkbox:OS:1.8")
     api("com.dorkbox:Serializers:2.9")
@@ -208,7 +208,7 @@ dependencies {
 
     // Expiring Map (A high performance thread-safe map that expires entries)
     // https://github.com/jhalterman/expiringmap
-    api("net.jodah:expiringmap:0.5.10")
+    api("net.jodah:expiringmap:0.5.11")
 
     // https://github.com/MicroUtils/kotlin-logging
 //    api("io.github.microutils:kotlin-logging:3.0.5")
