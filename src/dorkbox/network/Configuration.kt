@@ -236,7 +236,7 @@ abstract class Configuration protected constructor() {
         /**
          * Gets the version number.
          */
-        const val version = "6.13"
+        const val version = "6.14"
 
         internal val NOP_LOGGER = NOPLogger.NOP_LOGGER
 
