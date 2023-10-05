@@ -285,7 +285,27 @@ abstract class Configuration protected constructor() {
                     }
                     else if (logger !== NOP_LOGGER) {
                         // don't ALWAYS create it!
-                        val sizeInGB = 2
+
+
+                        /*
+                         * Note: Since Mac OS does not have a built-in support for /dev/shm, we automatically create a RAM disk for the Aeron directory (aeron.dir).
+                         *
+                         * You can create a RAM disk with the following command:
+                         *
+                         * $ diskutil erasevolume APFS "DISK_NAME" `hdiutil attach -nomount ram://$((SIZE_IN_MB * 2048))`
+                         *
+                         * where:
+                         *
+                         * DISK_NAME should be replaced with a name of your choice.
+                         * SIZE_IN_MB is the size in megabytes for the disk (e.g. 4096 for a 4GB disk).
+                         *
+                         * For example, the following command creates a RAM disk named DevShm which is 8GB in size:
+                         *
+                         * $ diskutil erasevolume APFS "DevShm" `hdiutil attach -nomount ram://$((8 * 1024 * 2048))`
+                         *
+                         * After this command is executed the new disk will be mounted under /Volumes/DevShm.
+                         */
+                        val sizeInGB = 4
 
                         // on macos, we cannot rely on users to actually create this -- so we automatically do it for them.
                         logger.info("Creating a $sizeInGB GB RAM drive for best performance.")
@@ -872,24 +892,6 @@ abstract class Configuration protected constructor() {
 //        }
 
 
-        /*
-         * Note: Since Mac OS does not have a built-in support for /dev/shm, we automatically create a RAM disk for the Aeron directory (aeron.dir).
-         *
-         * You can create a RAM disk with the following command:
-         *
-         * $ diskutil erasevolume APFS "DISK_NAME" `hdiutil attach -nomount ram://$((SIZE_IN_MB * 2048))`
-         *
-         * where:
-         *
-         * DISK_NAME should be replaced with a name of your choice.
-         * SIZE_IN_MB is the size in megabytes for the disk (e.g. 4096 for a 4GB disk).
-         *
-         * For example, the following command creates a RAM disk named DevShm which is 8GB in size:
-         *
-         * $ diskutil erasevolume APFS "DevShm" `hdiutil attach -nomount ram://$((8 * 1024 * 2048))`
-         *
-         * After this command is executed the new disk will be mounted under /Volumes/DevShm.
-         */
         var dir = aeronDirectory
 
         if (dir != null) {
