@@ -16,9 +16,12 @@
 
 package dorkbox.network.connection.session
 
+import dorkbox.network.connection.Connection
+
 interface SessionManager<CONNECTION : SessionConnection> {
 
     fun enabled(): Boolean
-    fun onInit(connection: CONNECTION): Boolean
+    fun onNewConnection(connection: Connection)
+    fun onInit(connection: Connection): Boolean
     fun onDisconnect(connection: CONNECTION)
 }

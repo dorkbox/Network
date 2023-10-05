@@ -21,14 +21,14 @@ import dorkbox.network.ClientConfiguration
 import dorkbox.network.connection.ConnectionParams
 
 open class SessionClient<CONNECTION: SessionConnection>(config: ClientConfiguration = ClientConfiguration(), loggerName: String = Client::class.java.simpleName):
-    Client<CONNECTION>(config, loggerName) {
+    Client<CONNECTION>(config, loggerName), SessionEndpoint<CONNECTION> {
 
     override fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION {
         @Suppress("UNCHECKED_CAST")
         return SessionConnection(connectionParameters) as CONNECTION
     }
 
-    open fun newSession(): Session<CONNECTION> {
-        return Session()
+    override fun newSession(connection: CONNECTION): Session<CONNECTION> {
+        return Session(connection)
     }
 }

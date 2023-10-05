@@ -16,18 +16,9 @@
 
 package dorkbox.network.connection.session
 
-import dorkbox.network.Server
-import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.ConnectionParams
 
-open class SessionServer<CONNECTION: SessionConnection>(config: ServerConfiguration = ServerConfiguration(), loggerName: String = Server::class.java.simpleName):
-    Server<CONNECTION>(config, loggerName), SessionEndpoint<CONNECTION> {
-    override fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION {
-        @Suppress("UNCHECKED_CAST")
-        return SessionConnection(connectionParameters) as CONNECTION
-    }
-
-    override fun newSession(connection: CONNECTION): Session<CONNECTION> {
-        return Session(connection)
-    }
+interface SessionEndpoint<CONNECTION: SessionConnection> {
+    fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION
+    fun newSession(connection: CONNECTION): Session<CONNECTION>
 }

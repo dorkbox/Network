@@ -16,12 +16,18 @@
 
 package dorkbox.network.connection.session
 
+import dorkbox.network.connection.Connection
+
 class SessionManagerNoOp<CONNECTION : SessionConnection>: SessionManager<CONNECTION> {
     override fun enabled(): Boolean {
         return false
     }
 
-    override fun onInit(connection: CONNECTION): Boolean {
+    override fun onNewConnection(connection: Connection) {
+        // do nothing
+    }
+
+    override fun onInit(connection: Connection): Boolean {
         // do nothing
         return true
     }

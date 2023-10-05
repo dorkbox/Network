@@ -134,11 +134,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
             }
 
             // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
-            var newSession = true
-            if (server.sessionManager.enabled()) {
-                // we want to restore RMI objects BEFORE the connection is fully setup!
-                newSession = server.sessionManager.onInit(newConnection as SessionConnection)
-            }
+            // when applicable - we ALSO want to restore RMI objects BEFORE the connection is fully setup!
+            val newSession = server.sessionManager.onInit(newConnection)
 
             newConnection.setImage()
 
@@ -330,7 +327,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
 
         // create a new connection. The session ID is encrypted.
-        var connection: CONNECTION? = null
+        var newConnection: CONNECTION? = null
         try {
             // Create a pub/sub at the given address and port, using the given stream ID.
             val newConnectionDriver = ServerConnectionDriver.build(
@@ -358,13 +355,16 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 logger.info("Creating new connection to $logInfo")
             }
 
-            connection = server.newConnection(ConnectionParams(
-                publicKey,
-                server,
-                newConnectionDriver.pubSub,
-                PublicKeyValidationState.VALID,
-                CryptoManagement.NOCRYPT // we don't use encryption for IPC connections
+            newConnection = server.newConnection(ConnectionParams(
+                publicKey = publicKey,
+                endPoint = server,
+                connectionInfo = newConnectionDriver.pubSub,
+                publicKeyValidation = PublicKeyValidationState.VALID,
+                cryptoKey = CryptoManagement.NOCRYPT // we don't use encryption for IPC connections
             ))
+
+            server.sessionManager.onNewConnection(newConnection)
+
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             // NOTE: all IPC client connections are, by default, always allowed to connect, because they are running on the same machine
@@ -395,10 +395,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
             successMessage.publicKey = server.crypto.publicKeyBytes
 
             // before we notify connect, we have to wait for the client to tell us that they can receive data
-            pendingConnections[message.connectKey] = connection
+            pendingConnections[message.connectKey] = newConnection
 
             if (logger.isDebugEnabled) {
-                logger.debug("[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello.")
+                logger.debug("[$logInfo] (${message.connectKey}) Connection (${newConnection.id}) responding to handshake hello.")
             }
 
             // this tells the client all the info to connect.
@@ -410,7 +410,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             streamIdAllocator.free(connectionStreamIdSub)
             streamIdAllocator.free(connectionStreamIdPub)
 
-            listenerManager.notifyError(ServerHandshakeException("[$logInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message", e))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] (${message.connectKey}) Connection (${newConnection?.id}) handshake crashed! Message $message", e))
 
             return false
         }
@@ -558,7 +558,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         }
 
         // create a new connection. The session ID is encrypted.
-        var connection: CONNECTION? = null
+        var newConnection: CONNECTION? = null
         try {
             // Create a pub/sub at the given address and port, using the given stream ID.
             val newConnectionDriver = ServerConnectionDriver.build(
@@ -589,13 +589,21 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 logger.info("Creating new connection to $logInfo")
             }
 
-            connection = server.newConnection(ConnectionParams(publicKey, server, newConnectionDriver.pubSub, validateRemoteAddress, cryptoSecretKey))
+            newConnection = server.newConnection(ConnectionParams(
+                publicKey = publicKey,
+                endPoint = server,
+                connectionInfo = newConnectionDriver.pubSub,
+                publicKeyValidation = validateRemoteAddress,
+                cryptoKey = cryptoSecretKey
+            ))
+
+            server.sessionManager.onNewConnection(newConnection)
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
-            val permitConnection = listenerManager.notifyFilter(connection)
+            val permitConnection = listenerManager.notifyFilter(newConnection)
             if (!permitConnection) {
                 // this will also unwind/free allocations
-                connection.close()
+                newConnection.close()
 
                 listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection was not permitted!"))
 
@@ -635,10 +643,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
             successMessage.publicKey = server.crypto.publicKeyBytes
 
             // before we notify connect, we have to wait for the client to tell us that they can receive data
-            pendingConnections[message.connectKey] = connection
+            pendingConnections[message.connectKey] = newConnection
 
             if (logger.isDebugEnabled) {
-                logger.debug("[$logInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello.")
+                logger.debug("[$logInfo] (${message.connectKey}) Connection (${newConnection.id}) responding to handshake hello.")
             }
 
             // this tells the client all the info to connect.
@@ -651,7 +659,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             streamIdAllocator.free(connectionStreamIdPub)
             streamIdAllocator.free(connectionStreamIdSub)
 
-            listenerManager.notifyError(ServerHandshakeException("[$logInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message", e))
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] (${message.connectKey}) Connection (${newConnection?.id}) handshake crashed! Message $message", e))
             return false
         }
 

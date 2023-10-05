@@ -21,7 +21,7 @@ import kotlinx.atomicfu.locks.ReentrantLock
 import kotlinx.atomicfu.locks.withLock
 import java.util.concurrent.*
 
-open class Session<CONNECTION: SessionConnection> {
+open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONNECTION) {
 
 
     // the RMI objects are saved when the connection is removed, and restored BEFORE the connection is initialized, so there are no concerns
@@ -36,7 +36,19 @@ open class Session<CONNECTION: SessionConnection> {
      */
     val pendingMessagesQueue: LinkedTransferQueue<Any> = LinkedTransferQueue()
 
-    @Volatile lateinit var connection: CONNECTION
+
+    /**
+     * the FIRST time this method is called, it will be true. EVERY SUBSEQUENT TIME, it will be false
+     */
+    internal var isNewSession = true
+        private set
+        get() {
+            val orig = field
+            if (orig) {
+                field = false
+            }
+            return orig
+        }
 
 
     fun restore(connection: CONNECTION) {

@@ -767,11 +767,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             connectionInfo.secretKey
         ))
 
-
-        if (sessionManager.enabled()) {
-            require(newConnection is SessionConnection) { "The new connection does not inherit a SessionConnection, unable to continue. " }
-        }
-
+        sessionManager.onNewConnection(newConnection)
 
         if (!handshakeConnection.pubSub.isIpc) {
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
@@ -805,11 +801,8 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         }
 
         // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
-        var newSession = true
-        if (sessionManager.enabled()) {
-            // we want to restore RMI objects BEFORE the connection is fully setup!
-            newSession = sessionManager.onInit(newConnection as SessionConnection)
-        }
+        // when applicable - we ALSO want to restore RMI objects BEFORE the connection is fully setup!
+        val newSession = sessionManager.onInit(newConnection)
 
         newConnection.setImage()
 

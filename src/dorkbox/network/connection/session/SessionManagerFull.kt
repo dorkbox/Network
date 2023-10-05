@@ -21,6 +21,7 @@ import dorkbox.collections.LockFreeHashMap
 import dorkbox.hex.toHexString
 import dorkbox.network.Configuration
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.util.Sys
 import net.jodah.expiringmap.ExpirationPolicy
@@ -73,45 +74,61 @@ internal open class SessionManagerFull<CONNECTION: SessionConnection>(
         return true
     }
 
-
     /**
-     * this must be called when a new connection is created AND when the internal `reconnect` occurs (as a result of a network error)
+     * this must be called when a new connection is created
      *
      * @return true if this is a new session, false if it is an existing session
      */
-    override fun onInit(connection: CONNECTION): Boolean {
+    override fun onNewConnection(connection: Connection) {
+        require(connection is SessionConnection) { "The new connection does not inherit a SessionConnection, unable to continue. " }
+
         val publicKeyWrapped = ByteArrayWrapper.wrap(connection.uuid)
 
-        var isNewSession = false
-        val session = synchronized(sessions) {
+        synchronized(sessions) {
             // always check if we are expiring first...
             val expiring = expiringSessions.remove(publicKeyWrapped)
             if (expiring != null) {
+                // we must always set this session value!!
+                connection.session = expiring
                 expiring
             } else {
                 val existing = sessions[publicKeyWrapped]
                 if (existing != null) {
+                    // we must always set this session value!!
+                    connection.session = existing
                     existing
                 } else {
-                    isNewSession = true
-
                     @Suppress("UNCHECKED_CAST")
-                    val newSession: Session<CONNECTION> = if (connection.endPoint.isServer()) {
-                        (connection.endPoint as SessionServer).newSession() as Session<CONNECTION>
-                    } else {
-                        (connection.endPoint as SessionClient).newSession() as Session<CONNECTION>
-                    }
+                    val newSession = (connection.endPoint as SessionEndpoint<CONNECTION>).newSession(connection as CONNECTION)
+
+                    // we must always set this when the connection is created, and it must be inside the sync block!
+                    connection.session = newSession
 
                     sessions[publicKeyWrapped] = newSession
                     newSession
                 }
             }
         }
+    }
 
-        connection.session = session
-        session.restore(connection)
 
-        return isNewSession
+    /**
+     * this must be called when a new connection is created AND when the internal `reconnect` occurs (as a result of a network error)
+     *
+     * @return true if this is a new session, false if it is an existing session
+     */
+    override fun onInit(connection: Connection): Boolean {
+        // we know this will always be the case, because if this specific method can be called, then it will be a sessionConnection
+        connection as SessionConnection
+
+        @Suppress("UNCHECKED_CAST")
+        val session: Session<CONNECTION> = connection.session as Session<CONNECTION>
+
+        @Suppress("UNCHECKED_CAST")
+        session.restore(connection as CONNECTION)
+
+        // the FIRST time this method is called, it will be true. EVERY SUBSEQUENT TIME, it will be false
+        return session.isNewSession
     }
 
 
