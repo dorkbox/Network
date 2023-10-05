@@ -170,12 +170,10 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                     } else {
                         error.cleanStackTrace()
                         // send this out to the listener-manager so we can be notified of global errors
-                        notifyError(AeronDriverException("Aeron Driver [$driverId]: Unexpected error!", error.cause!!))
+                        notifyError(AeronDriverException("Aeron Driver [$driverId]: Unexpected error!", error.cause))
                     }
                 }
-
-
-                if (error is io.aeron.exceptions.AeronException) {
+                else if (error is io.aeron.exceptions.AeronException) {
                     if (error.message?.startsWith("ERROR - unexpected close of heartbeat timestamp counter:") == true) {
                         restartNetwork = true
 
