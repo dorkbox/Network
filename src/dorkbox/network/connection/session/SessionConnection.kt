@@ -32,10 +32,10 @@ open class SessionConnection(connectionParameters: ConnectionParams<*>): Connect
         return true
     }
 
-    fun sendPendingMessages() {
+    internal fun sendPendingMessages() {
         // now send all pending messages
-        if (logger.isTraceEnabled) {
-            logger.trace("Sending pending messages: ${session.pendingMessagesQueue.size}")
+        if (logger.isDebugEnabled) {
+            logger.debug("Sending pending messages: ${session.pendingMessagesQueue.size}")
         }
         session.pendingMessagesQueue.forEach {
             super.send(it, false)

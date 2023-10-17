@@ -626,12 +626,19 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // the remote endPoint will send this message if it is closing the connection.
             // IF we get this message in time, then we do not have to wait for the connection to expire before closing it
             is DisconnectMessage -> {
+                val closeEverything = message.closeEverything
+
                 if (logger.isDebugEnabled) {
-                    logger.debug("Received disconnect message from: $otherTypeName")
+                    if (closeEverything) {
+                        logger.debug("Received disconnect message from $otherTypeName")
+                    } else {
+                        logger.debug("Received session disconnect message from $otherTypeName")
+                    }
                 }
                 connection.close(sendDisconnectMessage = false,
                                  notifyDisconnect = true,
-                                 closeEverything = message.closeEverything)
+                                 closeEverything = closeEverything
+                )
             }
 
             // streaming message. This is used when the published data is too large for a single Aeron message.

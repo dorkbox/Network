@@ -53,7 +53,7 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
 
     fun restore(connection: CONNECTION) {
         this.connection = connection
-        connection.logger.debug("restoring connection")
+        connection.logger.debug("[{}] restoring connection", connection)
 
         lock.withLock {
             // this is called, even on a brand-new session, so we must have extra checks in place.
@@ -74,7 +74,8 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
     }
 
     fun save(connection: CONNECTION) {
-        connection.logger.debug("saving connection")
+        connection.logger.debug("[{}] saving connection", connection)
+
         val allProxyObjects = connection.rmi.getAllProxyObjects()
         val allProxyCallbacks = connection.rmi.getAllCallbacks()
         val allImplObjects = connection.rmi.getAllImplObjects()
@@ -89,11 +90,13 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
 
     fun queueMessage(connection: SessionConnection, message: Any, abortEarly: Boolean): Boolean {
         if (this.connection != connection) {
+            connection.logger.error("[{}] MESSAGE RECEIVED ON OLD CONNECTION, RESENDING", connection)
+
             // we received a message on an OLD connection (which is no longer connected ---- BUT we have a NEW connection that is connected)
             // this can happen on RMI object that are old
             val success = this.connection.send(message, abortEarly)
             if (success) {
-                connection.logger.error("successfully resent message")
+                connection.logger.error("[{}] successfully resent message", connection)
                 return true
             }
         }
@@ -101,22 +104,22 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
         if (!abortEarly) {
             // this was a "normal" send (instead of the disconnect message).
             pendingMessagesQueue.put(message)
-            connection.logger.error("queueing message")
+            connection.logger.error("[{}] queueing message", connection)
         }
         else if (connection.endPoint.aeronDriver.internal.mustRestartDriverOnError) {
             // the only way we get errors, is if the connection is bad OR if we are sending so fast that the connection cannot keep up.
 
             // don't restart/reconnect -- there was an internal network error
             pendingMessagesQueue.put(message)
-            connection.logger.error("queueing message")
+            connection.logger.error("[{}] queueing message", connection)
         }
         else if (!connection.isConnected()) {
             // there was an issue - the connection should automatically reconnect
             pendingMessagesQueue.put(message)
-            connection.logger.error("queueing message")
+            connection.logger.error("[{}] queueing message", connection)
         }
 
-        connection.logger.error("NOT NOT NOT queueing message")
+        connection.logger.error("[{}] NOT NOT NOT queueing message", connection)
         return false
     }
 }
