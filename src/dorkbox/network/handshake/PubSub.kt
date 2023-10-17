@@ -18,6 +18,7 @@ package dorkbox.network.handshake
 
 import io.aeron.Publication
 import io.aeron.Subscription
+import org.slf4j.Logger
 import java.net.Inet4Address
 import java.net.InetAddress
 
@@ -36,12 +37,13 @@ data class PubSub(
 ) {
     val isIpc get() = remoteAddress == null
 
-    fun getLogInfo(debugEnabled: Boolean): String {
+    fun getLogInfo(logger: Logger): String {
+        val detailed = logger.isTraceEnabled
         return if (isIpc) {
-            if (debugEnabled) {
+            if (detailed) {
                 "IPC sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
             } else {
-                "IPC [${sessionIdPub}|${sessionIdSub}|${streamIdPub}|${streamIdSub}]"
+                "IPC"
             }
         } else {
             val prefix = if (remoteAddress is Inet4Address) {
@@ -50,10 +52,10 @@ data class PubSub(
                 "IPv6 $remoteAddressString"
             }
 
-            if (debugEnabled) {
+            if (detailed) {
                 "$prefix sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, port: p=${portPub} s=${portSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
             } else {
-                "$prefix [${sessionIdPub}|${sessionIdSub}|${streamIdPub}|${streamIdSub}|${portPub}|${portSub}]"
+                prefix
             }
         }
     }

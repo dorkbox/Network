@@ -348,7 +348,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 reliable = true
             )
 
-            val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
+            val logInfo = newConnectionDriver.pubSub.getLogInfo(logger)
             if (logger.isDebugEnabled) {
                 logger.debug("Creating new connection to $logInfo")
             } else {
@@ -582,7 +582,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             val cryptoSecretKey = server.crypto.generateAesKey(clientPublicKeyBytes, clientPublicKeyBytes, server.crypto.publicKeyBytes)
 
 
-            val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
+            val logInfo = newConnectionDriver.pubSub.getLogInfo(logger)
             if (logger.isDebugEnabled) {
                 logger.debug("Creating new connection to $logInfo")
             } else {

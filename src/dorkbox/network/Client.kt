@@ -555,7 +555,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                 )
 
                 val pubSub = handshakeConnection.pubSub
-                val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
+                val logInfo = pubSub.getLogInfo(logger)
 
                 if (logger.isDebugEnabled) {
                     logger.debug("Creating new handshake to $logInfo")
@@ -751,7 +751,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         )
 
         val pubSub = clientConnection.connectionInfo
-        val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
+        val logInfo = pubSub.getLogInfo(logger)
 
         if (logger.isDebugEnabled) {
             logger.debug("Creating new connection to $logInfo")

@@ -163,7 +163,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         rmi = endPoint.rmiConnectionSupport.getNewRmiSupport(this)
 
         // For toString() and logging
-        toString0 = info.getLogInfo(logger.isDebugEnabled)
+        toString0 = info.getLogInfo(logger)
     }
 
     /**
@@ -355,7 +355,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         // make sure to save off the RMI objects for session management
-        if (!closeEverything && endPoint.sessionManager.enabled()) {
+        if (!closeEverything) {
             endPoint.sessionManager.onDisconnect(this as SessionConnection)
         }
 
