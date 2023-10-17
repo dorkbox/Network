@@ -167,7 +167,7 @@ dependencies {
     // https://github.com/dorkbox
     api("com.dorkbox:ByteUtilities:2.0")
     api("com.dorkbox:ClassUtils:1.3")
-    api("com.dorkbox:Collections:2.6")
+    api("com.dorkbox:Collections:2.7")
     api("com.dorkbox:HexUtilities:1.1")
     api("com.dorkbox:JNA:1.2")
     api("com.dorkbox:MinLog:2.5")
