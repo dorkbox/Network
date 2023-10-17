@@ -192,7 +192,12 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: Logger) : AutoC
      * Take the proper steps to close the storage system.
      */
     override fun close() {
-        store.close()
+        try {
+            store.close()
+        }
+        catch (exception: Exception) {
+            logger.error("Unable to close the storage!", exception)
+        }
     }
 
 
