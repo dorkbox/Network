@@ -141,6 +141,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         // configure the aeron error handler
         val filter = config.aeronErrorFilter
         aeronErrorHandler = { error ->
+            // NOTE: this is an error callback for MANY things, MOST of them are ASYNC! This means that a messages can successfully be ADDED
+            //  to aeron, but NOT successfully sent over the network.
+
             // this is bad! We must close this connection. THIS WILL BE CALLED AS FAST AS THE CPU CAN RUN (because of how aeron works).
             if (!mustRestartDriverOnError) {
 
