@@ -707,6 +707,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         // THIS CAN TAKE A WHILE TO ACTUALLY CLOSE!
         while (subscription.isConnected || subscription.channelStatus() == ChannelEndpointStatus.ACTIVE || subscription.images().isNotEmpty()) {
             Thread.sleep(AERON_PUB_SUB_TIMEOUT)
+            if (logger.isTraceEnabled) {
+                logger.trace("Aeron Driver [$driverId]: Still closing sub!")
+            }
         }
 
         // deleting log files is generally not recommended in a production environment as it can result in data loss and potential disruption of the messaging system!!
@@ -861,8 +864,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             endPointUsages.remove(endPoint)
         }
 
-        if (logger.isTraceEnabled) {
-            logger.trace("Aeron Driver [$driverId]: Requested close... (${endPointUsages.size()} endpoints still in use)")
+        if (logger.isDebugEnabled) {
+            logger.debug("Aeron Driver [$driverId]: Requested close... (${endPointUsages.size()} endpoints still in use)")
         }
 
         // ignore the extra driver checks, because in SOME situations, when trying to reconnect upon an error, the

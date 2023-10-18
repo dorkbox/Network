@@ -774,9 +774,11 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
             val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
             if (logger.isTraceEnabled) {
-                logger.trace("[${handshakeConnection.details}] (${handshake.connectKey}) $connType (${newConnection.id}) adding new signature for [$addressString] : ${connectionInfo.publicKey.toHexString()}")
+                logger.trace("[${handshakeConnection.details}] (${handshake.connectKey}) $connType (${newConnection.id}) adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
+            } else if (logger.isDebugEnabled) {
+                logger.debug("[${handshakeConnection.details}] $connType (${newConnection.id}) adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
             } else if (logger.isInfoEnabled) {
-                logger.info("[${handshakeConnection.details}] $connType (${newConnection.id}) adding new signature for [$addressString] : ${connectionInfo.publicKey.toHexString()}")
+                logger.info("[${handshakeConnection.details}] $connType adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
             }
 
             storage.addRegisteredServerKey(address!!, connectionInfo.publicKey)
