@@ -126,6 +126,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     internal var mustRestartDriverOnError = false
 
     @Volatile
+    private var closedTime = 0L
+
+    @Volatile
     private var closed = false
 
     fun closed(): Boolean {
@@ -1011,6 +1014,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             logger.debug("Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'")
         }
         closed = true
+        closedTime = System.nanoTime()
 
         return@write true
     }
@@ -1136,10 +1140,22 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
     }
 
     /**
-     * Make sure that we DO NOT approach the Aeron linger timeout!
+     * Make sure that we DO NOT approach the Aeron linger timeout! If we have already passed it, do nothing.
      */
     fun delayLingerTimeout(multiplier: Number = 1) {
-        Thread.sleep(driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds((lingerNs() * multiplier.toDouble()).toLong())) )
+        val lingerTimeoutNs = (lingerNs() * multiplier.toDouble()).toLong()
+        val driverTimeoutSec = driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(lingerTimeoutNs))
+        val driverTimeoutNs = TimeUnit.SECONDS.toNanos(driverTimeoutSec)
+
+        val elapsedNs = System.nanoTime() - closedTime
+        if (elapsedNs >= driverTimeoutNs) {
+            // timeout already expired, do nothing.
+            return
+        }
+
+        // not always the full duration, but the duration since the close event
+        val adjustedTimeoutSec = TimeUnit.NANOSECONDS.toSeconds(driverTimeoutNs - elapsedNs)
+        Thread.sleep(adjustedTimeoutSec)
     }
 
     override fun equals(other: Any?): Boolean {
