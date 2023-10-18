@@ -22,6 +22,7 @@ import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.connection.*
 import dorkbox.network.connection.session.SessionConnection
+import dorkbox.network.connection.session.SessionServer
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerHandshakeException
 import dorkbox.network.exceptions.ServerTimedoutException
@@ -129,8 +130,11 @@ internal class ServerHandshake<CONNECTION : Connection>(
             }
 
             // Server is the "source", client mirrors the server
-            if (logger.isDebugEnabled) {
-                logger.debug("[${newConnection}] (${message.connectKey}) Connection done with handshake.")
+            val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
+            if (logger.isTraceEnabled) {
+                logger.trace("[${newConnection}] (${message.connectKey}) $connType (${newConnection.id}) done with handshake.")
+            } else if (logger.isDebugEnabled) {
+                logger.debug("[${newConnection}] $connType (${newConnection.id}) done with handshake.")
             }
 
             // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
@@ -349,10 +353,11 @@ internal class ServerHandshake<CONNECTION : Connection>(
             )
 
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger)
+            val connectionType = if (server is SessionServer) "session connection" else "connection"
             if (logger.isDebugEnabled) {
-                logger.debug("Creating new connection to $logInfo")
+                logger.debug("Creating new $connectionType to $logInfo")
             } else {
-                logger.info("Creating new connection to $logInfo")
+                logger.info("Creating new $connectionType to $logInfo")
             }
 
             newConnection = server.newConnection(ConnectionParams(
@@ -397,8 +402,11 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = newConnection
 
-            if (logger.isDebugEnabled) {
-                logger.debug("[$logInfo] (${message.connectKey}) Connection (${newConnection.id}) responding to handshake hello.")
+            val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
+            if (logger.isTraceEnabled) {
+                logger.trace("[$logInfo] (${message.connectKey}) $connType (${newConnection.id}) responding to handshake hello.")
+            } else if (logger.isDebugEnabled) {
+                logger.debug("[$logInfo] $connType (${newConnection.id}) responding to handshake hello.")
             }
 
             // this tells the client all the info to connect.
@@ -583,10 +591,11 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
 
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger)
+            val connectionType = if (server is SessionServer) "session connection" else "connection"
             if (logger.isDebugEnabled) {
-                logger.debug("Creating new connection to $logInfo")
+                logger.debug("Creating new $connectionType to $logInfo")
             } else {
-                logger.info("Creating new connection to $logInfo")
+                logger.info("Creating new $connectionType to $logInfo")
             }
 
             newConnection = server.newConnection(ConnectionParams(
@@ -645,8 +654,11 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = newConnection
 
-            if (logger.isDebugEnabled) {
-                logger.debug("[$logInfo] (${message.connectKey}) Connection (${newConnection.id}) responding to handshake hello.")
+            val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
+            if (logger.isTraceEnabled) {
+                logger.trace("[$logInfo] $connType (${newConnection.id}) responding to handshake hello.")
+            } else if (logger.isDebugEnabled) {
+                logger.debug("[$logInfo] $connType (${newConnection.id}) responding to handshake hello.")
             }
 
             // this tells the client all the info to connect.

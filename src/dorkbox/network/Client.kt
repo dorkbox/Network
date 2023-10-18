@@ -29,6 +29,7 @@ import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.formatCommonAddress
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
+import dorkbox.network.connection.session.SessionClient
 import dorkbox.network.connection.session.SessionConnection
 import dorkbox.network.connection.session.SessionManagerFull
 import dorkbox.network.connection.session.SessionManagerNoOp
@@ -752,11 +753,11 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         val pubSub = clientConnection.connectionInfo
         val logInfo = pubSub.getLogInfo(logger)
-
+        val connectionType = if (this is SessionClient) "session connection" else "connection"
         if (logger.isDebugEnabled) {
-            logger.debug("Creating new connection to $logInfo")
+            logger.debug("Creating new $connectionType to $logInfo")
         } else {
-            logger.info("Creating new connection to $logInfo")
+            logger.info("Creating new $connectionType to $logInfo")
         }
 
         val newConnection = newConnection(ConnectionParams(
@@ -771,8 +772,11 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         if (!handshakeConnection.pubSub.isIpc) {
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
-            if (logger.isInfoEnabled) {
-                logger.info("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) adding new signature for [$addressString] : ${connectionInfo.publicKey.toHexString()}")
+            val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
+            if (logger.isTraceEnabled) {
+                logger.trace("[${handshakeConnection.details}] (${handshake.connectKey}) $connType (${newConnection.id}) adding new signature for [$addressString] : ${connectionInfo.publicKey.toHexString()}")
+            } else if (logger.isInfoEnabled) {
+                logger.info("[${handshakeConnection.details}] $connType (${newConnection.id}) adding new signature for [$addressString] : ${connectionInfo.publicKey.toHexString()}")
             }
 
             storage.addRegisteredServerKey(address!!, connectionInfo.publicKey)
@@ -796,8 +800,11 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         // finished with the handshake, so always close these!
         handshakeConnection.close(this)
 
-        if (logger.isDebugEnabled) {
-            logger.debug("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] done with handshake.")
+        val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
+        if (logger.isTraceEnabled) {
+            logger.debug("[${handshakeConnection.details}] (${handshake.connectKey}) $connType (${newConnection.id}) done with handshake.")
+        } else if (logger.isDebugEnabled) {
+            logger.debug("[${handshakeConnection.details}] $connType (${newConnection.id}) done with handshake.")
         }
 
         // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
