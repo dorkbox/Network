@@ -113,7 +113,7 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
             pendingMessagesQueue.put(message)
             connection.logger.error("[{}] queueing message", connection)
         }
-        else if (!connection.isConnected()) {
+        else if (!connection.isClosedWithTimeout()) {
             // there was an issue - the connection should automatically reconnect
             pendingMessagesQueue.put(message)
             connection.logger.error("[{}] queueing message", connection)

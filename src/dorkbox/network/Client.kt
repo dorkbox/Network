@@ -831,7 +831,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             override fun invoke(): Int {
                 // if we initiate a disconnect manually, then there is no need to wait for aeron to verify it's closed
                 // we only want to wait for aeron to verify it's closed if we are SUPPOSED to be connected, but there's a network blip
-                return if (!(shutdownEventPoller || newConnection.isClosed() || newConnection.isConnected())) {
+                return if (!(shutdownEventPoller || newConnection.isClosed() || newConnection.isClosedWithTimeout())) {
                     newConnection.poll()
                 } else {
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.

@@ -230,7 +230,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
                     // so we can modify this as we go
                     connections.forEach { connection ->
-                        if (!(connection.isClosed() || connection.isConnected()) ) {
+                        if (!(connection.isClosed() || connection.isClosedWithTimeout()) ) {
                             // Otherwise, poll the connection for messages
                             pollCount += connection.poll()
                         } else {
