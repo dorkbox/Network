@@ -864,12 +864,14 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
                     // extra checks performed BECAUSE we have to do our own data fragmentation management.
                     // It doesn't make sense to use `.offer`, which ALSO has its own fragmentation handling (which is extra overhead for us)
                     bufferClaim.buffer().putBytes(DataHeaderFlyweight.HEADER_LENGTH, internalBuffer, offset, objectSize)
+                    return true
+                } catch (e: Exception) {
+                    logger.error("Error adding data to aeron buffer.", e)
+                    return false
                 } finally {
                     // must commit() or abort() before the unblock timeout (default 15 seconds) occurs.
                     bufferClaim.commit()
                 }
-
-                return true
             }
 
             if (internal.mustRestartDriverOnError) {
@@ -966,7 +968,6 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
             listenerManager.notifyError(exception)
             return false
         }
-
     }
 
     /**
