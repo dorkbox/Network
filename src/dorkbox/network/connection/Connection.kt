@@ -355,7 +355,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         // make sure to save off the RMI objects for session management
-        if (!closeEverything) {
+        if (!closeEverything && endPoint.sessionManager.enabled()) {
             endPoint.sessionManager.onDisconnect(this as SessionConnection)
         }
 
