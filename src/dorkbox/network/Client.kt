@@ -853,6 +853,15 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         onClose = object : EventCloseOperator {
             override fun invoke() {
                 val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
+                val uncleanDisconnect = !shutdownEventPoller && !newConnection.isClosed() && newConnection.isClosedWithTimeout()
+                val autoReconnect = mustRestartDriverOnError || uncleanDisconnect
+
+
+                if (mustRestartDriverOnError) {
+                    logger.error("Critical driver error detected, reconnecting client")
+                } else if (uncleanDisconnect) {
+                    logger.error("Unclean disconnect detected, reconnecting client")
+                }
 
                 // this can be closed when the connection is remotely closed in ADDITION to manually closing
                 if (logger.isDebugEnabled) {
@@ -861,10 +870,11 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
                 // we only need to run shutdown methods if there was a network outage or D/C
                 if (!shutdownInProgress.value) {
-                    // this is because we restart automatically on driver errors
-                    val standardClose = !mustRestartDriverOnError
+                    // this is because we restart automatically on driver errors/weird timeouts
+                    val standardClose = !autoReconnect
                     this@Client.close(
                         closeEverything = false,
+                        sendDisconnectMessage = standardClose,
                         notifyDisconnect = standardClose,
                         releaseWaitingThreads = standardClose
                     )
@@ -875,10 +885,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                 endpointIsRunning.lazySet(false)
                 pollerClosedLatch.countDown()
 
-
-                if (mustRestartDriverOnError) {
-                    logger.error("Critical driver error detected, reconnecting client")
-
+                if (autoReconnect) {
                     EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
                         waitForEndpointShutdown()
 
@@ -1002,6 +1009,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         stopConnectOnShutdown = true
         close(
             closeEverything = closeEverything,
+            sendDisconnectMessage = true,
             notifyDisconnect = true,
             releaseWaitingThreads = true
         )

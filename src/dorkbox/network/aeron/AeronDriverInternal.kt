@@ -195,6 +195,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                     EventDispatcher.CLOSE.launch {
                         endPointUsages.forEach {
                             it.close(closeEverything = false,
+                                     sendDisconnectMessage = false,
                                      notifyDisconnect = false,
                                      releaseWaitingThreads = false)
                         }

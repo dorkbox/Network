@@ -351,7 +351,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         if (logger.isDebugEnabled) {
-            logger.debug("[$toString0] connection closing")
+            logger.debug("[$toString0] connection closing. sendDisconnectMessage=$sendDisconnectMessage, notifyDisconnect=$notifyDisconnect, closeEverything=$closeEverything")
         }
 
         // make sure to save off the RMI objects for session management

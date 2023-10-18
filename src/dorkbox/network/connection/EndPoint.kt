@@ -267,6 +267,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         hook = Thread {
             close(
                 closeEverything = true,
+                sendDisconnectMessage = true,
                 notifyDisconnect = true,
                 releaseWaitingThreads = true
             )
@@ -902,11 +903,12 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      */
     internal fun close(
         closeEverything: Boolean,
+        sendDisconnectMessage: Boolean,
         notifyDisconnect: Boolean,
         releaseWaitingThreads: Boolean)
     {
         if (logger.isDebugEnabled) {
-            logger.debug("Requesting close: closeEverything=$closeEverything, releaseWaitingThreads=$releaseWaitingThreads")
+            logger.debug("Requesting close: closeEverything=$closeEverything, sendDisconnectMessage=$sendDisconnectMessage, notifyDisconnect=$notifyDisconnect, releaseWaitingThreads=$releaseWaitingThreads")
         }
 
         // 1) endpoints can call close()
@@ -953,7 +955,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
             // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
             connections.forEach {
-                it.closeImmediately(sendDisconnectMessage = true,
+                it.closeImmediately(sendDisconnectMessage = sendDisconnectMessage,
                                     notifyDisconnect = notifyDisconnect,
                                     closeEverything = closeEverything)
             }

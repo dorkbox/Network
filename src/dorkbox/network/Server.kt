@@ -272,6 +272,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     val standardClose = !mustRestartDriverOnError
                     this@Server.close(
                         closeEverything = false,
+                        sendDisconnectMessage = standardClose,
                         notifyDisconnect = standardClose,
                         releaseWaitingThreads = standardClose
                     )
@@ -395,6 +396,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     fun close(closeEverything: Boolean = true) {
         close(
             closeEverything = closeEverything,
+            sendDisconnectMessage = true,
             notifyDisconnect = true,
             releaseWaitingThreads = true
         )
