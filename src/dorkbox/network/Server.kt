@@ -106,7 +106,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
     init {
-         if (config.enableSessionManagement) {
+        if (this is SessionServer) {
              // only set this if we need to
              sessionManager = SessionManagerFull(config, aeronDriver, config.sessionTimeoutSeconds)
         }

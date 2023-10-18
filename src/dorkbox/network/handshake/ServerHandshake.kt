@@ -392,7 +392,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
-                enableSession = config.enableSessionManagement,
+                enableSession = newConnection is SessionConnection,
                 sessionTimeout = config.sessionTimeoutSeconds,
                 kryoRegDetails = serialization.getKryoRegistrationDetails()
             )
@@ -644,7 +644,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
-                enableSession = config.enableSessionManagement,
+                enableSession = newConnection is SessionConnection,
                 sessionTimeout = config.sessionTimeoutSeconds,
                 kryoRegDetails = serialization.getKryoRegistrationDetails()
             )

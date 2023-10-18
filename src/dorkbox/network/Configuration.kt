@@ -69,23 +69,12 @@ class ServerConfiguration : dorkbox.network.Configuration() {
             field = value
         }
 
-    /**
-     * If a connection is in a temporal state (in the middle of a reconnect), should the messages be saved in a `pending` queue, which will
-     * be sent once the connection (with the client/server) is re-established. After a connection has been disconnected for longer than
-     * `sessionTimeoutSeconds`, then the session will be closed.
-     *
-     * The server will send this configuration to the client
-     */
-    var enableSessionManagement = false
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
 
     /**
-     * How long before a session times out, after the connection holding the session is disconnected?
+     * If a connection is in a temporal state (in the middle of a reconnect) and sessions are enabled -- then how long should we consider
+     * a new connection from the same client as part of the same session.
      *
-     * The server will send this configuration to the client
+     * The session timeout cannot be shorter than 60 seconds, and the server will send this configuration to the client
      */
     var sessionTimeoutSeconds = TimeUnit.MINUTES.toSeconds(2)
         set(value) {
@@ -132,7 +121,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         config.listenIpAddress = listenIpAddress
         config.maxClientCount = maxClientCount
         config.maxConnectionsPerIpAddress = maxConnectionsPerIpAddress
-        config.enableSessionManagement = enableSessionManagement
         config.sessionTimeoutSeconds = sessionTimeoutSeconds
         config.settingsStore = settingsStore
 
@@ -149,7 +137,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         if (listenIpAddress != other.listenIpAddress) return false
         if (maxClientCount != other.maxClientCount) return false
         if (maxConnectionsPerIpAddress != other.maxConnectionsPerIpAddress) return false
-        if (enableSessionManagement != other.enableSessionManagement) return false
         if (sessionTimeoutSeconds != other.sessionTimeoutSeconds) return false
         if (settingsStore != other.settingsStore) return false
 
@@ -161,7 +148,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         result = 31 * result + listenIpAddress.hashCode()
         result = 31 * result + maxClientCount
         result = 31 * result + maxConnectionsPerIpAddress
-        result = 31 * result + enableSessionManagement.hashCode()
         result = 31 * result + sessionTimeoutSeconds.hashCode()
         result = 31 * result + settingsStore.hashCode()
         return result
