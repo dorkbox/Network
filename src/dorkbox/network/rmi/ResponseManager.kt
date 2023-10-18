@@ -38,7 +38,7 @@ import kotlin.concurrent.write
  */
 internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int = 2) {
     companion object {
-        val TIMEOUT_EXCEPTION = Exception().apply { stackTrace = arrayOf<StackTraceElement>() }
+        val TIMEOUT_EXCEPTION = TimeoutException().apply { stackTrace = arrayOf<StackTraceElement>() }
     }
 
     private val rmiWaitersInUse = atomic(0)
