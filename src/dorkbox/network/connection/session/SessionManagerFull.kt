@@ -42,23 +42,7 @@ internal open class SessionManagerFull<CONNECTION: SessionConnection>(
     private val sessions = LockFreeHashMap<ByteArrayWrapper, Session<CONNECTION>>()
 
 
-    // note: the expire time here is a 4x longer than the expire time in the client, this way we can adjust for network lag or quick reconnects
-    private val expiringSessions = ExpiringMap.builder()
-        .apply {
-            // connections are extremely difficult to diagnose when the connection timeout is short
-            val timeUnit = if (EndPoint.DEBUG_CONNECTIONS) { TimeUnit.HOURS } else { TimeUnit.NANOSECONDS }
-
-            // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
-            this.expiration(TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong() * 2) + aeronDriver.lingerNs(), timeUnit)
-        }
-        .expirationPolicy(ExpirationPolicy.CREATED)
-        .expirationListener<ByteArrayWrapper, Session<CONNECTION>> { publicKeyWrapped, _ ->
-            // this blocks until it fully runs (which is ok. this is fast)
-            logger.debug("Connection session for ${publicKeyWrapped.bytes.toHexString()} expired.")
-
-        }
-        .build<ByteArrayWrapper, Session<CONNECTION>>()
-
+    private val expiringSessions: ExpiringMap<ByteArrayWrapper, Session<CONNECTION>>
 
     init {
         // ignore 0
@@ -68,6 +52,19 @@ internal open class SessionManagerFull<CONNECTION: SessionConnection>(
         require(check == 0L || check > required + lingerNs) {
             "The session timeout (${Sys.getTimePretty(check)}) must be longer than the connection close timeout (${Sys.getTimePretty(required)}) + the aeron driver linger timeout (${Sys.getTimePretty(lingerNs)})!"
         }
+
+        // connections are extremely difficult to diagnose when the connection timeout is short
+        val timeUnit = if (EndPoint.DEBUG_CONNECTIONS) { TimeUnit.HOURS } else { TimeUnit.SECONDS }
+
+        expiringSessions = ExpiringMap.builder()
+            .expiration(sessionTimeout, timeUnit)
+            .expirationPolicy(ExpirationPolicy.CREATED)
+            .expirationListener<ByteArrayWrapper, Session<CONNECTION>> { publicKeyWrapped, _ ->
+                // this blocks until it fully runs (which is ok. this is fast)
+                logger.debug("Connection session expired for: ${publicKeyWrapped.bytes.toHexString()}")
+
+            }
+            .build()
     }
 
     override fun enabled(): Boolean {
