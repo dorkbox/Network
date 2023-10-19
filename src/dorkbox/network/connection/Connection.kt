@@ -56,7 +56,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     // only accessed on a single thread!
     private val connectionExpirationTimoutNanos = endPoint.config.connectionExpirationTimoutNanos
-    private var connectionTimeoutTimeNanos = 0L
+    // the timeout starts from when the connection is first created, so that we don't get "instant" timeouts when the server rejects a connection
+    private var connectionTimeoutTimeNanos = System.nanoTime()
 
     /**
      * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has its own logic on the remote endpoint,
@@ -144,6 +145,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
     // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
     internal val aes_gcm_iv = atomic(0)
+
+    // Used to track that this connection WILL be closed, but has not yet been closed.
+    @Volatile
+    internal var closeRequested = false
 
 
     init {
