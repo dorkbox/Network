@@ -90,13 +90,13 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
 
     fun queueMessage(connection: SessionConnection, message: Any, abortEarly: Boolean): Boolean {
         if (this.connection != connection) {
-            connection.logger.error("[{}] MESSAGE RECEIVED ON OLD CONNECTION, RESENDING", connection)
+            connection.logger.trace("[{}] message received on old connection, resending", connection)
 
             // we received a message on an OLD connection (which is no longer connected ---- BUT we have a NEW connection that is connected)
             // this can happen on RMI object that are old
             val success = this.connection.send(message, abortEarly)
             if (success) {
-                connection.logger.error("[{}] successfully resent message", connection)
+                connection.logger.trace("[{}] successfully resent message", connection)
                 return true
             }
         }
@@ -104,22 +104,21 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
         if (!abortEarly) {
             // this was a "normal" send (instead of the disconnect message).
             pendingMessagesQueue.put(message)
-            connection.logger.error("[{}] queueing message", connection)
+            connection.logger.trace("[{}] queueing message", connection)
         }
         else if (connection.endPoint.aeronDriver.internal.mustRestartDriverOnError) {
             // the only way we get errors, is if the connection is bad OR if we are sending so fast that the connection cannot keep up.
 
             // don't restart/reconnect -- there was an internal network error
             pendingMessagesQueue.put(message)
-            connection.logger.error("[{}] queueing message", connection)
+            connection.logger.trace("[{}] queueing message", connection)
         }
         else if (!connection.isClosedWithTimeout()) {
             // there was an issue - the connection should automatically reconnect
             pendingMessagesQueue.put(message)
-            connection.logger.error("[{}] queueing message", connection)
+            connection.logger.trace("[{}] queueing message", connection)
         }
 
-        connection.logger.error("[{}] NOT NOT NOT queueing message", connection)
         return false
     }
 }

@@ -785,9 +785,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (logger.isTraceEnabled) {
                 val elements = registeredPublicationsTrace.elements
                 val joined = elements.joinToString()
-                if (logger.isDebugEnabled) {
-                    logger.debug("Aeron Driver [$driverId]: has [$joined] publications (${registeredPublications.value} total)")
-                }
+                logger.trace("Aeron Driver [$driverId]: has publications: [$joined] (${registeredPublications.value} total)")
             } else if (logger.isDebugEnabled) {
                 logger.debug("Aeron Driver [$driverId]: has publications (${registeredPublications.value} total)")
             }
@@ -798,9 +796,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
             if (logger.isTraceEnabled) {
                 val elements = registeredSubscriptionsTrace.elements
                 val joined = elements.joinToString()
-                if (logger.isDebugEnabled) {
-                    logger.debug("Aeron Driver [$driverId]: has [$joined] subscriptions (${registeredSubscriptions.value} total)")
-                }
+                logger.trace("Aeron Driver [$driverId]: has subscriptions: [$joined] (${registeredSubscriptions.value} total)")
             } else if (logger.isDebugEnabled) {
                 logger.debug("Aeron Driver [$driverId]: has subscriptions (${registeredSubscriptions.value} total)")
             }
