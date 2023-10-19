@@ -70,13 +70,13 @@ data class ResponseWaiter(val id: Int) {
     /**
      * Waits a specific amount of time until another thread invokes "doNotify"
      */
-    fun doWait(timeout: Long): Boolean {
+    fun doWait(timeoutMs: Long): Boolean {
         return try {
             lock.withLock {
                 if (signalled) {
                     true
                 } else {
-                    condition.await(timeout, TimeUnit.MILLISECONDS)
+                    condition.await(timeoutMs, TimeUnit.MILLISECONDS)
                 }
             }
         } catch (ignored: Throwable) {
