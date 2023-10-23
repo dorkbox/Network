@@ -858,14 +858,14 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
 
                 if (mustRestartDriverOnError) {
-                    logger.error("Critical driver error detected, reconnecting client")
-                } else if (uncleanDisconnect) {
-                    logger.error("Unclean disconnect detected, reconnecting client")
+                    logger.error("[{}] Critical driver error detected, reconnecting client", connection)
+                } else if (dirtyDisconnect) {
+                    logger.error("[{}] Dirty disconnect detected, reconnecting client", connection)
                 }
 
                 // this can be closed when the connection is remotely closed in ADDITION to manually closing
                 if (logger.isDebugEnabled) {
-                    logger.debug("Client event dispatch closing...")
+                    logger.debug("[{}] Client event dispatch closing (in progress: $shutdownInProgress) ...", connection)
                 }
 
                 // we only need to run shutdown methods if there was a network outage or D/C
@@ -900,7 +900,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                         reconnect()
                     }
                 } else  {
-                    logger.debug("Closed the Network Event Poller...")
+                    logger.debug("[{}] Closed the Network Event Poller...", connection)
                 }
             }
         })
