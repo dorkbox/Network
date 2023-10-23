@@ -907,7 +907,12 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
                     listenerManager.notifyError(exception)
                     return false
                 }
-                else {
+                else if (connection.endPoint.sessionManager.enabled()) {
+                    // if we are a SESSION, then the message will be placed into a queue to be re-sent once the connection comes back
+                    // no extra actions required by us. Returning a "false" here makes sure that the session manager picks-up this message to
+                    // re-broadcast (eventually) on the updated connection
+                    return false
+                } else {
                     logger.info("[${publication.sessionId()}] Connection disconnected while sending data, closing connection.")
                     internal.mustRestartDriverOnError = true
 
