@@ -83,4 +83,8 @@ open class RmiObjectCache(val logger: Logger) {
     internal fun restoreImplObjects(implObjects: List<Pair<Int, Any>>) {
         this.implObjects.restoreAll(implObjects)
     }
+
+    internal open fun clear() {
+        this.implObjects.clear()
+    }
 }

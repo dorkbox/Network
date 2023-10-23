@@ -244,7 +244,7 @@ class RemoteObjectStorage(val logger: Logger) {
         }
     }
 
-    fun close() {
+    fun clear() {
         objectMap.clear()
     }
 }

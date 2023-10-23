@@ -374,8 +374,9 @@ class RmiSupportConnection<CONNECTION: Connection> : RmiObjectCache {
         return proxyObject as Iface
     }
 
-    internal fun clear() {
+    override fun clear() {
+        super.clear()
         proxyObjects.clear()
-        remoteObjectCreationCallbacks.close()
+        remoteObjectCreationCallbacks.clear()
     }
 }
