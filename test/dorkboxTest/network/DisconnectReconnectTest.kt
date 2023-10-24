@@ -383,8 +383,6 @@ class DisconnectReconnectTest : BaseTest() {
         client.connect(LOCALHOST, 2000)
 
         server.close()
-        client.waitForClose()
-        server.waitForClose()
 
         waitForThreads()
     }
