@@ -56,19 +56,23 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
         connection.logger.debug("[{}] restoring connection", connection)
 
         lock.withLock {
+            val oldProxyObjects = oldProxyObjects
+            val oldProxyCallbacks = oldProxyCallbacks
+            val oldImplObjects = oldImplObjects
+
             // this is called, even on a brand-new session, so we must have extra checks in place.
             val rmi = connection.rmi
             if (oldProxyObjects != null) {
-                rmi.recreateProxyObjects(oldProxyObjects!!)
-                oldProxyObjects = null
+                rmi.recreateProxyObjects(oldProxyObjects)
+                this.oldProxyObjects = null
             }
             if (oldProxyCallbacks != null) {
-                rmi.restoreCallbacks(oldProxyCallbacks!!)
-                oldProxyCallbacks = null
+                rmi.restoreCallbacks(oldProxyCallbacks)
+                this.oldProxyCallbacks = null
             }
             if (oldImplObjects != null) {
-                rmi.restoreImplObjects(oldImplObjects!!)
-                oldImplObjects = null
+                rmi.restoreImplObjects(oldImplObjects)
+                this.oldImplObjects = null
             }
         }
     }
@@ -76,9 +80,10 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
     fun save(connection: CONNECTION) {
         connection.logger.debug("[{}] saving connection", connection)
 
-        val allProxyObjects = connection.rmi.getAllProxyObjects()
-        val allProxyCallbacks = connection.rmi.getAllCallbacks()
-        val allImplObjects = connection.rmi.getAllImplObjects()
+        val rmi = connection.rmi
+        val allProxyObjects = rmi.getAllProxyObjects()
+        val allProxyCallbacks = rmi.getAllCallbacks()
+        val allImplObjects = rmi.getAllImplObjects()
 
         // we want to save all the connection RMI objects, so they can be recreated on connect
         lock.withLock {
