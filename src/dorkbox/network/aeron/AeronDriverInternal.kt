@@ -191,6 +191,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
 
                 if (restartNetwork) {
+                    notifyError(AeronDriverException("Critical network error internal to the Aeron Driver, restarting network!").cleanAllStackTrace())
+
                     // this must be set before anything else happens
                     mustRestartDriverOnError = true
 
