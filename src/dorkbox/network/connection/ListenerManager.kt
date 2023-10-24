@@ -131,16 +131,17 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
          *
          * We only want the error message, because we do something based on it (and the full stack trace is meaningless)
          */
-        fun Throwable.cleanAllStackTrace() {
+        fun Throwable.cleanAllStackTrace(): Throwable{
             val stackTrace = this.stackTrace
             val size = stackTrace.size
 
             if (size == 0) {
-                return
+                return this
             }
 
             // throw everything out
             this.stackTrace = stackTrace.copyOfRange(0, 1)
+            return this
         }
 
         internal inline fun <reified T> add(thing: T, array: Array<T>): Array<T> {
