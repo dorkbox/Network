@@ -176,7 +176,11 @@ abstract class BaseTest {
     init {
         setLogLevel(Level.TRACE)
 
-        logger.error("---- " + this.javaClass.simpleName)
+        if (DEBUG) {
+            logger.error("---- " + this.javaClass.simpleName + " :: DEBUG UNIT TESTS ENABLED")
+        } else {
+            logger.error("---- " + this.javaClass.simpleName)
+        }
 
         AeronDriver.checkForMemoryLeaks()
     }
@@ -295,7 +299,7 @@ abstract class BaseTest {
 
         // run actions before we actually shutdown, but after we wait
         if (!successClients || !successServers) {
-            Assert.fail("Shutdown latch not triggered!")
+            Assert.fail("Shutdown latch not triggered ($successClients|$successServers)!")
         }
 
         // we must always make sure that aeron is shut-down before starting again.
