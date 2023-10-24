@@ -65,9 +65,6 @@ internal class EventPoller {
     private val configureEventsEndpoints = mutableSetOf<ByteArrayWrapper>()
 
     @Volatile
-    private var delayClose = false
-
-    @Volatile
     private var shutdownLatch = CountDownLatch(0)
 
 
@@ -92,7 +89,6 @@ internal class EventPoller {
                     logger.trace("Configuring the Network Event Poller...")
                 }
 
-                delayClose = false
                 running = true
                 configured = true
                 shutdownLatch = CountDownLatch(1)
@@ -119,11 +115,6 @@ internal class EventPoller {
                                     // remove our event, it is no longer valid
                                     pollEvents.remove(this)
                                     it.onClose() // shutting down
-
-                                    // check to see if we requested a shutdown
-                                    if (delayClose) {
-                                        doClose(eventLogger)
-                                    }
                                 } else if (poll > 0) {
                                     pollCount += poll
                                 }
@@ -133,11 +124,6 @@ internal class EventPoller {
                                 // remove our event, it is no longer valid
                                 pollEvents.remove(this)
                                 it.onClose() // shutting down
-
-                                // check to see if we requested a shutdown
-                                if (delayClose) {
-                                    doClose(eventLogger)
-                                }
                             }
                         }
 
@@ -225,11 +211,6 @@ internal class EventPoller {
                     0 -> {
                         logger.debug("Closing the Network Event Poller...")
                         doClose(logger)
-                    }
-                    1 -> {
-                        // this means we are trying to close on our poll event, and obviously it won't work.
-                        logger.debug("Delayed closing the Network Event Poller...")
-                        delayClose = true
                     }
                     else -> {
                         if (logger.isDebugEnabled) {
