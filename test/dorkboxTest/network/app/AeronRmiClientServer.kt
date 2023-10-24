@@ -387,9 +387,15 @@ class AeronRmiClientServer {
             throwable.printStackTrace()
         }
 
+
+        var closeCalled = false
         SigInt.register {
-            server.logger.info("Shutting down via sig-int command")
-            server.close()
+            // only close once
+            if (!closeCalled) {
+                closeCalled = true
+                server.logger.info("Shutting down via sig-int command")
+                server.close()
+            }
         }
 
 
