@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.junit.Assert
 import org.junit.Test
+import java.util.concurrent.*
 
 
 class MessageToContinue
@@ -46,7 +47,6 @@ class SessionReconnectTest: BaseTest() {
 
             // for Client -> Server RMI
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
-            configuration.enableSessionManagement = true
 
             val server = SessionServer<SessionConnection>(configuration)
 
@@ -84,16 +84,20 @@ class SessionReconnectTest: BaseTest() {
                 val get = rmi.get<TestCow>(rmiId)
                 RemoteObject.cast(get).responseTimeout = 50_000
 
+                get.moo("NOT CRASHED!")
+
+                val latch = CountDownLatch(1)
+
                 GlobalScope.launch {
-                    delay(4000)
-
+                    latch.await()
                     get.moo("DELAYED AND NOT CRASHED!")
-
                     stopEndPoints()
                 }
 
                 client.close(false)
-                client.connectIpc()
+                client.waitForClose()
+                client.connectIpc() // reconnect
+                latch.countDown()
             }
 
             client
@@ -116,7 +120,6 @@ class SessionReconnectTest: BaseTest() {
 
             // for Client -> Server RMI
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
-            configuration.enableSessionManagement = true
 
             val server = SessionServer<SessionConnection>(configuration)
 
@@ -205,7 +208,6 @@ class SessionReconnectTest: BaseTest() {
 
             // for Client -> Server RMI
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
-            configuration.enableSessionManagement = true
 
             val server = SessionServer<SessionConnection>(configuration)
 
