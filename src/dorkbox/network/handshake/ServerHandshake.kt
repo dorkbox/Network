@@ -158,9 +158,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
                                         logInfo,
                                         HandshakeMessage.doneToClient(message.connectKey))
 
-                if (newSession) {
-                    listenerManager.notifyConnect(newConnection)
-                } else {
+                listenerManager.notifyConnect(newConnection)
+
+                if (!newSession) {
                     (newConnection as SessionConnection).sendPendingMessages()
                 }
             } catch (e: Exception) {
