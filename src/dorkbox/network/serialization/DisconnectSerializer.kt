@@ -32,7 +32,7 @@ internal class DisconnectSerializer: Serializer<DisconnectMessage>() {
         return if (closeEverything) {
             DisconnectMessage.CLOSE_EVERYTHING
         } else {
-            DisconnectMessage.CLOSE_FOR_SESSION
+            DisconnectMessage.CLOSE_SIMPLE
         }
     }
 }
