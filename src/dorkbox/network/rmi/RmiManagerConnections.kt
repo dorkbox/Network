@@ -53,13 +53,20 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
             listenerManager.notifyError(connection, newException)
             ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, RemoteObjectStorage.INVALID_RMI))
         } else {
-            val rmiId =  connection.rmi.saveImplObject(implObject)
-            if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-                val newException = RMIException("Unable to create RMI object, invalid RMI ID")
-                listenerManager.notifyError(connection, newException)
-            }
+            try {
+                val rmiId =  connection.rmi.saveImplObject(implObject)
+                if (rmiId == RemoteObjectStorage.INVALID_RMI) {
+                    val newException = RMIException("Unable to create RMI object, invalid RMI ID")
+                    listenerManager.notifyError(connection, newException)
+                }
 
-            ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, rmiId))
+                ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, rmiId))
+            }
+            catch (e: Exception) {
+                val newException = RMIException("Error saving the RMI implementation object!", e)
+                listenerManager.notifyError(connection, newException)
+                ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, RemoteObjectStorage.INVALID_RMI))
+            }
         }
 
         // we send the message ALWAYS, because the client needs to know it worked or not
