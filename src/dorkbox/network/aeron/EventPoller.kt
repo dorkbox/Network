@@ -20,7 +20,6 @@ import dorkbox.bytes.ByteArrayWrapper
 import dorkbox.collections.ConcurrentIterator
 import dorkbox.network.Configuration
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.EventDispatcher
 import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
 import org.agrona.concurrent.IdleStrategy
@@ -187,7 +186,7 @@ internal class EventPoller {
     fun close(logger: Logger, endPoint: EndPoint<*>) {
         // make sure that we close on the CLOSE dispatcher if we run on the poll dispatcher!
         if (isDispatch()) {
-            EventDispatcher.CLOSE.launch {
+            endPoint.eventDispatch.CLOSE.launch {
                 close(logger, endPoint)
             }
             return

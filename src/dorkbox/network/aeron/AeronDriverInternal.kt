@@ -20,7 +20,6 @@ import dorkbox.collections.ConcurrentIterator
 import dorkbox.collections.LockFreeHashSet
 import dorkbox.network.Configuration
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
@@ -196,14 +195,12 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
                     // this must be set before anything else happens
                     mustRestartDriverOnError = true
 
-                    // we must close all the connections on a DIFFERENT thread!
-                    EventDispatcher.CLOSE.launch {
-                        endPointUsages.forEach {
-                            it.close(closeEverything = false,
-                                     sendDisconnectMessage = false,
-                                     notifyDisconnect = false,
-                                     releaseWaitingThreads = false)
-                        }
+                    // close will make sure to run on a different thread
+                    endPointUsages.forEach {
+                        it.close(closeEverything = false,
+                                 sendDisconnectMessage = false,
+                                 notifyDisconnect = false,
+                                 releaseWaitingThreads = false)
                     }
                 }
             }

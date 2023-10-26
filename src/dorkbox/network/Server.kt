@@ -283,12 +283,14 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 if (mustRestartDriverOnError) {
                     logger.error("Critical driver error detected, restarting server.")
 
-                    EventDispatcher.launchSequentially(EventDispatcher.CONNECT) {
+                    eventDispatch.CLOSE.launch {
                         waitForEndpointShutdown()
 
                         // also wait for everyone else to shutdown!!
                         aeronDriver.internal.endPointUsages.forEach {
-                            it.waitForEndpointShutdown()
+                            if (it !== this@Server) {
+                                it.waitForEndpointShutdown()
+                            }
                         }
 
 

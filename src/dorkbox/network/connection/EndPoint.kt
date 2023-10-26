@@ -100,6 +100,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
     val logger: Logger = LoggerFactory.getLogger(loggerName)
 
+    internal val eventDispatch = EventDispatcher(loggerName)
+
     private val handler = CoroutineExceptionHandler { _, exception ->
         logger.error("Uncaught Coroutine Error: ${exception.stackTraceToString()}")
     }
@@ -110,7 +112,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     private val messageChannel = Channel<Paired<CONNECTION>>()
     private val pairedPool: Pool<Paired<CONNECTION>>
 
-    internal val listenerManager = ListenerManager<CONNECTION>(logger)
+    internal val listenerManager = ListenerManager<CONNECTION>(logger, eventDispatch)
 
     val connections = ConcurrentIterator<CONNECTION>()
 

@@ -337,13 +337,20 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         // the compareAndSet is used to make sure that if we call close() MANUALLY, (and later) when the auto-cleanup/disconnect is called -- it doesn't
         // try to do it again.
 
-        // make sure that EVERYTHING before "close()" runs before we do
-        EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
-            closeImmediately(
-                sendDisconnectMessage = sendDisconnectMessage,
-                notifyDisconnect = notifyDisconnect,
-                closeEverything = closeEverything)
+        // make sure that EVERYTHING before "close()" runs before we do.
+        // If there are multiple clients/servers sharing the same NetworkPoller -- then they will wait on each other!
+        val close = endPoint.eventDispatch.CLOSE
+        if (!close.isDispatch()) {
+            close.launch {
+                close(sendDisconnectMessage, notifyDisconnect, closeEverything)
+            }
+            return
         }
+
+        closeImmediately(
+            sendDisconnectMessage = sendDisconnectMessage,
+            notifyDisconnect = notifyDisconnect,
+            closeEverything = closeEverything)
     }
 
 

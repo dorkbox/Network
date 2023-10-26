@@ -28,7 +28,7 @@ import kotlin.concurrent.write
 /**
  * Manages all of the different connect/disconnect/etc listeners
  */
-internal class ListenerManager<CONNECTION: Connection>(private val logger: Logger) {
+internal class ListenerManager<CONNECTION: Connection>(private val logger: Logger, val eventDispatch: EventDispatcher) {
     companion object {
         /**
          * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
@@ -402,7 +402,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
     fun notifyConnect(connection: CONNECTION) {
         val list = onConnectList
         if (list.isNotEmpty()) {
-            EventDispatcher.CONNECT.launch {
+            connection.endPoint.eventDispatch.CONNECT.launch {
                 list.forEach {
                     try {
                         it(connection)
@@ -436,7 +436,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
     fun directNotifyDisconnect(connection: CONNECTION) {
         val list = onDisconnectList
         if (list.isNotEmpty()) {
-            EventDispatcher.DISCONNECT.launch {
+            connection.endPoint.eventDispatch.CLOSE.launch {
                 list.forEach {
                     try {
                         it(connection)
@@ -461,7 +461,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
     fun notifyError(connection: CONNECTION, exception: Throwable) {
         val list = onErrorList
         if (list.isNotEmpty()) {
-            EventDispatcher.ERROR.launch {
+            connection.endPoint.eventDispatch.ERROR.launch {
                 list.forEach {
                     try {
                         it(connection, exception)
@@ -485,7 +485,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
     fun notifyError(exception: Throwable) {
         val list = onErrorGlobalList
         if (list.isNotEmpty()) {
-            EventDispatcher.ERROR.launch {
+            eventDispatch.ERROR.launch {
                 list.forEach {
                     try {
                         it(exception)
