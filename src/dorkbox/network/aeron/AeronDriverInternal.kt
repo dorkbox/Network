@@ -824,7 +824,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         while (count > 0 && currentUsage > 0) {
             if (logger.isDebugEnabled) {
-                logger.debug("Aeron Driver [$driverId]: in use, double checking status")
+                logger.debug("Aeron Driver [$driverId]: usage is: $currentUsage, double checking status")
             }
             delayLingerTimeout()
             currentUsage = driverBacklog()?.snapshot()?.size ?: 0
@@ -839,7 +839,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
         count = 3
         while (count > 0 && currentUsage > 0) {
             if (logger.isDebugEnabled) {
-                logger.debug("Aeron Driver [$driverId]: in use, double checking status (long)")
+                logger.debug("Aeron Driver [$driverId]: usage is: $currentUsage, double checking status (long)")
             }
             delayDriverTimeout()
             currentUsage = driverBacklog()?.snapshot()?.size ?: 0
