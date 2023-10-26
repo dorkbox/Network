@@ -46,7 +46,7 @@ abstract class BaseTest {
     companion object {
         const val LOCALHOST = "localhost"
 
-        const val DEBUG = true
+        const val DEBUG = false
 
         // wait minimum of 3 minutes before we automatically fail the unit test.
         var AUTO_FAIL_TIMEOUT: Long = if (DEBUG) 9999999999L else 180L
