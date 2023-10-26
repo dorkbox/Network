@@ -18,7 +18,7 @@ package dorkbox.network.connection
 
 class DisconnectMessage(val closeEverything: Boolean) {
     companion object {
-        val CLOSE_FOR_SESSION = DisconnectMessage(false)
+        val CLOSE_SIMPLE = DisconnectMessage(false)
         val CLOSE_EVERYTHING = DisconnectMessage(true)
     }
 }
