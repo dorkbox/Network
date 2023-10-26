@@ -69,7 +69,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
             field = value
         }
 
-
     /**
      * If a connection is in a temporal state (in the middle of a reconnect) and sessions are enabled -- then how long should we consider
      * a new connection from the same client as part of the same session.
@@ -82,7 +81,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
             field = value
         }
 
-
     /**
      * Allows the user to change how endpoint settings and public key information are saved.
      */
@@ -91,7 +89,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
             require(!contextDefined) { errorMessage }
             field = value
         }
-
 
     /**
      * Validates the current configuration
@@ -439,7 +436,6 @@ abstract class Configuration protected constructor() {
             require(!contextDefined) { errorMessage }
             field = value
         }
-
 
     /**
      * How long a connection must be disconnected before we cleanup the memory associated with it

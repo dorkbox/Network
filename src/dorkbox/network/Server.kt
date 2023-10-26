@@ -20,6 +20,7 @@ import dorkbox.network.aeron.*
 import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.IpListenType
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
+import dorkbox.network.connection.session.SessionConnection
 import dorkbox.network.connection.session.SessionManagerFull
 import dorkbox.network.connection.session.SessionServer
 import dorkbox.network.connectionType.ConnectionRule
@@ -109,7 +110,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     init {
         if (this is SessionServer) {
              // only set this if we need to
-             sessionManager = SessionManagerFull(config, aeronDriver, config.sessionTimeoutSeconds)
+            @Suppress("UNCHECKED_CAST")
+            sessionManager = SessionManagerFull(config, listenerManager as ListenerManager<SessionConnection>, aeronDriver, config.sessionTimeoutSeconds)
         }
     }
 
@@ -135,7 +137,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         if (config.enableIPv4) { logger.warn("IPv4 is enabled, but only IPC will be used.") }
         if (config.enableIPv6) { logger.warn("IPv6 is enabled, but only IPC will be used.") }
 
-        bind(0, 0, true)
+        internalBind(port1 = 0, port2 = 0, onlyBindIpc = true, runShutdownCheck = true)
     }
 
     /**
@@ -155,18 +157,18 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             require(port2 < 65535) { "port2 must be < 65535" }
         }
 
-        bind(port1, port2, false)
+        internalBind(port1 = port1, port2 = port2, onlyBindIpc = false, runShutdownCheck = true)
     }
 
     @Suppress("DuplicatedCode")
-    private fun bind(port1: Int, port2: Int, onlyBindIpc: Boolean) {
+    private fun internalBind(port1: Int, port2: Int, onlyBindIpc: Boolean, runShutdownCheck: Boolean) {
         // the lifecycle of a server is the ENDPOINT (measured via the network event poller)
         if (endpointIsRunning.value) {
             listenerManager.notifyError(ServerException("Unable to start, the server is already running!"))
             return
         }
 
-        if (!waitForEndpointShutdown()) {
+        if (runShutdownCheck && !waitForEndpointShutdown()) {
             listenerManager.notifyError(ServerException("Unable to start the server!"))
             return
         }
@@ -189,7 +191,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
 
         val server = this@Server
-        handshake = ServerHandshake(config, listenerManager, aeronDriver)
+        handshake = ServerHandshake(config, listenerManager, aeronDriver, eventDispatch)
 
         val ipcPoller: AeronPoller = if (config.enableIpc || onlyBindIpc) {
             ServerHandshakePollers.ipc(server, handshake)
@@ -270,13 +272,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 // we only need to run shutdown methods if there was a network outage or D/C
                 if (!shutdownInProgress.value) {
                     // this is because we restart automatically on driver errors
-                    val standardClose = !mustRestartDriverOnError
-                    this@Server.close(
-                        closeEverything = false,
-                        sendDisconnectMessage = standardClose,
-                        notifyDisconnect = standardClose,
-                        releaseWaitingThreads = standardClose
-                    )
+                    this@Server.close(closeEverything = false, sendDisconnectMessage = true, releaseWaitingThreads = !mustRestartDriverOnError)
                 }
 
 
@@ -301,18 +297,17 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                         val p2 = this@Server.port2
 
                         if (p1 == 0 && p2 == 0) {
-                            bindIpc()
+                            internalBind(port1 = 0, port2 = 0, onlyBindIpc = true, runShutdownCheck = false)
                         } else {
-                            bind(p1, p2)
+                            internalBind(port1 = p1, port2 = p2, onlyBindIpc = false, runShutdownCheck = false)
                         }
                     }
                 }
 
                 // we can now call bind again
                 endpointIsRunning.lazySet(false)
+                logger.debug("Closed the Network Event Poller task.")
                 pollerClosedLatch.countDown()
-
-                logger.debug("Closed the Network Event Poller...")
             }
         })
     }
@@ -397,12 +392,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * @param closeEverything if true, all parts of the server will be closed (listeners, driver, event polling, etc)
      */
     fun close(closeEverything: Boolean = true) {
-        close(
-            closeEverything = closeEverything,
-            sendDisconnectMessage = true,
-            notifyDisconnect = true,
-            releaseWaitingThreads = true
-        )
+        close(closeEverything = closeEverything, sendDisconnectMessage = true, releaseWaitingThreads = true)
     }
 
     override fun toString(): String {

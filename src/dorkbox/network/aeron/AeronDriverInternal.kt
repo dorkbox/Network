@@ -197,10 +197,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
                     // close will make sure to run on a different thread
                     endPointUsages.forEach {
-                        it.close(closeEverything = false,
-                                 sendDisconnectMessage = false,
-                                 notifyDisconnect = false,
-                                 releaseWaitingThreads = false)
+                        // we cannot send the DC message because the network layer has issues!
+                        it.close(closeEverything = false, sendDisconnectMessage = false, releaseWaitingThreads = false)
                     }
                 }
             }

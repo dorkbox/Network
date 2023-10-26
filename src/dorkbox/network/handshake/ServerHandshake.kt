@@ -45,7 +45,8 @@ import java.util.concurrent.*
 internal class ServerHandshake<CONNECTION : Connection>(
     private val config: ServerConfiguration,
     private val listenerManager: ListenerManager<CONNECTION>,
-    val aeronDriver: AeronDriver
+    private val aeronDriver: AeronDriver,
+    private val eventDispatch: EventDispatcher
 ) {
 
     // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
@@ -701,7 +702,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         val connections = pendingConnections
         val latch = CountDownLatch(connections.size)
 
-        EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
+        eventDispatch.CLOSE.launch {
             connections.forEach { (_, v) ->
                 v.close()
                 latch.countDown()

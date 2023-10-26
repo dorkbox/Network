@@ -267,12 +267,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         }
 
         hook = Thread {
-            close(
-                closeEverything = true,
-                sendDisconnectMessage = true,
-                notifyDisconnect = true,
-                releaseWaitingThreads = true
-            )
+            close(closeEverything = true, sendDisconnectMessage = true, releaseWaitingThreads = true)
         }
 
         Runtime.getRuntime().addShutdownHook(hook)
@@ -906,11 +901,17 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal fun close(
         closeEverything: Boolean,
         sendDisconnectMessage: Boolean,
-        notifyDisconnect: Boolean,
         releaseWaitingThreads: Boolean)
     {
+        if (!eventDispatch.CLOSE.isDispatch()) {
+            eventDispatch.CLOSE.launch {
+                close(closeEverything, sendDisconnectMessage, releaseWaitingThreads)
+            }
+            return
+        }
+
         if (logger.isDebugEnabled) {
-            logger.debug("Requesting close: closeEverything=$closeEverything, sendDisconnectMessage=$sendDisconnectMessage, notifyDisconnect=$notifyDisconnect, releaseWaitingThreads=$releaseWaitingThreads")
+            logger.debug("Requesting close: closeEverything=$closeEverything, sendDisconnectMessage=$sendDisconnectMessage, releaseWaitingThreads=$releaseWaitingThreads")
         }
 
         // 1) endpoints can call close()
@@ -948,7 +949,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             }
         }
 
-        EventDispatcher.CLOSE.launch {
+
+
             if (logger.isDebugEnabled) {
                 logger.debug("Shutting down endpoint...")
             }
@@ -972,6 +974,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // this waits for the ENDPOINT to finish running its tasks in the poller.
             pollerClosedLatch.await()
 
+
+
             // this will ONLY close the event dispatcher if ALL endpoints have closed it.
             // when an endpoint closes, the poll-loop shuts down, and removes itself from the list of poll actions that need to be performed.
             networkEventPoller.close(logger, this)
@@ -991,7 +995,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
             // don't do these things if we are "closed" from a client connection disconnect
             // if there are any events going on, we want to schedule them to run AFTER all other events for this endpoint are done
-            EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
                 if (closeEverything) {
                     // when the client connection is closed, we don't close the driver/etc.
 
@@ -1002,6 +1005,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                     storage.close()
                 }
 
+                // we might be restarting the aeron driver, so make sure it's closed.
                 aeronDriver.close()
 
                 shutdown = true
@@ -1016,8 +1020,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 }
 
                 logger.info("Done shutting down the endpoint.")
-            }
-        }
     }
 
     /**

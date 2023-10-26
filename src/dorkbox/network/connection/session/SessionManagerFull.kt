@@ -23,6 +23,7 @@ import dorkbox.network.Configuration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager
 import dorkbox.util.Sys
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
@@ -31,8 +32,10 @@ import java.util.concurrent.*
 
 internal open class SessionManagerFull<CONNECTION: SessionConnection>(
     config: Configuration,
+    listenerManager: ListenerManager<CONNECTION>,
     val aeronDriver: AeronDriver,
-    sessionTimeout: Long): SessionManager<CONNECTION> {
+    sessionTimeout: Long
+): SessionManager<CONNECTION> {
 
     companion object {
         private val logger = LoggerFactory.getLogger(SessionManagerFull::class.java.simpleName)
@@ -59,10 +62,12 @@ internal open class SessionManagerFull<CONNECTION: SessionConnection>(
         expiringSessions = ExpiringMap.builder()
             .expiration(sessionTimeout, timeUnit)
             .expirationPolicy(ExpirationPolicy.CREATED)
-            .expirationListener<ByteArrayWrapper, Session<CONNECTION>> { publicKeyWrapped, _ ->
+            .expirationListener<ByteArrayWrapper, Session<CONNECTION>> { publicKeyWrapped, sessionConnection ->
                 // this blocks until it fully runs (which is ok. this is fast)
                 logger.debug("Connection session expired for: ${publicKeyWrapped.bytes.toHexString()}")
 
+                // this SESSION has expired, so we should call the onDisconnect for the underlying connection, in order to clean it up.
+                listenerManager.notifyDisconnect(sessionConnection.connection)
             }
             .build()
     }
@@ -87,13 +92,11 @@ internal open class SessionManagerFull<CONNECTION: SessionConnection>(
             if (expiring != null) {
                 // we must always set this session value!!
                 connection.session = expiring
-                expiring
             } else {
                 val existing = sessions[publicKeyWrapped]
                 if (existing != null) {
                     // we must always set this session value!!
                     connection.session = existing
-                    existing
                 } else {
                     @Suppress("UNCHECKED_CAST")
                     val newSession = (connection.endPoint as SessionEndpoint<CONNECTION>).newSession(connection as CONNECTION)
@@ -102,7 +105,6 @@ internal open class SessionManagerFull<CONNECTION: SessionConnection>(
                     connection.session = newSession
 
                     sessions[publicKeyWrapped] = newSession
-                    newSession
                 }
             }
         }
@@ -114,14 +116,12 @@ internal open class SessionManagerFull<CONNECTION: SessionConnection>(
      *
      * @return true if this is a new session, false if it is an existing session
      */
+    @Suppress("UNCHECKED_CAST")
     override fun onInit(connection: Connection): Boolean {
         // we know this will always be the case, because if this specific method can be called, then it will be a sessionConnection
         connection as SessionConnection
 
-        @Suppress("UNCHECKED_CAST")
         val session: Session<CONNECTION> = connection.session as Session<CONNECTION>
-
-        @Suppress("UNCHECKED_CAST")
         session.restore(connection as CONNECTION)
 
         // the FIRST time this method is called, it will be true. EVERY SUBSEQUENT TIME, it will be false
@@ -133,16 +133,21 @@ internal open class SessionManagerFull<CONNECTION: SessionConnection>(
      * Always called when a connection is disconnected from the network
      */
     override fun onDisconnect(connection: CONNECTION) {
-        val publicKeyWrapped = ByteArrayWrapper.wrap(connection.uuid)
+        try {
+            val publicKeyWrapped = ByteArrayWrapper.wrap(connection.uuid)
 
-        val session = synchronized(sessions) {
-            val session = sessions.remove(publicKeyWrapped)
-            // we want to expire this session after XYZ time
-            expiringSessions[publicKeyWrapped] = session
-            session
+            val session = synchronized(sessions) {
+                val sess = sessions.remove(publicKeyWrapped)
+                // we want to expire this session after XYZ time
+                expiringSessions[publicKeyWrapped] = sess
+                sess
+            }
+
+
+            session!!.save(connection)
         }
-
-
-        session!!.save(connection)
+        catch (e: Exception) {
+            logger.error("Unable to run save data for the session!", e)
+        }
     }
 }

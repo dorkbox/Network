@@ -255,7 +255,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     fun onDisconnect(function: Connection.() -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
-            origManager ?: ListenerManager(logger)
+            origManager ?: ListenerManager(logger, endPoint.eventDispatch)
         }
 
         listenerManager.value!!.onDisconnect(function)
@@ -267,7 +267,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     fun <MESSAGE> onMessage(function: Connection.(MESSAGE) -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
-            origManager ?: ListenerManager(logger)
+            origManager ?: ListenerManager(logger, endPoint.eventDispatch)
         }
 
         listenerManager.value!!.onMessage(function)
@@ -323,17 +323,17 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     fun close() {
         close(sendDisconnectMessage = true,
-              notifyDisconnect = true,
               closeEverything = true)
     }
 
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    internal fun close(sendDisconnectMessage: Boolean, notifyDisconnect: Boolean, closeEverything: Boolean) {
+    internal fun close(sendDisconnectMessage: Boolean, closeEverything: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
+
         // the compareAndSet is used to make sure that if we call close() MANUALLY, (and later) when the auto-cleanup/disconnect is called -- it doesn't
         // try to do it again.
 
@@ -342,28 +342,26 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         val close = endPoint.eventDispatch.CLOSE
         if (!close.isDispatch()) {
             close.launch {
-                close(sendDisconnectMessage, notifyDisconnect, closeEverything)
+                close(sendDisconnectMessage = sendDisconnectMessage, closeEverything = closeEverything)
             }
             return
         }
 
-        closeImmediately(
-            sendDisconnectMessage = sendDisconnectMessage,
-            notifyDisconnect = notifyDisconnect,
-            closeEverything = closeEverything)
+        closeImmediately(sendDisconnectMessage = sendDisconnectMessage, closeEverything = closeEverything)
     }
 
 
     // connection.close() -> this
     // endpoint.close() -> connection.close() -> this
-    internal fun closeImmediately(sendDisconnectMessage: Boolean, notifyDisconnect: Boolean, closeEverything: Boolean) {
+    internal fun closeImmediately(sendDisconnectMessage: Boolean, closeEverything: Boolean) {
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (!isClosed.compareAndSet(expect = false, update = true)) {
+            logger.debug("[$toString0] connection ignoring close request.")
             return
         }
 
         if (logger.isDebugEnabled) {
-            logger.debug("[$toString0] connection closing. sendDisconnectMessage=$sendDisconnectMessage, notifyDisconnect=$notifyDisconnect, closeEverything=$closeEverything")
+            logger.debug("[$toString0] connection closing. sendDisconnectMessage=$sendDisconnectMessage, closeEverything=$closeEverything")
         }
 
         // make sure to save off the RMI objects for session management
@@ -397,7 +395,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         // on close, we want to make sure this file is DELETED!
-
         try {
             // we might not be able to close this connection.
             endPoint.aeronDriver.close(publication, toString0)
@@ -407,11 +404,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
-        // NOTE: notifyDisconnect() is called inside closeAction()!!
-        if (notifyDisconnect) {
-            // if there are errors within the driver, we do not want to notify disconnect, as we will automatically reconnect.
-            endPoint.listenerManager.notifyDisconnect(this)
-        }
+        // if there are errors within the driver, we do not want to notify disconnect, as we will automatically reconnect.
+        endPoint.listenerManager.notifyDisconnect(this)
 
         endPoint.removeConnection(this)
 

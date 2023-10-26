@@ -918,9 +918,7 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
 
                     // publication was actually closed or the server was closed, so no bother throwing an error
                     connection.closeImmediately(
-                        sendDisconnectMessage = false,
-                        notifyDisconnect = true,
-                        closeEverything = false
+                        sendDisconnectMessage = false, closeEverything = false
                     )
 
                     return false
