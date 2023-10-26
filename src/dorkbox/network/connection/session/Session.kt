@@ -40,20 +40,32 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
     /**
      * the FIRST time this method is called, it will be true. EVERY SUBSEQUENT TIME, it will be false
      */
+    @Volatile
     internal var isNewSession = true
         private set
         get() {
             val orig = field
             if (orig) {
                 field = false
+                newSession  = false
             }
             return orig
         }
 
 
+    @Volatile
+    private var newSession = true
+
+
     fun restore(connection: CONNECTION) {
         this.connection = connection
-        connection.logger.debug("[{}] restoring connection", connection)
+
+        if (newSession) {
+            connection.logger.debug("[{}] Session connection established", connection)
+            return
+        }
+
+        connection.logger.debug("[{}] Restoring session connection", connection)
 
         lock.withLock {
             val oldProxyObjects = oldProxyObjects
@@ -78,7 +90,7 @@ open class Session<CONNECTION: SessionConnection>(@Volatile var connection: CONN
     }
 
     fun save(connection: CONNECTION) {
-        connection.logger.debug("[{}] saving connection", connection)
+        connection.logger.debug("[{}] Saving session connection", connection)
 
         val rmi = connection.rmi
         val allProxyObjects = rmi.getAllProxyObjects()
