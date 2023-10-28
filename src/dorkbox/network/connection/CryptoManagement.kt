@@ -182,7 +182,6 @@ internal class CryptoManagement(val logger: Logger,
         val streamIdPub = cryptInput.readInt()
         val streamIdSub = cryptInput.readInt()
         val regDetailsSize = cryptInput.readInt()
-        val enableSession = cryptInput.readBoolean()
         val sessionTimeout = cryptInput.readLong()
         val regDetails = cryptInput.readBytes(regDetailsSize)
 
@@ -193,7 +192,6 @@ internal class CryptoManagement(val logger: Logger,
             streamIdPub = streamIdPub,
             streamIdSub = streamIdSub,
             publicKey = serverPublicKeyBytes,
-            enableSession = enableSession,
             sessionTimeout = sessionTimeout,
             kryoRegistrationDetails = regDetails,
             secretKey = secretKey)
@@ -205,7 +203,6 @@ internal class CryptoManagement(val logger: Logger,
         sessionIdSub: Int,
         streamIdPub: Int,
         streamIdSub: Int,
-        enableSession: Boolean,
         sessionTimeout: Long,
         kryoRegDetails: ByteArray
     ): ByteArray {
@@ -218,7 +215,6 @@ internal class CryptoManagement(val logger: Logger,
             cryptOutput.writeInt(streamIdPub)
             cryptOutput.writeInt(streamIdSub)
             cryptOutput.writeInt(kryoRegDetails.size)
-            cryptOutput.writeBoolean(enableSession)
             cryptOutput.writeLong(sessionTimeout)
             cryptOutput.writeBytes(kryoRegDetails)
 
@@ -269,7 +265,6 @@ internal class CryptoManagement(val logger: Logger,
         sessionIdSub: Int,
         streamIdPub: Int,
         streamIdSub: Int,
-        enableSession: Boolean,
         sessionTimeout: Long,
         kryoRegDetails: ByteArray
     ): ByteArray {
@@ -287,7 +282,6 @@ internal class CryptoManagement(val logger: Logger,
             cryptOutput.writeInt(streamIdPub)
             cryptOutput.writeInt(streamIdSub)
             cryptOutput.writeInt(kryoRegDetails.size)
-            cryptOutput.writeBoolean(enableSession)
             cryptOutput.writeLong(sessionTimeout)
             cryptOutput.writeBytes(kryoRegDetails)
 

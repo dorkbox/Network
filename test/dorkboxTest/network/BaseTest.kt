@@ -98,6 +98,7 @@ abstract class BaseTest {
 
             val configuration = ClientConfiguration()
             configuration.appId = "network_test"
+            configuration.tag = "**Client**"
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
 
             configuration.enableIpc = false

@@ -22,6 +22,7 @@ import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.os.OS
 import net.jodah.typetools.TypeResolver
 import org.slf4j.Logger
+import java.net.InetAddress
 import java.util.concurrent.locks.*
 import kotlin.concurrent.write
 
@@ -144,7 +145,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
             return this
         }
 
-        internal inline fun <reified T> add(thing: T, array: Array<T>): Array<T> {
+        internal inline fun <reified T: Any> add(thing: T, array: Array<T>): Array<T> {
             val currentLength: Int = array.size
 
             // add the new subscription to the END of the array
@@ -155,7 +156,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
             return newMessageArray
         }
 
-        internal inline fun <reified T> remove(thing: T, array: Array<T>): Array<T> {
+        internal inline fun <reified T: Any> remove(thing: T, array: Array<T>): Array<T> {
             // remove the subscription form the array
             // THIS IS IDENTITY CHECKS, NOT EQUALITY
             return array.filter { it !== thing }.toTypedArray()
@@ -164,7 +165,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
 
     // initialize emtpy arrays
     @Volatile
-    private var onConnectFilterList = Array<(CONNECTION.() -> Boolean)>(0) { { true } }
+    private var onConnectFilterList = Array<(InetAddress.(String) -> Boolean)>(0) { { true } }
     private val onConnectFilterLock = ReentrantReadWriteLock()
 
     @Volatile
@@ -202,8 +203,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
      */
     fun filter(ipFilterRule: IpFilterRule) {
         filter {
-            // IPC will not filter, so this is OK to coerce to not-null
-            ipFilterRule.matches(remoteAddress!!)
+            // IPC will not filter
+            ipFilterRule.matches(this)
         }
     }
 
@@ -212,15 +213,21 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
      * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if a connection
      * should be allowed
      *
+     * By default, if there are no filter rules, then all connections are allowed to connect
+     * If there are filter rules - then ONLY connections for the filter that returns true are allowed to connect (all else are denied)
+     *
      * It is the responsibility of the custom filter to write the error, if there is one
      *
      * If the function returns TRUE, then the connection will continue to connect.
      * If the function returns FALSE, then the other end of the connection will
      *   receive a connection error
      *
-     * For a server, this function will be called for ALL clients.
+     *
+     * If ANY filter rule that is applied returns true, then the connection is permitted
+     *
+     * This function will be called for **only** network clients (IPC client are excluded)
      */
-    fun filter(function: CONNECTION.() -> Boolean) {
+    fun filter(function: InetAddress.(String) -> Boolean) {
         onConnectFilterLock.write {
             // we have to follow the single-writer principle!
             onConnectFilterList = add(function, onConnectFilterList)
@@ -348,23 +355,16 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
      *
      * NOTE: This is run directly on the thread that calls it!
      *
-     * @return true if the connection will be allowed to connect. False if we should terminate this connection
+     * @return true if the client address is allowed to connect. False if we should terminate this connection
      */
-    fun notifyFilter(connection: CONNECTION): Boolean {
-        // remote address will NOT be null at this stage, but best to verify.
-        val remoteAddress = connection.remoteAddress
-        if (remoteAddress == null) {
-            logger.error("Connection ${connection.id}: Unable to attempt connection stages when no remote address is present")
-            return false
-        }
-
+    fun notifyFilter(clientAddress: InetAddress, clientTagName: String): Boolean {
         // by default, there is a SINGLE rule that will always exist, and will always ACCEPT ALL connections.
         // This is so the array types can be setup (the compiler needs SOMETHING there)
         val list = onConnectFilterList
 
         // if there is a rule, a connection must match for it to connect
         list.forEach {
-            if (it.invoke(connection)) {
+            if (it.invoke(clientAddress, clientTagName)) {
                 return true
             }
         }

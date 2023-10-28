@@ -23,7 +23,6 @@ internal class ClientConnectionInfo(
     val streamIdPub: Int,
     val streamIdSub: Int = 0,
     val publicKey: ByteArray = ByteArray(0),
-    val enableSession: Boolean,
     val sessionTimeout: Long,
     val kryoRegistrationDetails: ByteArray,
     val secretKey: SecretKeySpec

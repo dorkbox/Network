@@ -168,6 +168,17 @@ class ClientConfiguration : dorkbox.network.Configuration() {
         }
 
     /**
+     * The tag name to be assigned to this connection and the server will receive this tag name during the handshake.
+     * The max length is 32 characters.
+     */
+    var tag: String = ""
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+
+    /**
      * Validates the current configuration. Throws an exception if there are problems.
      */
     @Suppress("DuplicatedCode")
@@ -180,6 +191,8 @@ class ClientConfiguration : dorkbox.network.Configuration() {
             require(port > 0) { "Client listen port must be > 0" }
             require(port < 65535) { "Client listen port must be < 65535" }
         }
+
+        require(tag.length <= 32) { "Client tag name length must be <= 32" }
     }
 
     override fun initialize(logger: Logger): dorkbox.network.ClientConfiguration {
@@ -191,6 +204,7 @@ class ClientConfiguration : dorkbox.network.Configuration() {
         super.copy(config)
 
         config.port = port
+        config.tag = tag
 
         return config
     }
@@ -201,6 +215,7 @@ class ClientConfiguration : dorkbox.network.Configuration() {
         if (!super.equals(other)) return false
 
         if (port != other.port) return false
+        if (tag != other.tag) return false
 
         return true
     }
@@ -208,6 +223,7 @@ class ClientConfiguration : dorkbox.network.Configuration() {
     override fun hashCode(): Int {
         var result = super.hashCode()
         result = 31 * result + port.hashCode()
+        result = 31 * result + tag.hashCode()
         return result
     }
 }

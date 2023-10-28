@@ -32,6 +32,9 @@ internal class HandshakeMessage private constructor() {
     // -1 means there is an error
     var state = INVALID
 
+    // used to name a connection (via the client)
+    var tag: String = ""
+
     var errorMessage: String? = null
 
     var port = 0
@@ -51,7 +54,7 @@ internal class HandshakeMessage private constructor() {
         const val DONE = 3
         const val DONE_ACK = 4
 
-        fun helloFromClient(connectKey: Long, publicKey: ByteArray, streamIdSub: Int, portSub: Int): HandshakeMessage {
+        fun helloFromClient(connectKey: Long, publicKey: ByteArray, streamIdSub: Int, portSub: Int, tagName: String): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
             hello.connectKey = connectKey // this is 'bounced back' by the server, so the client knows if it's the correct connection message
@@ -59,6 +62,7 @@ internal class HandshakeMessage private constructor() {
             hello.sessionId = 0 // not used by the server, since it connects in a different way!
             hello.streamId = streamIdSub
             hello.port = portSub
+            hello.tag = tagName
             return hello
         }
 
@@ -135,6 +139,6 @@ internal class HandshakeMessage private constructor() {
             ""
         }
 
-        return "HandshakeMessage($stateStr$errorMsg sessionId=$sessionId, streamId=$streamId, port=$port${connectInfo})"
+        return "HandshakeMessage($tag :: $stateStr$errorMsg sessionId=$sessionId, streamId=$streamId, port=$port${connectInfo})"
     }
 }

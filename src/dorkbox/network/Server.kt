@@ -365,7 +365,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      *
      * This function will be called for **only** network clients (IPC client are excluded)
      */
-    fun filter(function: CONNECTION.() -> Boolean)  {
+    fun filter(function: InetAddress.(String) -> Boolean)  {
         listenerManager.filter(function)
     }
 

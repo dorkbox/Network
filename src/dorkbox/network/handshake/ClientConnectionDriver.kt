@@ -21,6 +21,7 @@ import dorkbox.network.aeron.AeronDriver.Companion.getLocalAddressString
 import dorkbox.network.aeron.AeronDriver.Companion.uri
 import dorkbox.network.aeron.controlEndpoint
 import dorkbox.network.aeron.endpoint
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.CommonContext
@@ -45,6 +46,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             handshakeConnection: ClientHandshakeDriver,
             connectionInfo: ClientConnectionInfo,
             port2Server: Int, // this is the port2 value from the server
+            tagName: String
         ): ClientConnectionDriver {
             val handshakePubSub = handshakeConnection.pubSub
             val reliable = handshakePubSub.reliable
@@ -73,6 +75,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
                     streamIdPub = streamIdPub,
                     streamIdSub = streamIdSub,
                     reliable = reliable,
+                    tagName = tagName,
                     logInfo = logInfo
                 )
             }
@@ -101,6 +104,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
                     portSub = portSub,
                     port2Server = port2Server,
                     reliable = reliable,
+                    tagName = tagName,
                     logInfo = logInfo
                 )
             }
@@ -117,6 +121,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             streamIdPub: Int,
             streamIdSub: Int,
             reliable: Boolean,
+            tagName: String,
             logInfo: String
         ): PubSub {
             // on close, the publication CAN linger (in case a client goes away, and then comes back)
@@ -150,10 +155,20 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             }
 
 
-            return PubSub(publication, subscription,
-                          sessionIdPub, sessionIdSub,
-                          streamIdPub, streamIdSub,
-                          reliable)
+            return PubSub(
+                pub = publication,
+                sub = subscription,
+                sessionIdPub = sessionIdPub,
+                sessionIdSub = sessionIdSub,
+                streamIdPub = streamIdPub,
+                streamIdSub = streamIdSub,
+                reliable = reliable,
+                remoteAddress = null,
+                remoteAddressString = EndPoint.IPC_NAME,
+                portPub = 0,
+                portSub = 0,
+                tagName = tagName
+            )
         }
 
         @Throws(ClientTimedOutException::class)
@@ -170,6 +185,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             portSub: Int,
             port2Server: Int, // this is the port2 value from the server
             reliable: Boolean,
+            tagName: String,
             logInfo: String,
         ): PubSub {
             val isRemoteIpv4 = remoteAddress is Inet4Address
@@ -213,12 +229,20 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
                 ClientTimedOutException("$logInfo subscription cannot connect with server!", cause)
             }
 
-            return PubSub(publication, subscription,
-                          sessionIdPub, sessionIdSub,
-                          streamIdPub, streamIdSub,
-                          reliable,
-                          remoteAddress, remoteAddressString,
-                          portPub, portSub)
+            return PubSub(
+                pub = publication,
+                sub = subscription,
+                sessionIdPub = sessionIdPub,
+                sessionIdSub = sessionIdSub,
+                streamIdPub = streamIdPub,
+                streamIdSub = streamIdSub,
+                reliable = reliable,
+                remoteAddress = remoteAddress,
+                remoteAddressString = remoteAddressString,
+                portPub = portPub,
+                portSub = portSub,
+                tagName = tagName
+            )
         }
     }
 }

@@ -16,9 +16,9 @@
 
 package dorkbox.network.handshake
 
+import dorkbox.network.connection.EndPoint
 import io.aeron.Publication
 import io.aeron.Subscription
-import org.slf4j.Logger
 import java.net.Inet4Address
 import java.net.InetAddress
 
@@ -30,29 +30,43 @@ data class PubSub(
     val streamIdPub: Int,
     val streamIdSub: Int,
     val reliable: Boolean,
-    val remoteAddress: InetAddress? = null,
-    val remoteAddressString: String = "IPC",
-    val portPub: Int = 0,
-    val portSub: Int = 0
+    val remoteAddress: InetAddress?,
+    val remoteAddressString: String,
+    val portPub: Int,
+    val portSub: Int,
+    val tagName: String  // will either be "", or will be "[tag_name]"
 ) {
     val isIpc get() = remoteAddress == null
 
-    fun getLogInfo(logger: Logger): String {
-        val detailed = logger.isTraceEnabled
+    fun getLogInfo(extraDetails: Boolean): String {
         return if (isIpc) {
-            if (detailed) {
-                "IPC sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
+            val prefix = if (tagName.isNotEmpty()) {
+                EndPoint.IPC_NAME + " $tagName"
             } else {
-                "IPC"
+                EndPoint.IPC_NAME
+            }
+
+            if (extraDetails) {
+                if (tagName.isNotEmpty()) {
+                    "$prefix sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
+                } else {
+                    "$prefix sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
+                }
+            } else {
+                prefix
             }
         } else {
-            val prefix = if (remoteAddress is Inet4Address) {
+            var prefix = if (remoteAddress is Inet4Address) {
                 "IPv4 $remoteAddressString"
             } else {
                 "IPv6 $remoteAddressString"
             }
 
-            if (detailed) {
+            if (tagName.isNotEmpty()) {
+                prefix += " $tagName"
+            }
+
+            if (extraDetails) {
                 "$prefix sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, port: p=${portPub} s=${portSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
             } else {
                 prefix

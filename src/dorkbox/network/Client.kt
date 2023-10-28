@@ -117,6 +117,15 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         private set
 
     /**
+     * The tag name assigned (by the configuration) to the client. The server will receive this tag during the handshake. The max length is
+     * 32 characters.
+     */
+    @Volatile
+    var tag: String = ""
+        private set
+
+
+    /**
      * The default connection reliability type (ie: can the lower-level network stack throw away data that has errors, for example real-time-voice)
      */
     @Volatile
@@ -507,6 +516,10 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         this.port1 = port1
         this.port2 = port2
 
+        // DOUBLE CHECK!
+        require(config.tag.length <= 32) { "Client tag name length must be <= 32" }
+        this.tag = config.tag
+
         this.reliable = reliable
         this.connectionTimeoutSec = connectionTimeoutSec
 
@@ -578,12 +591,13 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                     remotePort2 = port2,
                     handshakeTimeoutNs = handshakeTimeoutNs,
                     reliable = reliable,
+                    tagName = tag,
                     logger = logger
                 )
 
                 val pubSub = handshakeConnection.pubSub
-                val logInfo = pubSub.getLogInfo(logger)
 
+                val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
                 if (logger.isDebugEnabled) {
                     logger.debug("Creating new handshake to $logInfo")
                 } else {
@@ -701,6 +715,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         // throws(ConnectTimedOutException::class, ClientRejectedException::class, ClientException::class)
         val connectionInfo = handshake.hello(
+            tagName = tag,
             endPoint = this,
             handshakeConnection = handshakeConnection,
             handshakeTimeoutNs = handshakeTimeoutNs
@@ -771,7 +786,8 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             handshakeTimeoutNs = handshakeTimeoutNs,
             handshakeConnection = handshakeConnection,
             connectionInfo = connectionInfo,
-            port2Server = port2
+            port2Server = port2,
+            tagName = tag
         )
 
         val pubSub = clientConnection.connectionInfo

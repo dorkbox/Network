@@ -178,6 +178,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
     fun hello(
+        tagName: String,
         endPoint: EndPoint<CONNECTION>,
         handshakeConnection: ClientHandshakeDriver,
         handshakeTimeoutNs: Long
@@ -200,7 +201,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
                                         connectKey = connectKey,
                                         publicKey = client.storage.publicKey,
                                         streamIdSub = pubSub.streamIdSub,
-                                        portSub = pubSub.portSub
+                                        portSub = pubSub.portSub,
+                                        tagName = tagName
                                     ))
         } catch (e: Exception) {
             handshakeConnection.close(endPoint)

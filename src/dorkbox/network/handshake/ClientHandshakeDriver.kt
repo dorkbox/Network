@@ -65,6 +65,7 @@ internal class ClientHandshakeDriver(
             clientListenPort: Int,
             handshakeTimeoutNs: Long,
             reliable: Boolean,
+            tagName: String,
             logger: Logger
         ): ClientHandshakeDriver {
             logger.trace("Starting client handshake")
@@ -111,6 +112,7 @@ internal class ClientHandshakeDriver(
                         streamIdPub = streamIdPub,
                         streamIdSub = streamIdSub,
                         reliable = reliable,
+                        tagName = tagName,
                         logInfo = logInfo
                     )
                 } catch (exception: Exception) {
@@ -160,6 +162,7 @@ internal class ClientHandshakeDriver(
                     streamIdPub = streamIdPub,
                     reliable = reliable,
                     streamIdSub = streamIdSub,
+                    tagName = tagName,
                     logInfo = logInfo
                 )
 
@@ -188,6 +191,7 @@ internal class ClientHandshakeDriver(
             sessionIdPub: Int,
             streamIdPub: Int, streamIdSub: Int,
             reliable: Boolean,
+            tagName: String,
             logInfo: String
         ): PubSub {
             // Create a publication at the given address and port, using the given stream ID.
@@ -214,10 +218,20 @@ internal class ClientHandshakeDriver(
             val subscriptionUri = uriHandshake(CommonContext.IPC_MEDIA, reliable)
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, true)
 
-            return PubSub(publication, subscription,
-                          sessionIdPub, 0,
-                          streamIdPub, streamIdSub,
-                          reliable)
+            return PubSub(
+                pub = publication,
+                sub = subscription,
+                sessionIdPub = sessionIdPub,
+                sessionIdSub = 0,
+                streamIdPub = streamIdPub,
+                streamIdSub = streamIdSub,
+                reliable = reliable,
+                remoteAddress = null,
+                remoteAddressString = EndPoint.IPC_NAME,
+                portPub = 0,
+                portSub = 0,
+                tagName = tagName
+            )
         }
 
         @Throws(ClientTimedOutException::class)
@@ -233,6 +247,7 @@ internal class ClientHandshakeDriver(
             streamIdPub: Int,
             reliable: Boolean,
             streamIdSub: Int,
+            tagName: String,
             logInfo: String,
         ): PubSub {
             @Suppress("NAME_SHADOWING")
@@ -320,12 +335,20 @@ internal class ClientHandshakeDriver(
                 throw ex
             }
 
-            return PubSub(publication, subscription,
-                          sessionIdPub, 0,
-                          streamIdPub, streamIdSub,
-                          reliable,
-                          remoteAddress, remoteAddressString,
-                          portPub, portSub)
+            return PubSub(
+                pub = publication,
+                sub = subscription,
+                sessionIdPub = sessionIdPub,
+                sessionIdSub = 0,
+                streamIdPub = streamIdPub,
+                streamIdSub = streamIdSub,
+                reliable = reliable,
+                remoteAddress = remoteAddress,
+                remoteAddressString = remoteAddressString,
+                portPub = portPub,
+                portSub = portSub,
+                tagName = tagName
+            )
         }
     }
 

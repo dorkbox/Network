@@ -21,8 +21,6 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.connection.*
-import dorkbox.network.connection.session.SessionConnection
-import dorkbox.network.connection.session.SessionServer
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerHandshakeException
 import dorkbox.network.exceptions.ServerTimedoutException
@@ -131,23 +129,16 @@ internal class ServerHandshake<CONNECTION : Connection>(
             }
 
             // Server is the "source", client mirrors the server
-            val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
             if (logger.isTraceEnabled) {
-                logger.trace("[${newConnection}] (${message.connectKey}) $connType (${newConnection.id}) done with handshake.")
+                logger.trace("[${newConnection}] (${message.connectKey}) Buffered connection (${newConnection.id}) done with handshake.")
             } else if (logger.isDebugEnabled) {
-                logger.debug("[${newConnection}] $connType (${newConnection.id}) done with handshake.")
+                logger.debug("[${newConnection}] Buffered connection (${newConnection.id}) done with handshake.")
             }
-
-            // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
-            // when applicable - we ALSO want to restore RMI objects BEFORE the connection is fully setup!
-            val newSession = server.sessionManager.onInit(newConnection)
 
             newConnection.setImage()
 
             // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
-            if (newSession) {
-                listenerManager.notifyInit(newConnection)
-            }
+            listenerManager.notifyInit(newConnection)
 
             // this enables the connection to start polling for messages
             server.addConnection(newConnection)
@@ -160,9 +151,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
                 listenerManager.notifyConnect(newConnection)
 
-                if (!newSession) {
-                    (newConnection as SessionConnection).sendPendingMessages()
-                }
+                newConnection.sendBufferedMessages()
             } catch (e: Exception) {
                 listenerManager.notifyError(newConnection, TransmitException("[$newConnection] Handshake error", e))
             }
@@ -247,6 +236,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
         logger: Logger
     ): Boolean {
         val serialization = config.serialization
+
+        val clientTagName = message.tag.let { if (it.isEmpty()) "" else "[$it]" }
+        if (clientTagName.length > 34) {
+            // 34 to account for []
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Invalid tag name."))
+            return false
+        }
 
         /////
         /////
@@ -339,7 +335,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 aeronDriver = aeronDriver,
                 ipInfo = server.ipInfo,
                 isIpc = true,
-                logInfo = "IPC",
+                tagName = clientTagName,
+                logInfo = EndPoint.IPC_NAME,
 
                 remoteAddress = null,
                 remoteAddressString = "",
@@ -353,12 +350,11 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 reliable = true
             )
 
-            val logInfo = newConnectionDriver.pubSub.getLogInfo(logger)
-            val connectionType = if (server is SessionServer) "session connection" else "connection"
+            val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
-                logger.debug("Creating new $connectionType to $logInfo")
+                logger.debug("Creating new buffered connection to $logInfo")
             } else {
-                logger.info("Creating new $connectionType to $logInfo")
+                logger.info("Creating new buffered connection to $logInfo")
             }
 
             newConnection = server.newConnection(ConnectionParams(
@@ -369,7 +365,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 cryptoKey = CryptoManagement.NOCRYPT // we don't use encryption for IPC connections
             ))
 
-            server.sessionManager.onNewConnection(newConnection)
+            server.bufferedManager.onConnect(newConnection)
 
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
@@ -393,8 +389,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
-                enableSession = newConnection is SessionConnection,
-                sessionTimeout = config.sessionTimeoutSeconds,
+                sessionTimeout = config.bufferedConnectionTimeoutSeconds,
                 kryoRegDetails = serialization.getKryoRegistrationDetails()
             )
 
@@ -403,11 +398,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = newConnection
 
-            val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
             if (logger.isTraceEnabled) {
-                logger.trace("[$logInfo] (${message.connectKey}) $connType (${newConnection.id}) responding to handshake hello.")
+                logger.trace("[$logInfo] (${message.connectKey}) buffered connection (${newConnection.id}) responding to handshake hello.")
             } else if (logger.isDebugEnabled) {
-                logger.debug("[$logInfo] $connType (${newConnection.id}) responding to handshake hello.")
+                logger.debug("[$logInfo] Buffered connection (${newConnection.id}) responding to handshake hello.")
             }
 
             // this tells the client all the info to connect.
@@ -467,6 +461,27 @@ internal class ServerHandshake<CONNECTION : Connection>(
         if (!isSelfMachine &&
             !validateUdpConnectionInfo(server, handshaker, handshakePublication, config, clientAddress, logInfo)) {
             // we do not want to limit the loopback addresses!
+            return false
+        }
+
+        val clientTagName = message.tag.let { if (it.isEmpty()) "" else "[$it]" }
+        if (clientTagName.length > 34) {
+            // 34 to account for []
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Invalid tag name."))
+            return false
+        }
+
+        // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
+        val permitConnection = listenerManager.notifyFilter(clientAddress, clientTagName)
+        if (!permitConnection) {
+            listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection was not permitted!"))
+
+            try {
+                handshaker.writeMessage(handshakePublication, logInfo,
+                                        HandshakeMessage.error("Connection was not permitted!"))
+            } catch (e: Exception) {
+                listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
+            }
             return false
         }
 
@@ -585,18 +600,18 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 portPubMdc = mdcPortPub,
                 portPub = portPub,
                 portSub = portSub,
+                tagName = clientTagName,
                 reliable = isReliable
             )
 
             val cryptoSecretKey = server.crypto.generateAesKey(clientPublicKeyBytes, clientPublicKeyBytes, server.crypto.publicKeyBytes)
 
 
-            val logInfo = newConnectionDriver.pubSub.getLogInfo(logger)
-            val connectionType = if (server is SessionServer) "session connection" else "connection"
+            val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
-                logger.debug("Creating new $connectionType to $logInfo")
+                logger.debug("Creating new buffered connection to $logInfo")
             } else {
-                logger.info("Creating new $connectionType to $logInfo")
+                logger.info("Creating new buffered connection to $logInfo")
             }
 
             newConnection = server.newConnection(ConnectionParams(
@@ -607,30 +622,12 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 cryptoKey = cryptoSecretKey
             ))
 
-            server.sessionManager.onNewConnection(newConnection)
-
-            // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
-            val permitConnection = listenerManager.notifyFilter(newConnection)
-            if (!permitConnection) {
-                // this will also unwind/free allocations
-                newConnection.close()
-
-                listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection was not permitted!"))
-
-                try {
-                    handshaker.writeMessage(handshakePublication, logInfo,
-                                            HandshakeMessage.error("Connection was not permitted!"))
-                } catch (e: Exception) {
-                    listenerManager.notifyError(TransmitException("[$logInfo] Handshake error", e))
-                }
-                return false
-            }
+            server.bufferedManager.onConnect(newConnection)
 
 
             ///////////////
             ///  HANDSHAKE
             ///////////////
-
 
             // The one-time pad is used to encrypt the session ID, so that ONLY the correct client knows what it is!
             val successMessage = HandshakeMessage.helloAckToClient(message.connectKey)
@@ -645,8 +642,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
-                enableSession = newConnection is SessionConnection,
-                sessionTimeout = config.sessionTimeoutSeconds,
+                sessionTimeout = config.bufferedConnectionTimeoutSeconds,
                 kryoRegDetails = serialization.getKryoRegistrationDetails()
             )
 
@@ -655,11 +651,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = newConnection
 
-            val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
             if (logger.isTraceEnabled) {
-                logger.trace("[$logInfo] $connType (${newConnection.id}) responding to handshake hello.")
+                logger.trace("[$logInfo] Buffered connection (${newConnection.id}) responding to handshake hello.")
             } else if (logger.isDebugEnabled) {
-                logger.debug("[$logInfo] $connType (${newConnection.id}) responding to handshake hello.")
+                logger.debug("[$logInfo] Buffered connection (${newConnection.id}) responding to handshake hello.")
             }
 
             // this tells the client all the info to connect.

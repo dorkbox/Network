@@ -18,6 +18,7 @@ package dorkbox.network.handshake
 
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uri
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.IpInfo
 import io.aeron.CommonContext
 import java.net.Inet4Address
@@ -33,16 +34,17 @@ import java.net.InetAddress
 internal class ServerConnectionDriver(val pubSub: PubSub) {
     companion object {
         fun build(isIpc: Boolean,
-                          aeronDriver: AeronDriver,
-                          sessionIdPub: Int, sessionIdSub: Int,
-                          streamIdPub: Int, streamIdSub: Int,
+                  aeronDriver: AeronDriver,
+                  sessionIdPub: Int, sessionIdSub: Int,
+                  streamIdPub: Int, streamIdSub: Int,
 
-                          ipInfo: IpInfo,
-                          remoteAddress: InetAddress?,
-                          remoteAddressString: String,
-                          portPubMdc: Int, portPub: Int, portSub: Int,
-                          reliable: Boolean,
-                          logInfo: String): ServerConnectionDriver {
+                  ipInfo: IpInfo,
+                  remoteAddress: InetAddress?,
+                  remoteAddressString: String,
+                  portPubMdc: Int, portPub: Int, portSub: Int,
+                  reliable: Boolean,
+                  tagName: String,
+                  logInfo: String): ServerConnectionDriver {
 
             val pubSub: PubSub
 
@@ -54,6 +56,7 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
                         streamIdPub = streamIdPub,
                         streamIdSub = streamIdSub,
                         reliable = reliable,
+                        tagName = tagName,
                         logInfo = logInfo
                     )
             } else {
@@ -70,6 +73,7 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
                     portPub = portPub,
                     portSub = portSub,
                     reliable = reliable,
+                    tagName = tagName,
                     logInfo = logInfo
                 )
             }
@@ -82,6 +86,7 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
             sessionIdPub: Int, sessionIdSub: Int,
             streamIdPub: Int, streamIdSub: Int,
             reliable: Boolean,
+            tagName: String,
             logInfo: String
         ): PubSub {
             // on close, the publication CAN linger (in case a client goes away, and then comes back)
@@ -98,10 +103,20 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
             val subscriptionUri = uri(CommonContext.IPC_MEDIA, sessionIdSub, reliable)
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, true)
 
-            return PubSub(publication, subscription,
-                          sessionIdPub, sessionIdSub,
-                          streamIdPub, streamIdSub,
-                          reliable)
+            return PubSub(
+                pub = publication,
+                sub = subscription,
+                sessionIdPub = sessionIdPub,
+                sessionIdSub = sessionIdSub,
+                streamIdPub = streamIdPub,
+                streamIdSub = streamIdSub,
+                reliable = reliable,
+                remoteAddress = null,
+                remoteAddressString = EndPoint.IPC_NAME,
+                portPub = 0,
+                portSub = 0,
+                tagName = tagName
+            )
         }
 
         private fun buildUdp(
@@ -114,6 +129,7 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
             portPub: Int,
             portSub: Int,
             reliable: Boolean,
+            tagName: String,
             logInfo: String
         ): PubSub {
             // on close, the publication CAN linger (in case a client goes away, and then comes back)
@@ -146,12 +162,20 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
 
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, false)
 
-            return PubSub(publication, subscription,
-                          sessionIdPub, sessionIdSub,
-                          streamIdPub, streamIdSub,
-                          reliable,
-                          remoteAddress, remoteAddressString,
-                          portPub, portSub)
+            return PubSub(
+                pub = publication,
+                sub = subscription,
+                sessionIdPub = sessionIdPub,
+                sessionIdSub = sessionIdSub,
+                streamIdPub = streamIdPub,
+                streamIdSub = streamIdSub,
+                reliable = reliable,
+                remoteAddress = remoteAddress,
+                remoteAddressString = remoteAddressString,
+                portPub = portPub,
+                portSub = portSub,
+                tagName = tagName
+            )
         }
     }
 }

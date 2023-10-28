@@ -87,6 +87,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
+     * The tag name for a connection permits an INCOMING client to define a custom string. The max length is 32
+     */
+    val tag = info.tagName
+
+    /**
      * The remote address, as a string. Will be null for IPC connections
      */
     val remoteAddress = info.remoteAddress

@@ -189,7 +189,7 @@ internal class IpInfo(config: ServerConfiguration) {
             }
             else -> {
                 ipType = IPC
-                listenAddressString = "IPC"
+                listenAddressString = EndPoint.IPC_NAME
                 formattedListenAddressString = listenAddressString
             }
         }
