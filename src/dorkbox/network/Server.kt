@@ -20,9 +20,7 @@ import dorkbox.network.aeron.*
 import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.IpListenType
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
-import dorkbox.network.connection.session.SessionConnection
-import dorkbox.network.connection.session.SessionManagerFull
-import dorkbox.network.connection.session.SessionServer
+import dorkbox.network.connection.buffer.BufferManager
 import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
@@ -30,6 +28,7 @@ import dorkbox.network.handshake.ServerHandshakePollers
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.rmi.RmiSupportServer
 import org.slf4j.LoggerFactory
+import java.net.InetAddress
 import java.util.concurrent.*
 
 /**
@@ -103,16 +102,19 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     @Volatile
     internal lateinit var handshake: ServerHandshake<CONNECTION>
 
+    /**
+     * Different connections (to the same client) can be "buffered", meaning that if they "go down" because of a network glitch -- the data
+     * being sent is not lost (it is buffered) and then re-sent once the new connection is established. References to the old connection
+     * will also redirect to the new connection.
+     */
+    internal val bufferedManager: BufferManager<CONNECTION>
+
     private val string0: String by lazy {
         "EndPoint [Server: ${storage.publicKey.toHexString()}]"
     }
 
     init {
-        if (this is SessionServer) {
-             // only set this if we need to
-            @Suppress("UNCHECKED_CAST")
-            sessionManager = SessionManagerFull(config, listenerManager as ListenerManager<SessionConnection>, aeronDriver, config.sessionTimeoutSeconds)
-        }
+        bufferedManager = BufferManager(config, listenerManager, aeronDriver, config.bufferedConnectionTimeoutSeconds)
     }
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
@@ -392,6 +394,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * @param closeEverything if true, all parts of the server will be closed (listeners, driver, event polling, etc)
      */
     fun close(closeEverything: Boolean = true) {
+        bufferedManager.close()
         close(closeEverything = closeEverything, sendDisconnectMessage = true, releaseWaitingThreads = true)
     }
 

@@ -907,20 +907,10 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
                     listenerManager.notifyError(exception)
                     return false
                 }
-                else if (connection.endPoint.sessionManager.enabled()) {
-                    // if we are a SESSION, then the message will be placed into a queue to be re-sent once the connection comes back
-                    // no extra actions required by us. Returning a "false" here makes sure that the session manager picks-up this message to
-                    // re-broadcast (eventually) on the updated connection
-                    return false
-                } else {
-                    logger.info("[${publication.sessionId()}] Connection disconnected while sending data, closing connection.")
-                    internal.mustRestartDriverOnError = true
-
-                    // publication was actually closed or the server was closed, so no bother throwing an error
-                    connection.closeImmediately(
-                        sendDisconnectMessage = false, closeEverything = false
-                    )
-
+                else {
+                    // by default, we BUFFER data on a connection -- so the message will be placed into a queue to be re-sent once the connection comes back
+                    // no extra actions required by us.
+                    // Returning a "false" here makes sure that the session manager picks-up this message to e-broadcast (eventually) on the updated connection
                     return false
                 }
             }
@@ -947,15 +937,6 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
                 // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
                 // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
                 // send the message.
-
-                if (!endPoint.shutdownInProgress.value && !endPoint.sessionManager.enabled()) {
-                    // we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
-                    // additionally, if we are managing pending messages, don't show an error (since the message will be queued to send again)
-                    val exception = endPoint.newException(
-                        "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${errorCodeName(result)})"
-                    ).cleanStackTrace(5)
-                    listenerManager.notifyError(exception)
-                }
                 return false
             }
 
@@ -1053,15 +1034,6 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
                 // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
                 // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
                 // send the message.
-
-                if (!endPoint.shutdownInProgress.value && !endPoint.sessionManager.enabled()) {
-                    // we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
-                    // additionally, if we are managing pending messages, don't show an error (since the message will be queued to send again)
-                    val exception = endPoint.newException(
-                        "[${publication.sessionId()}] Unable to send message. (Connection is closed, aborted attempt! ${errorCodeName(result)})"
-                    )
-                    listenerManager.notifyError(exception)
-                }
                 return false
             }
 

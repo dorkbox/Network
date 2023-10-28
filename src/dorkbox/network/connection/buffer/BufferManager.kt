@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package dorkbox.network.connection.session
+package dorkbox.network.connection.buffer
 
 import dorkbox.bytes.ByteArrayWrapper
 import dorkbox.collections.LockFreeHashMap
@@ -30,24 +30,23 @@ import net.jodah.expiringmap.ExpiringMap
 import org.slf4j.LoggerFactory
 import java.util.concurrent.*
 
-internal open class SessionManagerFull<CONNECTION: SessionConnection>(
+internal open class BufferManager<CONNECTION: Connection>(
     config: Configuration,
     listenerManager: ListenerManager<CONNECTION>,
-    val aeronDriver: AeronDriver,
+    aeronDriver: AeronDriver,
     sessionTimeout: Long
-): SessionManager<CONNECTION> {
+) {
 
     companion object {
-        private val logger = LoggerFactory.getLogger(SessionManagerFull::class.java.simpleName)
+        private val logger = LoggerFactory.getLogger(BufferManager::class.java.simpleName)
     }
 
-
-    private val sessions = LockFreeHashMap<ByteArrayWrapper, Session<CONNECTION>>()
-
-
-    private val expiringSessions: ExpiringMap<ByteArrayWrapper, Session<CONNECTION>>
+    private val sessions = LockFreeHashMap<ByteArrayWrapper, BufferedSession>()
+    private val expiringSessions: ExpiringMap<ByteArrayWrapper, BufferedSession>
 
     init {
+        require(sessionTimeout >= 60) { "The buffered connection timeout 'bufferedConnectionTimeoutSeconds' must be greater than 60 seconds!" }
+
         // ignore 0
         val check = TimeUnit.SECONDS.toNanos(sessionTimeout)
         val lingerNs = aeronDriver.lingerNs()
@@ -62,7 +61,7 @@ internal open class SessionManagerFull<CONNECTION: SessionConnection>(
         expiringSessions = ExpiringMap.builder()
             .expiration(sessionTimeout, timeUnit)
             .expirationPolicy(ExpirationPolicy.CREATED)
-            .expirationListener<ByteArrayWrapper, Session<CONNECTION>> { publicKeyWrapped, sessionConnection ->
+            .expirationListener<ByteArrayWrapper, BufferedSession> { publicKeyWrapped, sessionConnection ->
                 // this blocks until it fully runs (which is ok. this is fast)
                 logger.debug("Connection session expired for: ${publicKeyWrapped.bytes.toHexString()}")
 
@@ -72,82 +71,60 @@ internal open class SessionManagerFull<CONNECTION: SessionConnection>(
             .build()
     }
 
-    override fun enabled(): Boolean {
-        return true
-    }
-
     /**
      * this must be called when a new connection is created
      *
      * @return true if this is a new session, false if it is an existing session
      */
-    override fun onNewConnection(connection: Connection) {
-        require(connection is SessionConnection) { "The new connection does not inherit a SessionConnection, unable to continue. " }
-
+    fun onConnect(connection: Connection): BufferedSession {
         val publicKeyWrapped = ByteArrayWrapper.wrap(connection.uuid)
 
-        synchronized(sessions) {
+        return synchronized(sessions) {
             // always check if we are expiring first...
             val expiring = expiringSessions.remove(publicKeyWrapped)
             if (expiring != null) {
-                // we must always set this session value!!
-                connection.session = expiring
+                expiring.connection = connection
+                expiring
             } else {
                 val existing = sessions[publicKeyWrapped]
                 if (existing != null) {
                     // we must always set this session value!!
-                    connection.session = existing
+                    existing.connection = connection
+                    existing
                 } else {
-                    @Suppress("UNCHECKED_CAST")
-                    val newSession = (connection.endPoint as SessionEndpoint<CONNECTION>).newSession(connection as CONNECTION)
+                    val newSession = BufferedSession(connection)
+                    sessions[publicKeyWrapped] = newSession
 
                     // we must always set this when the connection is created, and it must be inside the sync block!
-                    connection.session = newSession
-
-                    sessions[publicKeyWrapped] = newSession
+                    newSession
                 }
             }
         }
     }
 
-
-    /**
-     * this must be called when a new connection is created AND when the internal `reconnect` occurs (as a result of a network error)
-     *
-     * @return true if this is a new session, false if it is an existing session
-     */
-    @Suppress("UNCHECKED_CAST")
-    override fun onInit(connection: Connection): Boolean {
-        // we know this will always be the case, because if this specific method can be called, then it will be a sessionConnection
-        connection as SessionConnection
-
-        val session: Session<CONNECTION> = connection.session as Session<CONNECTION>
-        session.restore(connection as CONNECTION)
-
-        // the FIRST time this method is called, it will be true. EVERY SUBSEQUENT TIME, it will be false
-        return session.isNewSession
-    }
-
-
     /**
      * Always called when a connection is disconnected from the network
      */
-    override fun onDisconnect(connection: CONNECTION) {
+    fun onDisconnect(connection: Connection) {
         try {
             val publicKeyWrapped = ByteArrayWrapper.wrap(connection.uuid)
 
-            val session = synchronized(sessions) {
+            synchronized(sessions) {
                 val sess = sessions.remove(publicKeyWrapped)
                 // we want to expire this session after XYZ time
                 expiringSessions[publicKeyWrapped] = sess
-                sess
             }
-
-
-            session!!.save(connection)
         }
         catch (e: Exception) {
-            logger.error("Unable to run save data for the session!", e)
+            logger.error("Unable to run session expire logic!", e)
+        }
+    }
+
+
+    fun close() {
+        synchronized(sessions) {
+            sessions.clear()
+            expiringSessions.clear()
         }
     }
 }

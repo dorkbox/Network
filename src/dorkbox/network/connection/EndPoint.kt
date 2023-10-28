@@ -24,9 +24,6 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
 import dorkbox.network.aeron.EventPoller
-import dorkbox.network.connection.session.SessionConnection
-import dorkbox.network.connection.session.SessionManager
-import dorkbox.network.connection.session.SessionManagerNoOp
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -181,14 +178,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
     private val streamingManager = StreamingManager<CONNECTION>(logger, config)
-
-    /**
-     * By default, this is a NO-OP version! We do not want if/else checks for every message!
-     * this can change of the lifespan of the CLIENT, depending on which/what server a single client connects to.
-     */
-    @Volatile
-    internal var sessionManager: SessionManager<SessionConnection> = SessionManagerNoOp()
-
 
     /**
      * The primary machine port that the server will listen for connections on
@@ -990,74 +979,70 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
 
 
-            if (logger.isDebugEnabled) {
-                logger.debug("Shutting down endpoint...")
-            }
+        if (logger.isDebugEnabled) {
+            logger.debug("Shutting down endpoint...")
+        }
 
 
-            // always do this. It is OK to run this multiple times
-            // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
-            // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
-            connections.forEach {
-                it.closeImmediately(sendDisconnectMessage = sendDisconnectMessage, closeEverything = closeEverything)
-            }
+        // always do this. It is OK to run this multiple times
+        // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
+        // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
+        connections.forEach {
+            it.closeImmediately(sendDisconnectMessage = sendDisconnectMessage, closeEverything = closeEverything)
+        }
 
 
-            // this closes the endpoint specific instance running in the poller
+        // this closes the endpoint specific instance running in the poller
 
-            // THIS WILL SHUT DOWN THE EVENT POLLER IMMEDIATELY! BUT IN AN ASYNC MANNER!
-            shutdownEventPoller = true
+        // THIS WILL SHUT DOWN THE EVENT POLLER IMMEDIATELY! BUT IN AN ASYNC MANNER!
+        shutdownEventPoller = true
 
-            // if we close the poller AND listener manager too quickly, events will not get published
-            // this waits for the ENDPOINT to finish running its tasks in the poller.
-            pollerClosedLatch.await()
+        // if we close the poller AND listener manager too quickly, events will not get published
+        // this waits for the ENDPOINT to finish running its tasks in the poller.
+        pollerClosedLatch.await()
 
 
 
-            // this will ONLY close the event dispatcher if ALL endpoints have closed it.
-            // when an endpoint closes, the poll-loop shuts down, and removes itself from the list of poll actions that need to be performed.
-            networkEventPoller.close(logger, this)
+        // this will ONLY close the event dispatcher if ALL endpoints have closed it.
+        // when an endpoint closes, the poll-loop shuts down, and removes itself from the list of poll actions that need to be performed.
+        networkEventPoller.close(logger, this)
 
-            // Connections MUST be closed first, because we want to make sure that no RMI messages can be received
-            // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
-            // IF CLOSED VIA RMI: this will wait for RMI timeouts if there are RMI in-progress.
-            if (sessionManager.enabled()) {
-                if (closeEverything) {
-                    // only close out RMI if we are using session management AND we are closing everything!
-                    responseManager.close(logger)
-                }
-            } else {
-                // no session management, so always clear this out.
-                responseManager.close(logger)
-            }
+        // Connections MUST be closed first, because we want to make sure that no RMI messages can be received
+        // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
+        // IF CLOSED VIA RMI: this will wait for RMI timeouts if there are RMI in-progress.
+        if (closeEverything) {
+            // only close out RMI if we are closing everything!
+            responseManager.close(logger)
+        }
 
-            // don't do these things if we are "closed" from a client connection disconnect
-            // if there are any events going on, we want to schedule them to run AFTER all other events for this endpoint are done
-                if (closeEverything) {
-                    // when the client connection is closed, we don't close the driver/etc.
 
-                    // Clears out all registered events
-                    listenerManager.close()
+        // don't do these things if we are "closed" from a client connection disconnect
+        // if there are any events going on, we want to schedule them to run AFTER all other events for this endpoint are done
+        if (closeEverything) {
+            // when the client connection is closed, we don't close the driver/etc.
 
-                    // Remove from memory the data from the back-end storage
-                    storage.close()
-                }
+            // Clears out all registered events
+            listenerManager.close()
 
-                // we might be restarting the aeron driver, so make sure it's closed.
-                aeronDriver.close()
+            // Remove from memory the data from the back-end storage
+            storage.close()
+        }
 
-                shutdown = true
+        // we might be restarting the aeron driver, so make sure it's closed.
+        aeronDriver.close()
 
-                // the shutdown here must be in the launchSequentially lambda, this way we can guarantee the driver is closed before we move on
-                shutdownLatch.countDown()
-                shutdownInProgress.lazySet(false)
+        shutdown = true
 
-                if (releaseWaitingThreads) {
-                    logger.trace("Counting down the close latch...")
-                    closeLatch.countDown()
-                }
+        // the shutdown here must be in the launchSequentially lambda, this way we can guarantee the driver is closed before we move on
+        shutdownLatch.countDown()
+        shutdownInProgress.lazySet(false)
 
-                logger.info("Done shutting down the endpoint.")
+        if (releaseWaitingThreads) {
+            logger.trace("Counting down the close latch...")
+            closeLatch.countDown()
+        }
+
+        logger.info("Done shutting down the endpoint.")
     }
 
     /**

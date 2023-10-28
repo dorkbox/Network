@@ -70,12 +70,12 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         }
 
     /**
-     * If a connection is in a temporal state (in the middle of a reconnect) and sessions are enabled -- then how long should we consider
-     * a new connection from the same client as part of the same session.
+     * If a connection is in a temporal state (in the middle of a reconnect) and a buffered connection is in use -- then how long should we consider
+     * a new connection from the same client as part of the same "session".
      *
      * The session timeout cannot be shorter than 60 seconds, and the server will send this configuration to the client
      */
-    var sessionTimeoutSeconds = TimeUnit.MINUTES.toSeconds(2)
+    var bufferedConnectionTimeoutSeconds = TimeUnit.MINUTES.toSeconds(2)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -118,7 +118,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         config.listenIpAddress = listenIpAddress
         config.maxClientCount = maxClientCount
         config.maxConnectionsPerIpAddress = maxConnectionsPerIpAddress
-        config.sessionTimeoutSeconds = sessionTimeoutSeconds
+        config.bufferedConnectionTimeoutSeconds = bufferedConnectionTimeoutSeconds
         config.settingsStore = settingsStore
 
         super.copy(config)
@@ -134,7 +134,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         if (listenIpAddress != other.listenIpAddress) return false
         if (maxClientCount != other.maxClientCount) return false
         if (maxConnectionsPerIpAddress != other.maxConnectionsPerIpAddress) return false
-        if (sessionTimeoutSeconds != other.sessionTimeoutSeconds) return false
+        if (bufferedConnectionTimeoutSeconds != other.bufferedConnectionTimeoutSeconds) return false
         if (settingsStore != other.settingsStore) return false
 
         return true
@@ -145,7 +145,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         result = 31 * result + listenIpAddress.hashCode()
         result = 31 * result + maxClientCount
         result = 31 * result + maxConnectionsPerIpAddress
-        result = 31 * result + sessionTimeoutSeconds.hashCode()
+        result = 31 * result + bufferedConnectionTimeoutSeconds.hashCode()
         result = 31 * result + settingsStore.hashCode()
         return result
     }
@@ -175,7 +175,6 @@ class ClientConfiguration : dorkbox.network.Configuration() {
         super.validate()
 
         // have to do some basic validation of our configuration
-
         if (port != -1) {
             // this means it was configured!
             require(port > 0) { "Client listen port must be > 0" }

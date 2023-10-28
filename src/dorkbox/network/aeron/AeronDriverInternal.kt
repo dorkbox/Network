@@ -148,7 +148,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
             // this is bad! We must close this connection. THIS WILL BE CALLED AS FAST AS THE CPU CAN RUN (because of how aeron works).
             if (!mustRestartDriverOnError) {
-
                 var restartNetwork = false
 
                 // if the network interface is removed (for example, a VPN connection).

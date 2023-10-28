@@ -19,7 +19,7 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
-import dorkbox.network.connection.session.SessionConnection
+import dorkbox.network.connection.buffer.BufferedSession
 import dorkbox.network.ping.Ping
 import dorkbox.network.rmi.RmiSupportConnection
 import io.aeron.Image
@@ -32,10 +32,15 @@ import org.agrona.DirectBuffer
 import javax.crypto.SecretKey
 
 /**
- * This connection is established once the registration information is validated, and the various connect/filter checks have passed
+ * This connection is established once the registration information is validated, and the various connect/filter checks have passed.
+ *
+ * Connections are also BUFFERED, meaning that if the connection between a client-server goes down because of a network glitch, then the
+ * data being sent is not lost (it is buffered) and then re-sent once a new connection has the same UUID within the timout period.
+ *
+ * References to the old connection will also redirect to the new connection.
  */
 open class Connection(connectionParameters: ConnectionParams<*>) {
-    private var messageHandler: FragmentHandler
+    private val messageHandler: FragmentHandler
 
     /**
      * The specific connection details for this connection!
@@ -107,6 +112,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     val isNetwork = !isIpc
 
     /**
+     * used when the connection is buffered
+     */
+    private val bufferedSession: BufferedSession
+
+    /**
      * The largest size a SINGLE message via AERON can be. Because the maximum size we can send in a "single fragment" is the
      * publication.maxPayloadLength() function (which is the MTU length less header). We could depend on Aeron for fragment reassembly,
      * but that has a (very low) maximum reassembly size -- so we have our own mechanism for object fragmentation/assembly, which
@@ -164,11 +174,17 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             endPoint.dataReceive(buffer, offset, length, header, this@Connection)
         }
 
+        bufferedSession = when (endPoint) {
+            is Server -> endPoint.bufferedManager.onConnect(this)
+            is Client -> endPoint.bufferedManager!!.onConnect(this)
+            else  -> throw RuntimeException("Unable to determine type, aborting!")
+        }
+
         @Suppress("LeakingThis")
         rmi = endPoint.rmiConnectionSupport.getNewRmiSupport(this)
 
         // For toString() and logging
-        toString0 = info.getLogInfo(logger)
+        toString0 = info.getLogInfo(logger.isDebugEnabled)
     }
 
     /**
@@ -200,9 +216,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Safely sends objects to a destination, if `abortEarly` is true, there are no retries if sending the message fails.
      *
-     *  @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
+     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    internal open fun send(message: Any, abortEarly: Boolean): Boolean {
+    internal fun send(message: Any, abortEarly: Boolean): Boolean {
         if (logger.isTraceEnabled) {
             // The handshake sessionId IS NOT globally unique
             // don't automatically create the lambda when trace is disabled! Because this uses 'outside' scoped info, it's a new lambda each time!
@@ -210,7 +226,28 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
                 logger.trace("[$toString0] send: ${message.javaClass.simpleName} : $message")
             }
         }
-        return endPoint.write(message, publication, sendIdleStrategy, this@Connection, maxMessageSize, abortEarly)
+
+        val success = endPoint.write(message, publication, sendIdleStrategy, this@Connection, maxMessageSize, abortEarly)
+
+        return if (!success && message !is DisconnectMessage) {
+            // queue up the messages, because we couldn't write them for whatever reason!
+            // NEVER QUEUE THE DISCONNECT MESSAGE!
+            bufferedSession.queueMessage(this@Connection, message, abortEarly)
+        } else {
+            success
+        }
+    }
+
+    private fun sendNoBuffer(message: Any): Boolean {
+        if (logger.isTraceEnabled) {
+            // The handshake sessionId IS NOT globally unique
+            // don't automatically create the lambda when trace is disabled! Because this uses 'outside' scoped info, it's a new lambda each time!
+            if (logger.isTraceEnabled) {
+                logger.trace("[$toString0] send: ${message.javaClass.simpleName} : $message")
+            }
+        }
+
+        return endPoint.write(message, publication, sendIdleStrategy, this@Connection, maxMessageSize, false)
     }
 
     /**
@@ -280,6 +317,17 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     internal fun notifyOnMessage(message: Any): Boolean {
         return listenerManager.value?.notifyOnMessage(this, message) ?: false
+    }
+
+    internal fun sendBufferedMessages() {
+        // now send all buffered/pending messages
+        if (logger.isDebugEnabled) {
+            logger.debug("Sending pending messages: ${bufferedSession.pendingMessagesQueue.size}")
+        }
+
+        bufferedSession.pendingMessagesQueue.forEach {
+            sendNoBuffer(it)
+        }
     }
 
     /**
@@ -380,8 +428,20 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         // make sure to save off the RMI objects for session management
-        if (!closeEverything && endPoint.sessionManager.enabled()) {
-            endPoint.sessionManager.onDisconnect(this as SessionConnection)
+        if (!closeEverything) {
+            when (endPoint) {
+                is Server     -> endPoint.bufferedManager.onDisconnect(this)
+                is Client -> endPoint.bufferedManager!!.onDisconnect(this)
+                else  -> throw RuntimeException("Unable to determine type, aborting!")
+            }
+        }
+
+        if (!closeEverything) {
+            when (endPoint) {
+                is Server -> endPoint.bufferedManager.onDisconnect(this)
+                is Client -> endPoint.bufferedManager!!.onDisconnect(this)
+                else  -> throw RuntimeException("Unable to determine type, aborting!")
+            }
         }
 
         // on close, we want to make sure this file is DELETED!

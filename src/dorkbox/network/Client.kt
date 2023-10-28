@@ -25,14 +25,14 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.EventActionOperator
 import dorkbox.network.aeron.EventCloseOperator
 import dorkbox.network.aeron.EventPoller
-import dorkbox.network.connection.*
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.IpInfo.Companion.formatCommonAddress
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
-import dorkbox.network.connection.session.SessionClient
-import dorkbox.network.connection.session.SessionConnection
-import dorkbox.network.connection.session.SessionManagerFull
-import dorkbox.network.connection.session.SessionManagerNoOp
+import dorkbox.network.connection.PublicKeyValidationState
+import dorkbox.network.connection.buffer.BufferManager
 import dorkbox.network.exceptions.*
 import dorkbox.network.handshake.ClientConnectionDriver
 import dorkbox.network.handshake.ClientHandshake
@@ -147,6 +147,14 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
     @Volatile
     private var stopConnectOnShutdown = false
+
+    /**
+     * Different connections (to the same client) can be "buffered", meaning that if they "go down" because of a network glitch -- the data
+     * being sent is not lost (it is buffered) and then re-sent once the new connection is established. References to the old connection
+     * will also redirect to the new connection.
+     */
+    @Volatile
+    internal var bufferedManager: BufferManager<CONNECTION>? = null
 
     // is valid when there is a connection to the server, otherwise it is null
     @Volatile
@@ -420,7 +428,6 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             require(port1 < 65535) { "port1 must be < 65535" }
             require(port2 < 65535) { "port2 must be < 65535" }
         }
-
         require(connectionTimeoutSec >= 0) { "connectionTimeoutSec '$connectionTimeoutSec' is invalid. It must be >=0" }
 
         // only try to connect via IPv4 if we have a network interface that supports it!
@@ -550,7 +557,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
 
             // the handshake connection is closed when the handshake has an error, or it is finished
-            var handshakeConnection: ClientHandshakeDriver? = null
+            var handshakeConnection: ClientHandshakeDriver?
 
             try {
                 // always start the aeron driver inside the restart loop.
@@ -699,6 +706,9 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             handshakeTimeoutNs = handshakeTimeoutNs
         )
 
+        bufferedManager = BufferManager(config, listenerManager, aeronDriver, connectionInfo.sessionTimeout)
+
+
         // VALIDATE:: check to see if the remote connection's public key has changed!
         val validateRemoteAddress = if (handshakeConnection.pubSub.isIpc) {
             PublicKeyValidationState.VALID
@@ -720,13 +730,6 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         // is rogue, we do not want to carelessly provide info.
 
 
-        // NOTE: this can change depending on what the server specifies!
-        // should we queue messages during a reconnect? This is important if the client/server connection is unstable
-        if (connectionInfo.enableSession && sessionManager is SessionManagerNoOp) {
-            sessionManager = SessionManagerFull(config, listenerManager as ListenerManager<SessionConnection>, aeronDriver, connectionInfo.sessionTimeout)
-        } else if (!connectionInfo.enableSession && sessionManager is SessionManagerFull) {
-            sessionManager = SessionManagerNoOp()
-        }
 
         ///////////////
         ////   RMI
@@ -772,12 +775,12 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         )
 
         val pubSub = clientConnection.connectionInfo
-        val logInfo = pubSub.getLogInfo(logger)
-        val connectionType = if (this is SessionClient) "session connection" else "connection"
+
+        val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
         if (logger.isDebugEnabled) {
-            logger.debug("Creating new $connectionType to $logInfo")
+            logger.debug("Creating new buffered connection to $logInfo")
         } else {
-            logger.info("Creating new $connectionType to $logInfo")
+            logger.info("Creating new buffered connection to $logInfo")
         }
 
         val newConnection = newConnection(ConnectionParams(
@@ -788,17 +791,16 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             connectionInfo.secretKey
         ))
 
-        sessionManager.onNewConnection(newConnection)
+        bufferedManager?.onConnect(newConnection)
 
         if (!handshakeConnection.pubSub.isIpc) {
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
-            val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
             if (logger.isTraceEnabled) {
-                logger.trace("[${handshakeConnection.details}] (${handshake.connectKey}) $connType (${newConnection.id}) adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
+                logger.trace("[${handshakeConnection.details}] (${handshake.connectKey}) Buffered connection (${newConnection.id}) adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
             } else if (logger.isDebugEnabled) {
-                logger.debug("[${handshakeConnection.details}] $connType (${newConnection.id}) adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
+                logger.debug("[${handshakeConnection.details}] Buffered connection (${newConnection.id}) adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
             } else if (logger.isInfoEnabled) {
-                logger.info("[${handshakeConnection.details}] $connType adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
+                logger.info("[${handshakeConnection.details}] Buffered connection adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
             }
 
             storage.addRegisteredServerKey(address!!, connectionInfo.publicKey)
@@ -822,25 +824,18 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         // finished with the handshake, so always close these!
         handshakeConnection.close(this)
 
-        val connType = if (newConnection is SessionConnection) "Session connection" else "Connection"
         if (logger.isTraceEnabled) {
-            logger.debug("[${handshakeConnection.details}] (${handshake.connectKey}) $connType (${newConnection.id}) done with handshake.")
+            logger.debug("[${handshakeConnection.details}] (${handshake.connectKey}) Buffered connection (${newConnection.id}) done with handshake.")
         } else if (logger.isDebugEnabled) {
-            logger.debug("[${handshakeConnection.details}] $connType (${newConnection.id}) done with handshake.")
+            logger.debug("[${handshakeConnection.details}] Buffered connection (${newConnection.id}) done with handshake.")
         }
 
         connection0 = newConnection
         newConnection.setImage()
 
 
-        // in the specific case of using sessions, we don't want to call 'init' or `connect` for a connection that is resuming a session
-        // when applicable - we ALSO want to restore RMI objects BEFORE the connection is fully setup!
-        val newSession = sessionManager.onInit(newConnection)
-
         // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
-        if (newSession) {
-            listenerManager.notifyInit(newConnection)
-        }
+        listenerManager.notifyInit(newConnection)
 
         // this enables the connection to start polling for messages
         addConnection(newConnection)
@@ -882,7 +877,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                 }
 
                 val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
-                val dirtyDisconnectWithSession = (this@Client is SessionClient) && !shutdownEventPoller && connection.isDirtyClose()
+                val dirtyDisconnectWithSession = !shutdownEventPoller && connection.isDirtyClose()
 
                 autoReconnect = mustRestartDriverOnError || dirtyDisconnectWithSession
 
@@ -950,9 +945,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         listenerManager.notifyConnect(newConnection)
 
-        if (!newSession) {
-            (newConnection as SessionConnection).sendPendingMessages()
-        }
+        newConnection.sendBufferedMessages()
     }
 
     /**
@@ -1050,6 +1043,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
      */
     fun close(closeEverything: Boolean = true) {
         stopConnectOnShutdown = true
+        bufferedManager?.close()
         close(closeEverything = closeEverything, sendDisconnectMessage = true, releaseWaitingThreads = true)
     }
 

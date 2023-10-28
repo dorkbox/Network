@@ -3,7 +3,7 @@ module dorkbox.network {
     exports dorkbox.network.aeron;
     exports dorkbox.network.connection;
     exports dorkbox.network.connection.streaming;
-    exports dorkbox.network.connection.session;
+    exports dorkbox.network.connection.buffer;
     exports dorkbox.network.connectionType;
     exports dorkbox.network.exceptions;
     exports dorkbox.network.handshake;

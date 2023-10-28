@@ -274,9 +274,7 @@ internal class RmiClient(val isGlobal: Boolean,
 
             val success = connection.send(invokeMethod)
             if (!success) {
-                if (!connection.endPoint.sessionManager.enabled()) {
-                    throw RmiException("Unable to send async message, an error occurred during the send process")
-                }
+                throw RmiException("Unable to send async message, an error occurred during the send process")
             }
 
             // if we are async then we return immediately (but must return the correct type!)
@@ -310,10 +308,8 @@ internal class RmiClient(val isGlobal: Boolean,
 
         val success = connection.send(invokeMethod)
         if (!success) {
-            if (!connection.endPoint.sessionManager.enabled()) {
-                responseManager.abort(responseWaiter, logger)
-                throw RmiException("Unable to send message, an error occurred during the send process")
-            }
+            responseManager.abort(responseWaiter, logger)
+            throw RmiException("Unable to send message, an error occurred during the send process")
         }
 
 

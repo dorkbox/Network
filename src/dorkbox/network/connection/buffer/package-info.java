@@ -14,11 +14,4 @@
  * limitations under the License.
  */
 
-package dorkbox.network.connection.session
-
-import dorkbox.network.connection.ConnectionParams
-
-interface SessionEndpoint<CONNECTION: SessionConnection> {
-    fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION
-    fun newSession(connection: CONNECTION): Session<CONNECTION>
-}
+package dorkbox.network.connection.buffer;
