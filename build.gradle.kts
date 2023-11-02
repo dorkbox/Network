@@ -146,7 +146,7 @@ shadowJar.apply {
     manifest.inheritFrom(tasks.jar.get().manifest)
 
     manifest.attributes.apply {
-        put("Main-Class", "dorkboxTest.network.app.AeronRmiClientServer")
+        put("Main-Class", "dorkboxTest.network.app.AeronClientServerForever")
     }
 
     mergeServiceFiles()
