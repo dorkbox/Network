@@ -264,6 +264,19 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         return send(message, false)
     }
 
+
+    /**
+     * Safely sends objects to a destination, where the callback is notified once the remote endpoint has received the message.
+     *
+     * This is to guarantee happens-before, and using this will depend upon APP+NETWORK latency, and is (by design) not as performant as
+     * sending a regular message!
+     *
+     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
+     */
+    fun send(message: Any, onSuccessCallback: Connection.() -> Unit): Boolean {
+        return sendSync(message, onSuccessCallback)
+    }
+
     /**
      * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
      *
@@ -555,6 +568,55 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         return id == other1.id
     }
 
+    internal fun receiveSendSync(sendSync: SendSync) {
+        if (sendSync.message != null) {
+            // this is on the "remote end".
+            sendSync.message = null
+
+            if (!send(sendSync)) {
+                logger.error("Error returning send-sync: $sendSync")
+            }
+        } else {
+            // this is on the "local end" when the response comes back
+            val responseId = sendSync.id
+
+            // process the ping message so that our ping callback does something
+
+            // this will be null if the ping took longer than XXX seconds and was cancelled
+            val result = EndPoint.responseManager.removeWaiterCallback<Connection.() -> Unit>(responseId, logger)
+            if (result != null) {
+                result(this)
+            } else {
+                logger.error("Unable to receive send-sync, there was no waiting response for $sendSync ($responseId)")
+            }
+        }
+    }
+
+
+    /**
+     * Safely sends objects to a destination, the callback is notified once the remote endpoint has received the message.
+     *
+     * This is to guarantee happens-before, and using this will depend upon APP+NETWORK latency, and is (by design) not as performant as
+     * sending a regular message!
+     *
+     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
+     */
+    private fun sendSync(message: Any, onSuccessCallback: Connection.() -> Unit): Boolean {
+        val id = EndPoint.responseManager.prepWithCallback(logger, onSuccessCallback)
+
+        val sendSync = SendSync()
+        sendSync.message = message
+        sendSync.id = id
+
+        // if there is no ping response EVER, it means that the connection is in a critically BAD state!
+        // eventually, all the ping replies (or, in our case, the RMI replies that have timed out) will
+        // become recycled.
+        // Is it a memory-leak? No, because the memory will **EVENTUALLY** get freed.
+
+        return send(sendSync, false)
+    }
+
+
     internal fun receivePing(ping: Ping) {
         if (ping.pongTime == 0L) {
             // this is on the "remote end".
@@ -567,21 +629,21 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             // this is on the "local end" when the response comes back
             ping.finishedTime = System.currentTimeMillis()
 
-            val rmiId = ping.packedId
+            val responseId = ping.packedId
 
             // process the ping message so that our ping callback does something
 
             // this will be null if the ping took longer than XXX seconds and was cancelled
-            val result = EndPoint.responseManager.removeWaiterCallback<Ping.() -> Unit>(rmiId, logger)
+            val result = EndPoint.responseManager.removeWaiterCallback<Ping.() -> Unit>(responseId, logger)
             if (result != null) {
                 result(ping)
             } else {
-                logger.error("Unable to receive ping, there was no waiting response for $ping ($rmiId)")
+                logger.error("Unable to receive ping, there was no waiting response for $ping ($responseId)")
             }
         }
     }
 
-    internal fun sendPing(function: Ping.() -> Unit): Boolean {
+    private fun sendPing(function: Ping.() -> Unit): Boolean {
         val id = EndPoint.responseManager.prepWithCallback(logger, function)
 
         val ping = Ping()

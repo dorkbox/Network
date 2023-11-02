@@ -493,15 +493,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     }
 
     /**
-     * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
-     *
-     * @return true if the message was successfully sent by aeron
-     */
-    internal fun ping(connection: Connection, function: Ping.() -> Unit): Boolean {
-        return connection.sendPing(function)
-    }
-
-    /**
      * This is designed to permit modifying/overriding how data is processed on the network.
      *
      * This will split a message if it's too large to send in a single network message.
@@ -682,7 +673,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 try {
                     connection.receivePing(message)
                 } catch (e: Exception) {
-                    listenerManager.notifyError(connection, PingException("Error while processing Ping message", e))
+                    listenerManager.notifyError(connection, PingException("Error while processing Ping message: $message", e))
                 }
             }
 
@@ -696,6 +687,33 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                     rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
                 } catch (e: Exception) {
                     listenerManager.notifyError(connection, RMIException("Error while processing RMI message", e))
+                }
+            }
+
+            is SendSync -> {
+                // SendSync enables us to NOTIFY the remote endpoint that we have received the message. This is to guarantee happens-before!
+                // Using this will depend upon APP+NETWORK latency, and is (by design) not as performant as sending a regular message!
+                try {
+                    val message2 = message.message
+                    if (message2 != null) {
+                        // this is on the "remote end". Make sure to dispatch/notify the message BEFORE we send a message back!
+                        try {
+                            var hasListeners = listenerManager.notifyOnMessage(connection, message2)
+
+                            // each connection registers, and is polled INDEPENDENTLY for messages.
+                            hasListeners = hasListeners or connection.notifyOnMessage(message2)
+
+                            if (!hasListeners) {
+                                listenerManager.notifyError(connection, MessageDispatchException("No send-sync message callbacks found for ${message2::class.java.name}"))
+                            }
+                        } catch (e: Exception) {
+                            listenerManager.notifyError(connection, MessageDispatchException("Error processing send-sync message ${message2::class.java.name}", e))
+                        }
+                    }
+
+                    connection.receiveSendSync(message)
+                } catch (e: Exception) {
+                    listenerManager.notifyError(connection, SendSyncException("Error while processing send-sync message: $message", e))
                 }
             }
 

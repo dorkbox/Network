@@ -13,44 +13,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package dorkboxTest.network
 
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
+import kotlinx.atomicfu.atomic
+import org.junit.Assert
 import org.junit.Test
 
-class ErrorLoggerTest : BaseTest() {
-    class TestObj {
-        var entry = "1234"
-    }
+class SendSyncTest : BaseTest() {
+    val counter = atomic(0)
 
     @Test
-    fun customErrorLoggerTest() {
+    fun sendSync() {
+        // session/stream count errors
+        val serverSuccess = atomic(false)
+        val clientSuccess = atomic(false)
+
         val server = run {
             val configuration = serverConfig()
-            configuration.aeronErrorFilter = {
-                true // log all errors
-            }
-
-            configuration.serialization.register(TestObj::class.java)
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
 
-
-            server.onError { throwable ->
-                println("Error on connection $this")
-                throwable.printStackTrace()
-            }
-
-            server.onErrorGlobal { throwable ->
-                println("Global error!!!!")
-                throwable.printStackTrace()
-            }
-
-            server.onMessage<Any> {
-                throw Exception("server ERROR. SHOULD BE CAUGHT")
+            server.onMessage<String> {
+                serverSuccess.value = true
             }
 
             server
@@ -58,19 +47,22 @@ class ErrorLoggerTest : BaseTest() {
 
         val client = run {
             val config = clientConfig()
-            config.aeronErrorFilter = {
-                true // log all errors
-            }
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
 
             client.onConnect {
-                // can be any message, we just want the error-log to log something
-                send(TestObj())
+                repeat(100) {
+                    send("Hi, I'm waiting!") {
+                        // a send-sync object is returned, once the round-trip is complete, and we are notified
+                        val count = counter.getAndIncrement()
+                        if (count == 99) {
+                            clientSuccess.value = true
 
-                pause(200)
-                stopEndPoints()
+                            stopEndPoints()
+                        }
+                    }
+                }
             }
 
             client
@@ -80,5 +72,8 @@ class ErrorLoggerTest : BaseTest() {
         client.connect(LOCALHOST, 2000)
 
         waitForThreads()
+
+        Assert.assertTrue(clientSuccess.value)
+        Assert.assertTrue(serverSuccess.value)
     }
 }

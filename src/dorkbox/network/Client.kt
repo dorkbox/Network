@@ -1013,6 +1013,26 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
     }
 
     /**
+     * Safely sends objects to a destination, where the callback is notified once the remote endpoint has received the message.
+     * This is to guarantee happens-before, and using this will depend upon APP+NETWORK latency, and is (by design) not as performant as
+     * sending a regular message!
+     *
+     * @return true if the message was sent successfully, false if the connection has been closed
+     */
+    fun send(message: Any, onSuccessCallback: CONNECTION.() -> Unit): Boolean {
+        val c = connection0
+
+        return if (c != null) {
+            @Suppress("UNCHECKED_CAST")
+            c.send(message, onSuccessCallback as Connection.() -> Unit)
+        } else {
+            val exception = TransmitException("Cannot send-sync a message when there is no connection!")
+            listenerManager.notifyError(exception)
+            false
+        }
+    }
+
+    /**
      * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
      *
      * @param function called when the ping returns (ie: update time/latency counters/metrics/etc)
@@ -1023,7 +1043,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         val c = connection0
 
         if (c != null) {
-            return super.ping(c, function)
+            return c.ping(function)
         } else {
             val exception = TransmitException("Cannot send a ping when there is no connection!")
             listenerManager.notifyError(exception)

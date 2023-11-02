@@ -31,7 +31,7 @@ import kotlin.concurrent.write
  *  - these are just looped around in a ring buffer.
  *  - these are stored here as int, however these are REALLY shorts and are int-packed when transferring data on the wire
  *
- *  (By default, for RMI...)
+ *  (By default, for RMI/Ping/SendSync...)
  *  - 0 is reserved for INVALID
  *  - 1 is reserved for ASYNC (the response will never be sent back, and we don't wait for it)
  *
@@ -41,7 +41,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         val TIMEOUT_EXCEPTION = TimeoutException().apply { stackTrace = arrayOf<StackTraceElement>() }
     }
 
-    private val rmiWaitersInUse = atomic(0)
+    private val responseWaitersInUse = atomic(0)
     private val waiterCache: Pool<ResponseWaiter>
 
     private val pendingLock = ReentrantReadWriteLock()
@@ -49,7 +49,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
 
     init {
         require(maxValuesInCache <= 65535) { "The maximum size for the values in the response manager is 65535"}
-        require(maxValuesInCache > minimumValue) { "< $minimumValue (0 and 1 for RMI) are reserved"}
+        require(maxValuesInCache > minimumValue) { "< $minimumValue (0 and 1 for RMI/Ping/SendSync) are reserved"}
         require(minimumValue > 1) { "The minimum value $minimumValue must be > 1"}
 
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
@@ -70,6 +70,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      * Called when we receive the answer for our initial request. If no response data, then the pending rmi data entry is deleted
      *
      * resume any pending remote object method invocations (if they are not async, or not manually waiting)
+     *
      * NOTE: async RMI will never call this (because async doesn't return a response)
      */
     fun notifyWaiter(id: Int, result: Any?, logger: Logger) {
@@ -117,7 +118,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
             // always return this to the cache!
             previous.result = null
             waiterCache.put(previous)
-            rmiWaitersInUse.getAndDecrement()
+            responseWaitersInUse.getAndDecrement()
 
             return result as T
         }
@@ -132,9 +133,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      */
     fun prep(logger: Logger): ResponseWaiter {
         val waiter = waiterCache.take()
-        rmiWaitersInUse.getAndIncrement()
+        responseWaitersInUse.getAndIncrement()
         if (logger.isTraceEnabled) {
-            logger.trace("[RM] prep in-use: [${waiter.id}] ${rmiWaitersInUse.value}")
+            logger.trace("[RM] prep in-use: [${waiter.id}] ${responseWaitersInUse.value}")
         }
 
         // this will initialize the result
@@ -154,9 +155,9 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      */
     fun prepWithCallback(logger: Logger, function: Any): Int {
         val waiter = waiterCache.take()
-        rmiWaitersInUse.getAndIncrement()
+        responseWaitersInUse.getAndIncrement()
         if (logger.isTraceEnabled) {
-            logger.trace("[RM] prep in-use: [${waiter.id}]  ${rmiWaitersInUse.value}")
+            logger.trace("[RM] prep in-use: [${waiter.id}]  ${responseWaitersInUse.value}")
         }
 
         // this will initialize the result
@@ -199,7 +200,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         // always return the waiter to the cache
         responseWaiter.result = null
         waiterCache.put(responseWaiter)
-        rmiWaitersInUse.getAndDecrement()
+        responseWaitersInUse.getAndDecrement()
 
         if (resultOrWaiter is ResponseWaiter) {
             if (logger.isTraceEnabled) {
@@ -228,17 +229,18 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         // always return the waiter to the cache
         responseWaiter.result = null
         waiterCache.put(responseWaiter)
-        rmiWaitersInUse.getAndDecrement()
+        responseWaitersInUse.getAndDecrement()
     }
 
+    // This is only closed when shutting down the client/server.
     fun close(logger: Logger) {
         // technically, this isn't closing it, so much as it's cleaning it out
         if (logger.isDebugEnabled) {
-            logger.debug("Closing the response manager for RMI")
+            logger.debug("Closing the response manager")
         }
 
         // wait for responses, or wait for timeouts!
-        while (rmiWaitersInUse.value > 0) {
+        while (responseWaitersInUse.value > 0) {
             Thread.sleep(50)
         }
 
