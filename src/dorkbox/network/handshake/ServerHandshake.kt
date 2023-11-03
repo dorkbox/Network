@@ -74,7 +74,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
     init {
         // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
-        var handshakeTimeoutNs = aeronDriver.publicationConnectionTimeoutNs() + aeronDriver.lingerNs()
+        var handshakeTimeoutNs = TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong()) + aeronDriver.publicationConnectionTimeoutNs() + aeronDriver.lingerNs()
 
         if (EndPoint.DEBUG_CONNECTIONS) {
             // connections are extremely difficult to diagnose when the connection timeout is short

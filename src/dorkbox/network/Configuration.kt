@@ -455,7 +455,7 @@ abstract class Configuration protected constructor() {
     /**
      * How long a connection must be disconnected before we cleanup the memory associated with it
      */
-    var connectionCloseTimeoutInSeconds: Int = 10
+    var connectionCloseTimeoutInSeconds: Int = 60
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -469,7 +469,7 @@ abstract class Configuration protected constructor() {
      *
      * Too low and it's likely to get false-positives, too high and there will be some lag when detecting if a connection has been disconnected.
      */
-    var connectionExpirationTimoutNanos = TimeUnit.SECONDS.toNanos(2)
+    var connectionExpirationTimoutNanos = TimeUnit.SECONDS.toNanos(4)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value

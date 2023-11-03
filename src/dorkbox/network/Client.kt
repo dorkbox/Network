@@ -534,7 +534,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             (config.enableIpc && (remoteAddress == null || isSelfMachine)) || (!config.enableIpc && remoteAddress == null)
 
         // how long does the initial handshake take to connect
-        var handshakeTimeoutNs = aeronDriver.publicationConnectionTimeoutNs() + aeronDriver.lingerNs()
+        var handshakeTimeoutNs = TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong()) + aeronDriver.publicationConnectionTimeoutNs() + aeronDriver.lingerNs()
         // how long before we COMPLETELY give up retrying. A '0' means try forever.
         var connectionTimoutInNs = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
 
