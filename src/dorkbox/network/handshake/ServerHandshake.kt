@@ -223,6 +223,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
 
     /**
+     * NOTE: This must not be called on the main thread because it is blocking!
+     *
      * @return true if the connection was SUCCESS. False if the handshake poller should immediately close the publication
      */
     fun processIpcHandshakeMessageServer(
@@ -331,6 +333,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         var newConnection: CONNECTION? = null
         try {
             // Create a pub/sub at the given address and port, using the given stream ID.
+            // NOTE: This must not be called on the main thread because it is blocking!
             val newConnectionDriver = ServerConnectionDriver.build(
                 aeronDriver = aeronDriver,
                 ipInfo = server.ipInfo,
@@ -422,7 +425,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
     }
 
     /**
-     * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+     * NOTE: This must not be called on the main thread because it is blocking!
      *
      * @return true if the connection was SUCCESS. False if the handshake poller should immediately close the publication
      */
@@ -585,6 +588,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         var newConnection: CONNECTION? = null
         try {
             // Create a pub/sub at the given address and port, using the given stream ID.
+            // NOTE: This must not be called on the main thread because it is blocking!
             val newConnectionDriver = ServerConnectionDriver.build(
                 ipInfo = server.ipInfo,
                 aeronDriver = aeronDriver,
