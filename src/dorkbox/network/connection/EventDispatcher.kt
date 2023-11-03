@@ -34,11 +34,35 @@ internal class EventDispatcher(val type: String) {
         CONNECT, ERROR, CLOSE
     }
 
+    internal class ED(private val dispatcher: EventDispatcher, private val type: EDType) {
+        fun launch(function: () -> Unit) {
+            dispatcher.launch(type, function)
+        }
+
+        fun isDispatch(): Boolean {
+            return dispatcher.isDispatch(type)
+        }
+    }
+
+    internal class Dispatch() {
+        companion object {
+            val executor = Executors.newCachedThreadPool(
+                NamedThreadFactory("Multi", Configuration.networkThreadGroup)
+            )
+        }
+
+        fun launch(function: () -> Unit) {
+            executor.submit(function)
+        }
+    }
+
     companion object {
         private val DEBUG_EVENTS = false
         private val traceId = atomic(0)
 
         private val typedEntries: Array<EDType>
+
+        val MULTI = Dispatch()
 
         init {
             typedEntries = EDType.entries.toTypedArray()
@@ -65,15 +89,7 @@ internal class EventDispatcher(val type: String) {
         )
     }.toTypedArray()
 
-    internal class ED(private val dispatcher: EventDispatcher, private val type: EDType) {
-        fun launch(function: () -> Unit) {
-            dispatcher.launch(type, function)
-        }
 
-        fun isDispatch(): Boolean {
-            return dispatcher.isDispatch(type)
-        }
-    }
 
     val CONNECT: ED
     val ERROR: ED
