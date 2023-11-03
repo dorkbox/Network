@@ -387,7 +387,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: Log
         val startSent = endPoint.writeUnsafe(startMessage, publication, sendIdleStrategy, connection, kryo)
         if (!startSent) {
             // more critical error sending the message. we shouldn't retry or anything.
-            val errorMessage = "[${publication.sessionId()}] Error starting streaming content."
+            val errorMessage = "[${publication.sessionId()}] Error starting streaming content (could not send data)."
 
             // either client or server. No other choices. We create an exception, because it's more useful!
             val exception = endPoint.newException(errorMessage)
