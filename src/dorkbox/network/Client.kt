@@ -547,6 +547,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         val startTime = System.nanoTime()
         var success = false
         while (!stopConnectOnShutdown && (connectionTimoutInNs == 0L || System.nanoTime() - startTime < connectionTimoutInNs)) {
+            logger.trace("Starting connect process...")
 
             if (isShutdown()) {
                 resetOnError()

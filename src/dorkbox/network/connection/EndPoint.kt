@@ -911,6 +911,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             throw IllegalStateException("Unable to 'waitForClose()' while inside the network event dispatch, this will deadlock!")
         }
 
+        logger.trace("Waiting for endpoint to close...")
 
         var origCloseLatch: CountDownLatch? = null
 
@@ -1052,8 +1053,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         shutdown = true
 
         // the shutdown here must be in the launchSequentially lambda, this way we can guarantee the driver is closed before we move on
-        shutdownLatch.countDown()
         shutdownInProgress.lazySet(false)
+        shutdownLatch.countDown()
 
         if (releaseWaitingThreads) {
             logger.trace("Counting down the close latch...")
