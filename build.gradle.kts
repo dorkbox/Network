@@ -66,6 +66,10 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
 //    include("**/*.kt") // want to include kotlin files for the source. 'setSrcDirs' resets includes...
 //}
 
+// TODO: driver name resolution: https://github.com/real-logic/aeron/wiki/Driver-Name-Resolution
+//  this keeps us from having to restart the media driver when a connection changes IP addresses
+
+// TODO: virtual threads in java21 for polling?
 
 // if we are sending a SMALL byte array, then we SEND IT DIRECTLY in a more optimized manner (because we can count size info!)
 //   other side has to be able to parse/know that this was sent directly as bytes. It could be game state data, or voice data, etc.
@@ -170,7 +174,7 @@ dependencies {
     api("com.dorkbox:Collections:2.7")
     api("com.dorkbox:HexUtilities:1.1")
     api("com.dorkbox:JNA:1.2")
-    api("com.dorkbox:MinLog:2.5")
+    api("com.dorkbox:MinLog:2.6")
     api("com.dorkbox:NetworkDNS:2.16")
     api("com.dorkbox:NetworkUtils:2.23")
     api("com.dorkbox:OS:1.8")
