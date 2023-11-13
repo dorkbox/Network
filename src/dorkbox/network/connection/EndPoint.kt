@@ -145,8 +145,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal val endpointIsRunning = atomic(false)
 
     // this only prevents multiple shutdowns (in the event this close() is called multiple times)
-    @Volatile
-    private var shutdown = false
+    private var shutdown = atomic(false)
     internal val shutdownInProgress = atomic(false)
 
     @Volatile
@@ -320,7 +319,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         origPollerLatch.countDown()
 
         endpointIsRunning.lazySet(true)
-        shutdown = false
+        shutdown.lazySet(false)
         shutdownEventPoller = false
 
         // there are threading issues if there are client(s) and server's within the same JVM, where we have thread starvation
@@ -851,7 +850,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * @return true if this endpoint has been closed
      */
     fun isShutdown(): Boolean {
-        return shutdown
+        return shutdown.value
     }
 
     /**
@@ -1050,7 +1049,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         // we might be restarting the aeron driver, so make sure it's closed.
         aeronDriver.close()
 
-        shutdown = true
+        shutdown.lazySet(true)
 
         // the shutdown here must be in the launchSequentially lambda, this way we can guarantee the driver is closed before we move on
         shutdownInProgress.lazySet(false)
@@ -1079,7 +1078,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         shutdownLatch.countDown()
         pollerClosedLatch.countDown()
         endpointIsRunning.lazySet(false)
-        shutdown = false
+        shutdown.lazySet(false)
         shutdownEventPoller = false
     }
 
