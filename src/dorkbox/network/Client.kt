@@ -780,7 +780,6 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         ////   CONFIG THE CLIENT
         ///////////////
 
-
         // we are now connected, so we can connect to the NEW client-specific ports
         val clientConnection = ClientConnectionDriver.build(
             aeronDriver = aeronDriver,
