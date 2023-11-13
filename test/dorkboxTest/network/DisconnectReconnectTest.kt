@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory
 import java.util.concurrent.*
 
 class DisconnectReconnectTest : BaseTest() {
-    private val reconnects = 2
+    private val reconnects = 5
 
     @Test
     fun reconnectClient() {
@@ -37,9 +37,10 @@ class DisconnectReconnectTest : BaseTest() {
         val reconnectCount = atomic(0)
 
         val server = run {
-            val configuration = serverConfig()
+            val config = serverConfig()
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
 
-            val server: Server<Connection> = Server(configuration)
+            val server: Server<Connection> = Server(config)
             addEndPoint(server)
 
             server.onConnect {
@@ -55,6 +56,7 @@ class DisconnectReconnectTest : BaseTest() {
 
         val client = run {
             val config = clientConfig()
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
@@ -90,11 +92,13 @@ class DisconnectReconnectTest : BaseTest() {
         val reconnectCount = atomic(0)
 
         val server = run {
-            val configuration = serverConfig {
+            val config = serverConfig {
                 uniqueAeronDirectory = true
             }
 
-            val server: Server<Connection> = Server(configuration)
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
+
+            val server: Server<Connection> = Server(config)
             addEndPoint(server)
             server
         }
@@ -103,6 +107,8 @@ class DisconnectReconnectTest : BaseTest() {
             val config = clientConfig {
                 uniqueAeronDirectory = true
             }
+
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
@@ -164,6 +170,7 @@ class DisconnectReconnectTest : BaseTest() {
 
         val server = run {
             val config = serverConfig()
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
             config.serialization.rmi.register(CloseIface::class.java)
 
             val server: Server<Connection> = Server(config)
@@ -190,6 +197,7 @@ class DisconnectReconnectTest : BaseTest() {
         val client = run {
             val config = clientConfig()
             config.serialization.rmi.register(CloseIface::class.java, CloseImpl::class.java)
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
@@ -234,8 +242,10 @@ class DisconnectReconnectTest : BaseTest() {
         aeronDriver.start()
 
         val server = run {
-            val serverConfiguration = serverConfig()
-            val server: Server<Connection> = Server(serverConfiguration)
+            val config = serverConfig()
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
+
+            val server: Server<Connection> = Server(config)
             addEndPoint(server, false)
 
             server.onConnect {
@@ -251,6 +261,7 @@ class DisconnectReconnectTest : BaseTest() {
 
         val client = run {
             val config = clientConfig()
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client, false)
@@ -296,6 +307,7 @@ class DisconnectReconnectTest : BaseTest() {
         val server = run {
             val config = serverConfig()
             config.enableIpc = false
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
 
             val server: Server<Connection> = Server(config)
             addEndPoint(server)
@@ -314,6 +326,7 @@ class DisconnectReconnectTest : BaseTest() {
         val client = run {
             val config = clientConfig()
             config.enableIpc = true
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
@@ -350,6 +363,7 @@ class DisconnectReconnectTest : BaseTest() {
             val config = serverConfig()
             config.enableIpc = false
             config.uniqueAeronDirectory = true
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
 
             val server = Server<Connection>(config)
             addEndPoint(server)
@@ -364,6 +378,7 @@ class DisconnectReconnectTest : BaseTest() {
             val config = clientConfig()
             config.enableIpc = false
             config.uniqueAeronDirectory = true
+            config.connectionCloseTimeoutInSeconds = 0 // we want the unit test to go fast (there will be a limit with aeron linger, etc)
 
             val client = Client<Connection>(config)
             addEndPoint(client)
