@@ -31,7 +31,7 @@ import java.util.concurrent.*
 internal class EventDispatcher(val type: String) {
     enum class EDType {
         // CLOSE must be last!
-        CONNECT, ERROR, CLOSE
+        HANDSHAKE, CONNECT, ERROR, CLOSE
     }
 
     internal class ED(private val dispatcher: EventDispatcher, private val type: EDType) {
@@ -44,25 +44,11 @@ internal class EventDispatcher(val type: String) {
         }
     }
 
-    internal class Dispatch() {
-        companion object {
-            val executor = Executors.newCachedThreadPool(
-                NamedThreadFactory("Multi", Configuration.networkThreadGroup)
-            )
-        }
-
-        fun launch(function: () -> Unit) {
-            executor.submit(function)
-        }
-    }
-
     companion object {
         private val DEBUG_EVENTS = false
         private val traceId = atomic(0)
 
         private val typedEntries: Array<EDType>
-
-        val MULTI = Dispatch()
 
         init {
             typedEntries = EDType.entries.toTypedArray()
@@ -91,6 +77,7 @@ internal class EventDispatcher(val type: String) {
 
 
 
+    val HANDSHAKE: ED
     val CONNECT: ED
     val ERROR: ED
     val CLOSE: ED
@@ -103,6 +90,7 @@ internal class EventDispatcher(val type: String) {
             }
         }
 
+        HANDSHAKE = ED(this, EDType.HANDSHAKE)
         CONNECT = ED(this, EDType.CONNECT)
         ERROR = ED(this, EDType.ERROR)
         CLOSE = ED(this, EDType.CLOSE)

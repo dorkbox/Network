@@ -26,7 +26,6 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.IpInfo
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.exceptions.ServerHandshakeException
@@ -122,7 +121,7 @@ internal object ServerHandshakePollers {
 
             // NOTE: This MUST to happen in separates thread so that we can take as long as we need when creating publications and handshaking,
             //  because under load -- this will REGULARLY timeout! Under no circumstance can this happen in the main processing thread!!
-            EventDispatcher.MULTI.launch {
+            server.eventDispatch.HANDSHAKE.launch {
                 // we have read all the data, now dispatch it.
                 // HandshakeMessage.HELLO
                 // HandshakeMessage.DONE
@@ -377,7 +376,7 @@ internal object ServerHandshakePollers {
 
             // NOTE: This MUST to happen in separates thread so that we can take as long as we need when creating publications and handshaking,
             //  because under load -- this will REGULARLY timeout! Under no circumstance can this happen in the main processing thread!!
-            EventDispatcher.MULTI.launch {
+            server.eventDispatch.HANDSHAKE.launch {
                 // HandshakeMessage.HELLO
                 // HandshakeMessage.DONE
                 val messageState = message.state
