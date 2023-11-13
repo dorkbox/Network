@@ -21,7 +21,6 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
-import com.esotericsoftware.kryo.KryoException
 import dorkbox.hex.toHexString
 import dorkbox.network.*
 import dorkbox.network.aeron.AeronDriver
@@ -199,10 +198,8 @@ abstract class BaseTest {
         endPoint.onError { logger.error("UNIT TEST: ERROR! $id (${uuid.toHexString()})", it) }
 
         endPoint.onError {
-            if (it is KryoException) {
-                logger.error("UNIT TEST: ERROR! $id (${uuid.toHexString()})", it)
-                Assert.fail("KryoException caught, and it shouldn't be!")
-            }
+            logger.error("UNIT TEST: ERROR! $id (${uuid.toHexString()})", it)
+            Assert.fail("Exception caught, and it shouldn't have happened!")
         }
 
         endPointConnections.add(endPoint)
