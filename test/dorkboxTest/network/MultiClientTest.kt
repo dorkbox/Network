@@ -23,7 +23,8 @@ import dorkbox.network.connection.Connection
 import dorkbox.util.NamedThreadFactory
 import io.aeron.driver.ThreadingMode
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.*
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.junit.Assert
 import org.junit.Test
 import java.text.SimpleDateFormat
@@ -32,7 +33,7 @@ import java.util.concurrent.*
 
 @Suppress("UNUSED_ANONYMOUS_PARAMETER")
 class MultiClientTest : BaseTest() {
-    private val totalCount = 40
+    private val totalCount = 100
 
     private val clientConnectCount = atomic(0)
     private val serverConnectCount = atomic(0)
@@ -97,7 +98,7 @@ class MultiClientTest : BaseTest() {
         }
 
         // if we are on the same JVM, the defaultScope for coroutines is SHARED, and limited!
-        val differentThreadLaunchers = Executors.newFixedThreadPool(8,
+        val differentThreadLaunchers = Executors.newFixedThreadPool(totalCount/2,
             NamedThreadFactory("Unit Test Client", Configuration.networkThreadGroup, true)
         )
 
