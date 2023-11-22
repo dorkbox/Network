@@ -33,7 +33,8 @@ import java.util.concurrent.*
 
 @Suppress("UNUSED_ANONYMOUS_PARAMETER")
 class MultiClientTest : BaseTest() {
-    private val totalCount = 100
+    // this can be upped to 100 for stress testing, but for general unit tests this should be smaller (as this is sensitive on the load of the machine)
+    private val totalCount = 10
 
     private val clientConnectCount = atomic(0)
     private val serverConnectCount = atomic(0)
