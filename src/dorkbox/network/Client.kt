@@ -459,16 +459,21 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         if (eventDispatch.isDispatch() && !eventDispatch.CONNECT.isDispatch()) {
             // only re-dispatch if we are on the event dispatch AND it's not the CONNECT one
             // if we are on an "outside" thread, then we don't care.
-            eventDispatch.CONNECT.launch {
-                connect(
-                    remoteAddress = remoteAddress,
-                    remoteAddressString = remoteAddressString,
-                    remoteAddressPrettyString = remoteAddressPrettyString,
-                    port1 = port1,
-                    port2 = port2,
-                    connectionTimeoutSec = connectionTimeoutSec,
-                    reliable = reliable)
+
+            // we have to guarantee that CLOSE finishes running first! If we are already on close, then this will just run after close is finished.
+            eventDispatch.CLOSE.launch {
+                eventDispatch.CONNECT.launch {
+                    connect(
+                        remoteAddress = remoteAddress,
+                        remoteAddressString = remoteAddressString,
+                        remoteAddressPrettyString = remoteAddressPrettyString,
+                        port1 = port1,
+                        port2 = port2,
+                        connectionTimeoutSec = connectionTimeoutSec,
+                        reliable = reliable)
+                }
             }
+
             return
         }
 
