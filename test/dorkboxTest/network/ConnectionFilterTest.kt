@@ -271,7 +271,11 @@ class ConnectionFilterTest : BaseTest() {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
             stopEndPoints()
-            waitForThreads()
+            waitForThreads { errors ->
+                errors.filterNot {
+                    it.message?.contains("Connection was not permitted!") ?: false
+                }
+            }
             throw e
         }
 
@@ -370,7 +374,11 @@ class ConnectionFilterTest : BaseTest() {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
             stopEndPoints()
-            waitForThreads()
+            waitForThreads { errors ->
+                errors.filterNot {
+                    it.message?.contains("Connection was not permitted!") ?: false
+                }
+            }
             throw e
         }
 
@@ -518,7 +526,11 @@ class ConnectionFilterTest : BaseTest() {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
             stopEndPoints()
-            waitForThreads()
+            waitForThreads{ errors ->
+                errors.filterNot {
+                    it.message?.contains("Connection was not permitted!") ?: false
+                }
+            }
             throw e
         }
 
@@ -560,7 +572,12 @@ class ConnectionFilterTest : BaseTest() {
             client.connect(LOCALHOST, 2000)
         } catch (e: Exception) {
             stopEndPoints()
-            waitForThreads()
+            waitForThreads{ errors ->
+                errors.filterNot {
+                    it.message?.contains("Connection was not permitted!") ?: false
+                }
+            }
+
             throw e
         }
 

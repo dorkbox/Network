@@ -168,6 +168,8 @@ abstract class BaseTest {
 
     private val endPointConnections: MutableList<EndPoint<*>> = CopyOnWriteArrayList()
 
+    private var errors = mutableListOf<Throwable>()
+
     @Volatile
     private var isStopping = false
 
@@ -195,11 +197,14 @@ abstract class BaseTest {
         endPoint.onConnect { logger.error("UNIT TEST: connect $id (${uuid.toHexString()})") }
         endPoint.onDisconnect { logger.error("UNIT TEST: disconnect $id (${uuid.toHexString()})") }
 
-        endPoint.onError { logger.error("UNIT TEST: ERROR! $id (${uuid.toHexString()})", it) }
-
         endPoint.onError {
             logger.error("UNIT TEST: ERROR! $id (${uuid.toHexString()})", it)
-            Assert.fail("Exception caught, and it shouldn't have happened!")
+            errors.add(it)
+        }
+
+        endPoint.onErrorGlobal {
+            logger.error("UNIT TEST: GLOBAL ERROR!", it)
+            errors.add(it)
         }
 
         endPointConnections.add(endPoint)
@@ -272,7 +277,7 @@ abstract class BaseTest {
      *
      * @param stopAfterSeconds how many seconds to wait, the default is 2 minutes.
      */
-    fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT) {
+    fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT, onShutdown: (List<Throwable>) -> List<Throwable> = { it }) {
         val clients = endPointConnections.filterIsInstance<Client<Connection>>()
         val servers = endPointConnections.filterIsInstance<Server<Connection>>()
 
@@ -330,6 +335,18 @@ abstract class BaseTest {
         endPointConnections.clear()
 
         logger.error("Finished shutting down all endpoints... ($successClients, $successServers)")
+
+        if (errors.isNotEmpty()) {
+            val acceptableErrors = errors.filterNot { it.message?.contains("Unable to send message. (Connection in non-connected state, aborted attempt! Not connected)") ?: false }
+            val filteredErrors = onShutdown(acceptableErrors)
+            if (filteredErrors.isNotEmpty()) {
+                filteredErrors.forEach {
+                    it.printStackTrace()
+                }
+
+                Assert.fail("Exception caught, and it shouldn't have happened!")
+            }
+        }
     }
 
     @Before

@@ -27,6 +27,8 @@ class ErrorLoggerTest : BaseTest() {
 
     @Test
     fun customErrorLoggerTest() {
+        val exception = Exception("server ERROR. SHOULD BE CAUGHT")
+
         val server = run {
             val configuration = serverConfig()
             configuration.aeronErrorFilter = {
@@ -50,7 +52,7 @@ class ErrorLoggerTest : BaseTest() {
             }
 
             server.onMessage<Any> {
-                throw Exception("server ERROR. SHOULD BE CAUGHT")
+                throw exception
             }
 
             server
@@ -79,6 +81,9 @@ class ErrorLoggerTest : BaseTest() {
         server.bind(2000)
         client.connect(LOCALHOST, 2000)
 
-        waitForThreads()
+        waitForThreads() { errors ->
+            // we don't want to fail the unit test for this exception
+            errors.filter { it != exception }
+        }
     }
 }
