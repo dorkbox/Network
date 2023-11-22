@@ -165,23 +165,23 @@ shadowJar.apply {
 
 
 dependencies {
-    api("org.jetbrains.kotlinx:atomicfu:0.22.0")
+    api("org.jetbrains.kotlinx:atomicfu:0.23.0")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 
     // https://github.com/dorkbox
-    api("com.dorkbox:ByteUtilities:2.0")
+    api("com.dorkbox:ByteUtilities:2.1")
     api("com.dorkbox:ClassUtils:1.3")
     api("com.dorkbox:Collections:2.7")
     api("com.dorkbox:HexUtilities:1.1")
-    api("com.dorkbox:JNA:1.2")
+    api("com.dorkbox:JNA:1.4")
     api("com.dorkbox:MinLog:2.6")
     api("com.dorkbox:NetworkDNS:2.16")
     api("com.dorkbox:NetworkUtils:2.23")
-    api("com.dorkbox:OS:1.8")
+    api("com.dorkbox:OS:1.11")
     api("com.dorkbox:Serializers:2.9")
     api("com.dorkbox:Storage:1.11")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.47")
+    api("com.dorkbox:Utilities:1.48")
 
 
     // how we bypass using reflection/jpms to access fields for java17+
