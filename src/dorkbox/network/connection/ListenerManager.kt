@@ -321,7 +321,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
             }
 
             if (success) {
-                // NOTE: https://github.com/Kotlin/kotlinx.atomicfu
+                // https://github.com/Kotlin/kotlinx.atomicfu
                 // this is EXPLICITLY listed as a "Don't" via the documentation. The ****ONLY**** reason this is actually OK is because
                 // we are following the "single-writer principle", so only ONE THREAD can modify this at a time.
                 val tempMap = onMessageMap
@@ -353,7 +353,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
      *
      * It is the responsibility of the custom filter to write the error, if there is one
      *
-     * NOTE: This is run directly on the thread that calls it!
+     * This is run directly on the thread that calls it!
      *
      * @return true if the client address is allowed to connect. False if we should terminate this connection
      */
@@ -387,7 +387,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
             try {
                 it(connection)
             } catch (t: Throwable) {
-                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                // when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
                 t.cleanStackTrace()
                 logger.error("Connection ${connection.id} error", t)
             }
@@ -397,7 +397,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
     /**
      * Invoked when a connection is connected to a remote address.
      *
-     * NOTE: This is run on the EventDispatch!
+     * This is run on the EventDispatch!
      */
     fun notifyConnect(connection: CONNECTION) {
         val list = onConnectList
@@ -407,7 +407,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
                     try {
                         it(connection)
                     } catch (t: Throwable) {
-                        // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                        //  when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
                         t.cleanStackTrace()
                         logger.error("Connection ${connection.id} error", t)
                     }
@@ -419,9 +419,9 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
     /**
      * Invoked when a connection is disconnected to a remote address.
      *
-     * NOTE: This is exclusively called from a connection, when that connection is closed!
+     * This is exclusively called from a connection, when that connection is closed!
      *
-     * NOTE: This is run on the EventDispatch!
+     * This is run on the EventDispatch!
      */
     fun notifyDisconnect(connection: Connection) {
         connection.notifyDisconnect()
@@ -441,7 +441,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
                     try {
                         it(connection)
                     } catch (t: Throwable) {
-                        // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                        // when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
                         t.cleanStackTrace()
                         logger.error("Connection ${connection.id} error", t)
                     }
@@ -456,7 +456,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
      *
      * The error is also sent to an error log before notifying callbacks
      *
-     * NOTE: This is run on the EventDispatch!
+     * This is run on the EventDispatch!
      */
     fun notifyError(connection: CONNECTION, exception: Throwable) {
         val list = onErrorList
@@ -466,7 +466,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
                     try {
                         it(connection, exception)
                     } catch (t: Throwable) {
-                        // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                        // when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
                         t.cleanStackTrace()
                         logger.error("Connection ${connection.id} error", t)
                     }
@@ -490,7 +490,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
                     try {
                         it(exception)
                     } catch (t: Throwable) {
-                        // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                        // when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
                         t.cleanStackTrace()
                         logger.error("Global error", t)
                     }

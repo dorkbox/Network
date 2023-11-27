@@ -342,6 +342,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * If ANY filter rule that is applied returns true, then the connection is permitted
      *
      * This function will be called for **only** network clients (IPC client are excluded)
+     *
+     * @param ipFilterRule the IpFilterRule to determine if this connection will be allowed to connect
      */
     fun filter(ipFilterRule: IpFilterRule) {
         listenerManager.filter(ipFilterRule)
@@ -364,6 +366,9 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * If ANY filter rule that is applied returns true, then the connection is permitted
      *
      * This function will be called for **only** network clients (IPC client are excluded)
+     *
+     * @param function clientAddress: UDP connection address
+     *                       tagName: the connection tag name
      */
     fun filter(function: InetAddress.(String) -> Boolean)  {
         listenerManager.filter(function)
