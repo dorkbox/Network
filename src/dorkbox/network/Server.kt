@@ -89,10 +89,10 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      */
     val rmiGlobal = RmiSupportServer(logger, rmiGlobalSupport)
 
-    /**
-     * Maintains a thread-safe collection of rules used to define the connection type with this server.
-     */
-    private val connectionRules = CopyOnWriteArrayList<ConnectionRule>()
+//    /**
+//     * Maintains a thread-safe collection of rules used to define the connection type with this server.
+//     */
+//    private val connectionRules = CopyOnWriteArrayList<ConnectionRule>()
 
     /**
      * the IP address information, if available.
@@ -315,23 +315,23 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
 
-    /**
-     * Adds an IP+subnet rule that defines what type of connection this IP+subnet should have.
-     * - NOTHING : Nothing happens to the in/out bytes
-     * - COMPRESS: The in/out bytes are compressed with LZ4-fast
-     * - COMPRESS_AND_ENCRYPT: The in/out bytes are compressed (LZ4-fast) THEN encrypted (AES-256-GCM)
-     *
-     * If no rules are defined, then for LOOPBACK, it will always be `COMPRESS` and for everything else it will always be `COMPRESS_AND_ENCRYPT`.
-     *
-     * If rules are defined, then everything by default is `COMPRESS_AND_ENCRYPT`.
-     *
-     * The compression algorithm is LZ4-fast, so there is a small performance impact for a very large gain
-     * Compress   :       6.210 micros/op;  629.0 MB/s (output: 55.4%)
-     * Uncompress :       0.641 micros/op; 6097.9 MB/s
-     */
-    fun addConnectionRules(vararg rules: ConnectionRule) {
-        connectionRules.addAll(listOf(*rules))
-    }
+//    /**
+//     * Adds an IP+subnet rule that defines what type of connection this IP+subnet should have.
+//     * - NOTHING : Nothing happens to the in/out bytes
+//     * - COMPRESS: The in/out bytes are compressed with LZ4-fast
+//     * - COMPRESS_AND_ENCRYPT: The in/out bytes are compressed (LZ4-fast) THEN encrypted (AES-256-GCM)
+//     *
+//     * If no rules are defined, then for LOOPBACK, it will always be `COMPRESS` and for everything else it will always be `COMPRESS_AND_ENCRYPT`.
+//     *
+//     * If rules are defined, then everything by default is `COMPRESS_AND_ENCRYPT`.
+//     *
+//     * The compression algorithm is LZ4-fast, so there is a small performance impact for a very large gain
+//     * Compress   :       6.210 micros/op;  629.0 MB/s (output: 55.4%)
+//     * Uncompress :       0.641 micros/op; 6097.9 MB/s
+//     */
+//    fun addConnectionRules(vararg rules: ConnectionRule) {
+//        connectionRules.addAll(listOf(*rules))
+//    }
 
     /**
      * Adds an IP+subnet rule that defines if that IP+subnet is allowed/denied connectivity to this server.
