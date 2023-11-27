@@ -951,9 +951,9 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                         aeronDriver.delayLingerTimeout()
 
                         if (connectionTimeoutSec == 0) {
-                            logger.info("Reconnecting...", Exception())
+                            logger.info("Reconnecting...")
                         } else {
-                            logger.info("Reconnecting... (timeout in $connectionTimeoutSec seconds)", Exception())
+                            logger.info("Reconnecting... (timeout in $connectionTimeoutSec seconds)")
                         }
 
                         connect(
