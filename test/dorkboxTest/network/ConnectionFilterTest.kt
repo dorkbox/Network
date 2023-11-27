@@ -597,7 +597,7 @@ class ConnectionFilterTest : BaseTest() {
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
 
-            server.enablePendingMessages { clientAddress, tagName ->
+            server.enableBufferedMessages { clientAddress, tagName ->
                 false
             }
 

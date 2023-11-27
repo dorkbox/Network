@@ -390,7 +390,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * @param function clientAddress: not-null when UDP connection, null when IPC connection
      *                       tagName: the connection tag name
      */
-    fun enablePendingMessages(function: (clientAddress: InetAddress?, tagName: String) -> Boolean)  {
+    fun enableBufferedMessages(function: (clientAddress: InetAddress?, tagName: String) -> Boolean)  {
         listenerManager.enableBufferedMessages(function)
     }
 
