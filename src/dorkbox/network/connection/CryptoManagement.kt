@@ -183,6 +183,7 @@ internal class CryptoManagement(val logger: Logger,
         val streamIdSub = cryptInput.readInt()
         val regDetailsSize = cryptInput.readInt()
         val sessionTimeout = cryptInput.readLong()
+        val bufferedMessages = cryptInput.readBoolean()
         val regDetails = cryptInput.readBytes(regDetailsSize)
 
         // now save data off
@@ -193,6 +194,7 @@ internal class CryptoManagement(val logger: Logger,
             streamIdSub = streamIdSub,
             publicKey = serverPublicKeyBytes,
             sessionTimeout = sessionTimeout,
+            bufferedMessages = bufferedMessages,
             kryoRegistrationDetails = regDetails,
             secretKey = secretKey)
     }
@@ -204,6 +206,7 @@ internal class CryptoManagement(val logger: Logger,
         streamIdPub: Int,
         streamIdSub: Int,
         sessionTimeout: Long,
+        bufferedMessages: Boolean,
         kryoRegDetails: ByteArray
     ): ByteArray {
 
@@ -216,6 +219,7 @@ internal class CryptoManagement(val logger: Logger,
             cryptOutput.writeInt(streamIdSub)
             cryptOutput.writeInt(kryoRegDetails.size)
             cryptOutput.writeLong(sessionTimeout)
+            cryptOutput.writeBoolean(bufferedMessages)
             cryptOutput.writeBytes(kryoRegDetails)
 
             cryptOutput.toBytes()
@@ -266,6 +270,7 @@ internal class CryptoManagement(val logger: Logger,
         streamIdPub: Int,
         streamIdSub: Int,
         sessionTimeout: Long,
+        bufferedMessages: Boolean,
         kryoRegDetails: ByteArray
     ): ByteArray {
 
@@ -283,6 +288,7 @@ internal class CryptoManagement(val logger: Logger,
             cryptOutput.writeInt(streamIdSub)
             cryptOutput.writeInt(kryoRegDetails.size)
             cryptOutput.writeLong(sessionTimeout)
+            cryptOutput.writeBoolean(bufferedMessages)
             cryptOutput.writeBytes(kryoRegDetails)
 
             return iv + aesCipher.doFinal(cryptOutput.toBytes())

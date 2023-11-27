@@ -797,19 +797,26 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         val pubSub = clientConnection.connectionInfo
 
+        val connectionType = if (connectionInfo.bufferedMessages) {
+            "buffered connection"
+        } else {
+            "connection"
+        }
+
         val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
         if (logger.isDebugEnabled) {
-            logger.debug("Creating new buffered connection to $logInfo")
+            logger.debug("Creating new $connectionType to $logInfo")
         } else {
-            logger.info("Creating new buffered connection to $logInfo")
+            logger.info("Creating new $connectionType to $logInfo")
         }
 
         val newConnection = newConnection(ConnectionParams(
-            connectionInfo.publicKey,
-            this,
-            clientConnection.connectionInfo,
-            validateRemoteAddress,
-            connectionInfo.secretKey
+            publicKey = connectionInfo.publicKey,
+            endPoint = this,
+            connectionInfo = clientConnection.connectionInfo,
+            publicKeyValidation = validateRemoteAddress,
+            enableBufferedMessages = connectionInfo.bufferedMessages,
+            cryptoKey = connectionInfo.secretKey
         ))
 
         bufferedManager?.onConnect(newConnection)

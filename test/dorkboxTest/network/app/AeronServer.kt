@@ -105,8 +105,8 @@ object AeronServer {
             throw IllegalStateException("Aeron was unable to shut down in a timely manner.")
         }
 
-        server.filter {
-            println("should the connection $this be allowed?")
+        server.filter { clientAddress, tagName ->
+            println("should the connection $clientAddress be allowed?")
             true
         }
 

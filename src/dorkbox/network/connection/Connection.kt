@@ -122,6 +122,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val bufferedSession: BufferedSession
 
     /**
+     * used to determine if this connection will have buffered messages enabled or not.
+     */
+    internal val enableBufferedMessages = connectionParameters.enableBufferedMessages
+
+    /**
      * The largest size a SINGLE message via AERON can be. Because the maximum size we can send in a "single fragment" is the
      * publication.maxPayloadLength() function (which is the MTU length less header). We could depend on Aeron for fragment reassembly,
      * but that has a (very low) maximum reassembly size -- so we have our own mechanism for object fragmentation/assembly, which
@@ -338,13 +343,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     internal fun sendBufferedMessages() {
-        // now send all buffered/pending messages
-        if (logger.isDebugEnabled) {
-            logger.debug("Sending pending messages: ${bufferedSession.pendingMessagesQueue.size}")
-        }
+        if (enableBufferedMessages) {
+            // now send all buffered/pending messages
+            if (logger.isDebugEnabled) {
+                logger.debug("Sending buffered messages: ${bufferedSession.pendingMessagesQueue.size}")
+            }
 
-        bufferedSession.pendingMessagesQueue.forEach {
-            sendNoBuffer(it)
+            bufferedSession.pendingMessagesQueue.forEach {
+                sendNoBuffer(it)
+            }
         }
     }
 

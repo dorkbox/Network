@@ -221,8 +221,8 @@ class AeronClientServerRMIForever {
 
         server.filter(IpSubnetFilterRule(IPv4.LOCALHOST, 32))
 
-        server.filter {
-            println("should the connection $this be allowed?")
+        server.filter { clientAddress, tagName ->
+            println("should the connection $clientAddress be allowed?")
             true
         }
 

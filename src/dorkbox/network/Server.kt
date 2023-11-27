@@ -21,7 +21,6 @@ import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.IpListenType
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.buffer.BufferManager
-import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.handshake.ServerHandshakePollers
@@ -370,8 +369,29 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * @param function clientAddress: UDP connection address
      *                       tagName: the connection tag name
      */
-    fun filter(function: InetAddress.(String) -> Boolean)  {
+    fun filter(function: (clientAddress: InetAddress, tagName: String) -> Boolean)  {
         listenerManager.filter(function)
+    }
+
+    /**
+     * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if buffered messages
+     * for a connection should be enabled
+     *
+     * By default, if there are no rules, then all connections will have buffered messages enabled
+     * If there are rules - then ONLY connections for the rule that returns true will have buffered messages enabled (all else are disabled)
+     *
+     * It is the responsibility of the custom filter to write the error, if there is one
+     *
+     * If the function returns TRUE, then the buffered messages for a connection are enabled.
+     * If the function returns FALSE, then the buffered messages for a connection is disabled.
+     *
+     * If ANY rule that is applied returns true, then the buffered messages for a connection are enabled
+     *
+     * @param function clientAddress: not-null when UDP connection, null when IPC connection
+     *                       tagName: the connection tag name
+     */
+    fun enablePendingMessages(function: (clientAddress: InetAddress?, tagName: String) -> Boolean)  {
+        listenerManager.enableBufferedMessages(function)
     }
 
     /**

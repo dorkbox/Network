@@ -38,6 +38,11 @@ open class BufferedSession(@Volatile var connection: Connection) {
             }
         }
 
+        if (!connection.enableBufferedMessages) {
+            // nothing, since we emit logs during connection initialization that pending messages are DISABLED
+            return false
+        }
+
         if (!abortEarly) {
             // this was a "normal" send (instead of the disconnect message).
             pendingMessagesQueue.put(message)

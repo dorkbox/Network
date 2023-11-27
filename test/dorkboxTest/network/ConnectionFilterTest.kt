@@ -27,6 +27,7 @@ import kotlinx.atomicfu.atomic
 import org.junit.Assert
 import org.junit.Test
 
+@Suppress("UNUSED_ANONYMOUS_PARAMETER")
 class ConnectionFilterTest : BaseTest() {
     @Test
     fun autoAcceptAll() {
@@ -395,7 +396,7 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.filter {
+            server.filter { clientAddress, tagName ->
                 true
             }
 
@@ -498,7 +499,7 @@ class ConnectionFilterTest : BaseTest() {
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
 
-            server.filter {
+            server.filter { clientAddress, tagName ->
                 false
             }
 
@@ -544,7 +545,7 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.filter {
+            server.filter { clientAddress, tagName ->
                 false
             }
 
@@ -582,5 +583,61 @@ class ConnectionFilterTest : BaseTest() {
         }
 
         waitForThreads()
+    }
+
+
+    @Test
+    fun acceptAllCustomClientNoPendingMessages() {
+        val serverConnectSuccess = atomic(false)
+        val clientConnectSuccess = atomic(false)
+
+        val server = run {
+            val configuration = serverConfig()
+
+            val server: Server<Connection> = Server(configuration)
+            addEndPoint(server)
+
+            server.enablePendingMessages { clientAddress, tagName ->
+                false
+            }
+
+            server.onConnect {
+                serverConnectSuccess.value = true
+                close()
+            }
+            server
+        }
+
+        val client = run {
+            val config = clientConfig()
+
+            val client: Client<Connection> = Client(config)
+            addEndPoint(client)
+
+
+            client.onConnect {
+                clientConnectSuccess.value = true
+            }
+
+            client.onDisconnect {
+                stopEndPoints()
+            }
+
+            client
+        }
+
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads()
+            throw e
+        }
+
+        waitForThreads()
+
+        Assert.assertTrue(serverConnectSuccess.value)
+        Assert.assertTrue(clientConnectSuccess.value)
     }
 }

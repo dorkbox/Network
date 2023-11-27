@@ -165,8 +165,12 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
 
     // initialize emtpy arrays
     @Volatile
-    private var onConnectFilterList = Array<(InetAddress.(String) -> Boolean)>(0) { { true } }
+    private var onConnectFilterList = Array<((InetAddress, String) -> Boolean)>(0) { { _, _ -> true } }
     private val onConnectFilterLock = ReentrantReadWriteLock()
+
+    @Volatile
+    private var onConnectBufferedMessageFilterList = Array<((InetAddress?, String) -> Boolean)>(0) { { _, _ -> true } }
+    private val onConnectBufferedMessageFilterLock = ReentrantReadWriteLock()
 
     @Volatile
     private var onInitList = Array<(CONNECTION.() -> Unit)>(0) { { } }
@@ -202,9 +206,9 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
      * If there are rules added, then a rule MUST be matched to be allowed
      */
     fun filter(ipFilterRule: IpFilterRule) {
-        filter {
+        filter { clientAddress, _ ->
             // IPC will not filter
-            ipFilterRule.matches(this)
+            ipFilterRule.matches(clientAddress)
         }
     }
 
@@ -226,11 +230,38 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
      * If ANY filter rule that is applied returns true, then the connection is permitted
      *
      * This function will be called for **only** network clients (IPC client are excluded)
+     *
+     * @param function clientAddress: UDP connection address
+     *                       tagName: the connection tag name
      */
-    fun filter(function: InetAddress.(String) -> Boolean) {
+    fun filter(function: (clientAddress: InetAddress, tagName: String) -> Boolean) {
         onConnectFilterLock.write {
             // we have to follow the single-writer principle!
             onConnectFilterList = add(function, onConnectFilterList)
+        }
+    }
+
+    /**
+     * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if buffered messages
+     * for a connection should be enabled
+     *
+     * By default, if there are no rules, then all connections will have buffered messages enabled
+     * If there are rules - then ONLY connections for the rule that returns true will have buffered messages enabled (all else are disabled)
+     *
+     * It is the responsibility of the custom filter to write the error, if there is one
+     *
+     * If the function returns TRUE, then the buffered messages for a connection are enabled.
+     * If the function returns FALSE, then the buffered messages for a connection is disabled.
+     *
+     * If ANY rule that is applied returns true, then the buffered messages for a connection are enabled
+     *
+     * @param function clientAddress: not-null when UDP connection, null when IPC connection
+     *                       tagName: the connection tag name
+     */
+    fun enableBufferedMessages(function: (clientAddress: InetAddress?, tagName: String) -> Boolean) {
+        onConnectBufferedMessageFilterLock.write {
+            // we have to follow the single-writer principle!
+            onConnectBufferedMessageFilterList = add(function, onConnectBufferedMessageFilterList)
         }
     }
 
@@ -372,6 +403,33 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
         // default if nothing matches
         // NO RULES ADDED -> ACCEPT
         //    RULES ADDED -> DENY
+        return list.isEmpty()
+    }
+
+    /**
+     * Invoked just after a connection is created, but before it is connected.
+     *
+     * It is the responsibility of the custom filter to write the error, if there is one
+     *
+     * This is run directly on the thread that calls it!
+     *
+     * @return true if the connection will have pending messages enabled. False if pending messages for this connection should be disabled.
+     */
+    fun notifyEnableBufferedMessages(clientAddress: InetAddress?, clientTagName: String): Boolean {
+        // by default, there is a SINGLE rule that will always exist, and will always PERMIT pending messages.
+        // This is so the array types can be setup (the compiler needs SOMETHING there)
+        val list = onConnectBufferedMessageFilterList
+
+        // if there is a rule, a connection must match for it to enable pending messages
+        list.forEach {
+            if (it.invoke(clientAddress, clientTagName)) {
+                return true
+            }
+        }
+
+        // default if nothing matches
+        // NO RULES ADDED -> ALLOW Pending Messages
+        //    RULES ADDED -> DISABLE Pending Messages
         return list.isEmpty()
     }
 
@@ -554,7 +612,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
         logger.debug("Closing the listener manager")
 
         onConnectFilterLock.write {
-            onConnectFilterList = Array(0) { { true } }
+            onConnectFilterList = Array(0) { { _, _ -> true } }
+        }
+        onConnectBufferedMessageFilterLock.write {
+            onConnectBufferedMessageFilterList = Array(0) { { _, _ -> true } }
         }
         onInitLock.write {
             onInitList = Array(0) { { } }

@@ -23,5 +23,6 @@ data class ConnectionParams<CONNECTION : Connection>(
     val endPoint: EndPoint<CONNECTION>,
     val connectionInfo: PubSub,
     val publicKeyValidation: PublicKeyValidationState,
+    val enableBufferedMessages: Boolean,
     val cryptoKey: SecretKeySpec
 )

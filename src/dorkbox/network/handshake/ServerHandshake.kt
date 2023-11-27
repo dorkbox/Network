@@ -353,11 +353,19 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 reliable = true
             )
 
+
+            val enableBufferedMessagesForConnection = listenerManager.notifyEnableBufferedMessages(null, clientTagName)
+            val connectionType = if (enableBufferedMessagesForConnection) {
+                "buffered connection"
+            } else {
+                "connection"
+            }
+
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
-                logger.debug("Creating new buffered connection to $logInfo")
+                logger.debug("Creating new $connectionType to $logInfo")
             } else {
-                logger.info("Creating new buffered connection to $logInfo")
+                logger.info("Creating new $connectionType to $logInfo")
             }
 
             newConnection = server.newConnection(ConnectionParams(
@@ -365,6 +373,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 endPoint = server,
                 connectionInfo = newConnectionDriver.pubSub,
                 publicKeyValidation = PublicKeyValidationState.VALID,
+                enableBufferedMessages = enableBufferedMessagesForConnection,
                 cryptoKey = CryptoManagement.NOCRYPT // we don't use encryption for IPC connections
             ))
 
@@ -393,6 +402,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
                 sessionTimeout = config.bufferedConnectionTimeoutSeconds,
+                bufferedMessages = enableBufferedMessagesForConnection,
                 kryoRegDetails = serialization.getKryoRegistrationDetails()
             )
 
@@ -611,11 +621,19 @@ internal class ServerHandshake<CONNECTION : Connection>(
             val cryptoSecretKey = server.crypto.generateAesKey(clientPublicKeyBytes, clientPublicKeyBytes, server.crypto.publicKeyBytes)
 
 
+            val enableBufferedMessagesForConnection = listenerManager.notifyEnableBufferedMessages(clientAddress, clientTagName)
+            val connectionType = if (enableBufferedMessagesForConnection) {
+                "buffered connection"
+            } else {
+                "connection"
+            }
+
+
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
-                logger.debug("Creating new buffered connection to $logInfo")
+                logger.debug("Creating new $connectionType to $logInfo")
             } else {
-                logger.info("Creating new buffered connection to $logInfo")
+                logger.info("Creating new $connectionType to $logInfo")
             }
 
             newConnection = server.newConnection(ConnectionParams(
@@ -623,6 +641,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 endPoint = server,
                 connectionInfo = newConnectionDriver.pubSub,
                 publicKeyValidation = validateRemoteAddress,
+                enableBufferedMessages = enableBufferedMessagesForConnection,
                 cryptoKey = cryptoSecretKey
             ))
 
@@ -647,6 +666,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
                 sessionTimeout = config.bufferedConnectionTimeoutSeconds,
+                bufferedMessages =  enableBufferedMessagesForConnection,
                 kryoRegDetails = serialization.getKryoRegistrationDetails()
             )
 
