@@ -413,14 +413,14 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
      *
      * This is run directly on the thread that calls it!
      *
-     * @return true if the connection will have pending messages enabled. False if pending messages for this connection should be disabled.
+     * @return true if the connection will have buffered messages enabled. False if buffered messages for this connection should be disabled.
      */
     fun notifyEnableBufferedMessages(clientAddress: InetAddress?, clientTagName: String): Boolean {
-        // by default, there is a SINGLE rule that will always exist, and will always PERMIT pending messages.
+        // by default, there is a SINGLE rule that will always exist, and will always PERMIT buffered messages.
         // This is so the array types can be setup (the compiler needs SOMETHING there)
         val list = onConnectBufferedMessageFilterList
 
-        // if there is a rule, a connection must match for it to enable pending messages
+        // if there is a rule, a connection must match for it to enable buffered messages
         list.forEach {
             if (it.invoke(clientAddress, clientTagName)) {
                 return true
@@ -428,8 +428,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: Logge
         }
 
         // default if nothing matches
-        // NO RULES ADDED -> ALLOW Pending Messages
-        //    RULES ADDED -> DISABLE Pending Messages
+        // NO RULES ADDED -> ALLOW Buffered Messages
+        //    RULES ADDED -> DISABLE Buffered Messages
         return list.isEmpty()
     }
 
