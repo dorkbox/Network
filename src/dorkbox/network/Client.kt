@@ -42,6 +42,7 @@ import org.slf4j.LoggerFactory
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
+import java.util.*
 import java.util.concurrent.*
 
 /**
@@ -797,11 +798,13 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         val pubSub = clientConnection.connectionInfo
 
-        val connectionType = if (connectionInfo.bufferedMessages) {
+        val bufferedMessages = connectionInfo.bufferedMessages
+        val connectionType = if (bufferedMessages) {
             "buffered connection"
         } else {
             "connection"
         }
+        val connectionTypeCaps = connectionType.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
         val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
         if (logger.isDebugEnabled) {
@@ -815,7 +818,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             endPoint = this,
             connectionInfo = clientConnection.connectionInfo,
             publicKeyValidation = validateRemoteAddress,
-            enableBufferedMessages = connectionInfo.bufferedMessages,
+            enableBufferedMessages = bufferedMessages,
             cryptoKey = connectionInfo.secretKey
         ))
 
@@ -824,11 +827,11 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         if (!handshakeConnection.pubSub.isIpc) {
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
             if (logger.isTraceEnabled) {
-                logger.trace("[${handshakeConnection.details}] (${handshake.connectKey}) Buffered connection (${newConnection.id}) adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
+                logger.trace("[${handshakeConnection.details}] (${handshake.connectKey}) $connectionTypeCaps (${newConnection.id}) adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
             } else if (logger.isDebugEnabled) {
-                logger.debug("[${handshakeConnection.details}] Buffered connection (${newConnection.id}) adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
+                logger.debug("[${handshakeConnection.details}] $connectionTypeCaps (${newConnection.id}) adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
             } else if (logger.isInfoEnabled) {
-                logger.info("[${handshakeConnection.details}] Buffered connection adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
+                logger.info("[${handshakeConnection.details}] $connectionTypeCaps adding new signature for [$addressString -> ${connectionInfo.publicKey.toHexString()}]")
             }
 
             storage.addRegisteredServerKey(address!!, connectionInfo.publicKey)
@@ -853,9 +856,9 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         handshakeConnection.close(this)
 
         if (logger.isTraceEnabled) {
-            logger.debug("[${handshakeConnection.details}] (${handshake.connectKey}) Buffered connection (${newConnection.id}) done with handshake.")
+            logger.debug("[${handshakeConnection.details}] (${handshake.connectKey}) $connectionTypeCaps (${newConnection.id}) done with handshake.")
         } else if (logger.isDebugEnabled) {
-            logger.debug("[${handshakeConnection.details}] Buffered connection (${newConnection.id}) done with handshake.")
+            logger.debug("[${handshakeConnection.details}] $connectionTypeCaps (${newConnection.id}) done with handshake.")
         }
 
         connection0 = newConnection
@@ -937,7 +940,6 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                 if (autoReconnect) {
                     // clients can reconnect automatically ONLY if there are driver errors, otherwise it's explicit!
                     eventDispatch.CLOSE.launch {
-                        logger.error("MUST AUTORECONNECT STARTING ON CLOSE ***********************************")
                         waitForEndpointShutdown()
 
                         // also wait for everyone else to shutdown!!
@@ -1017,8 +1019,11 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         return if (c != null) {
             c.send(message)
+        } else if (isShutdown()) {
+            logger.error("Cannot send a message '${message::class.java}' when there is no connection! (We are shutdown)")
+            false
         } else {
-            val exception = TransmitException("Cannot send a message when there is no connection!")
+            val exception = TransmitException("Cannot send message '${message::class.java}' when there is no connection!")
             listenerManager.notifyError(exception)
             false
         }
@@ -1037,8 +1042,11 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
         return if (c != null) {
             @Suppress("UNCHECKED_CAST")
             c.send(message, onSuccessCallback as Connection.() -> Unit)
+        } else if (isShutdown()) {
+            logger.error("Cannot send-sync message '${message::class.java}' when there is no connection! (We are shutdown)")
+            false
         } else {
-            val exception = TransmitException("Cannot send-sync a message when there is no connection!")
+            val exception = TransmitException("Cannot send-sync message '${message::class.java}' when there is no connection!")
             listenerManager.notifyError(exception)
             false
         }
@@ -1054,14 +1062,16 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
     fun ping(function: Ping.() -> Unit): Boolean {
         val c = connection0
 
-        if (c != null) {
-            return c.ping(function)
+        return if (c != null) {
+            c.ping(function)
+        } else if (isShutdown()) {
+            logger.error("Cannot send a ping when there is no connection! (We are shutdown)")
+            false
         } else {
             val exception = TransmitException("Cannot send a ping when there is no connection!")
             listenerManager.notifyError(exception)
+            false
         }
-
-        return false
     }
 
     /**

@@ -41,17 +41,13 @@ data class PubSub(
     fun getLogInfo(extraDetails: Boolean): String {
         return if (isIpc) {
             val prefix = if (tagName.isNotEmpty()) {
-                EndPoint.IPC_NAME + " $tagName"
+                EndPoint.IPC_NAME + " ($tagName)"
             } else {
                 EndPoint.IPC_NAME
             }
 
             if (extraDetails) {
-                if (tagName.isNotEmpty()) {
-                    "$prefix sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
-                } else {
-                    "$prefix sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
-                }
+                "$prefix sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, reg: p=${pub.registrationId()} s=${sub.registrationId()}"
             } else {
                 prefix
             }
@@ -63,7 +59,7 @@ data class PubSub(
             }
 
             if (tagName.isNotEmpty()) {
-                prefix += " $tagName"
+                prefix += " ($tagName)"
             }
 
             if (extraDetails) {

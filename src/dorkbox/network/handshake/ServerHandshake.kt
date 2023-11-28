@@ -31,6 +31,7 @@ import net.jodah.expiringmap.ExpiringMap
 import org.slf4j.Logger
 import java.net.Inet4Address
 import java.net.InetAddress
+import java.util.*
 import java.util.concurrent.*
 
 
@@ -128,11 +129,17 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 return true
             }
 
+            val connectionType = if (newConnection.enableBufferedMessages) {
+                "Buffered connection"
+            } else {
+                "Connection"
+            }
+
             // Server is the "source", client mirrors the server
             if (logger.isTraceEnabled) {
-                logger.trace("[${newConnection}] (${message.connectKey}) Buffered connection (${newConnection.id}) done with handshake.")
+                logger.trace("[${newConnection}] (${message.connectKey}) $connectionType (${newConnection.id}) done with handshake.")
             } else if (logger.isDebugEnabled) {
-                logger.debug("[${newConnection}] Buffered connection (${newConnection.id}) done with handshake.")
+                logger.debug("[${newConnection}] $connectionType (${newConnection.id}) done with handshake.")
             }
 
             newConnection.setImage()
@@ -239,9 +246,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
     ): Boolean {
         val serialization = config.serialization
 
-        val clientTagName = message.tag.let { if (it.isEmpty()) "" else "[$it]" }
-        if (clientTagName.length > 34) {
-            // 34 to account for []
+        val clientTagName = message.tag
+        if (clientTagName.length > 32) {
             listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Invalid tag name."))
             return false
         }
@@ -361,6 +367,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 "connection"
             }
 
+            val connectionTypeCaps = connectionType.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+
+
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
                 logger.debug("Creating new $connectionType to $logInfo")
@@ -412,9 +421,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
             pendingConnections[message.connectKey] = newConnection
 
             if (logger.isTraceEnabled) {
-                logger.trace("[$logInfo] (${message.connectKey}) buffered connection (${newConnection.id}) responding to handshake hello.")
+                logger.trace("[$logInfo] (${message.connectKey}) $connectionType (${newConnection.id}) responding to handshake hello.")
             } else if (logger.isDebugEnabled) {
-                logger.debug("[$logInfo] Buffered connection (${newConnection.id}) responding to handshake hello.")
+                logger.debug("[$logInfo] $connectionTypeCaps (${newConnection.id}) responding to handshake hello.")
             }
 
             // this tells the client all the info to connect.
@@ -477,9 +486,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
             return false
         }
 
-        val clientTagName = message.tag.let { if (it.isEmpty()) "" else "[$it]" }
-        if (clientTagName.length > 34) {
-            // 34 to account for []
+        val clientTagName = message.tag
+        if (clientTagName.length > 32) {
             listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Invalid tag name."))
             return false
         }
@@ -628,6 +636,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 "connection"
             }
 
+            val connectionTypeCaps = connectionType.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
@@ -676,9 +685,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
             pendingConnections[message.connectKey] = newConnection
 
             if (logger.isTraceEnabled) {
-                logger.trace("[$logInfo] Buffered connection (${newConnection.id}) responding to handshake hello.")
+                logger.trace("[$logInfo] $connectionTypeCaps (${newConnection.id}) responding to handshake hello.")
             } else if (logger.isDebugEnabled) {
-                logger.debug("[$logInfo] Buffered connection (${newConnection.id}) responding to handshake hello.")
+                logger.debug("[$logInfo] $connectionTypeCaps (${newConnection.id}) responding to handshake hello.")
             }
 
             // this tells the client all the info to connect.
