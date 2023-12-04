@@ -42,6 +42,10 @@ internal class EventDispatcher(val type: String) {
         fun isDispatch(): Boolean {
             return dispatcher.isDispatch(type)
         }
+
+        fun shutdownAndWait(timeout: Long, timeoutUnit: TimeUnit) {
+            dispatcher.shutdownAndWait(type, timeout, timeoutUnit)
+        }
     }
 
     companion object {
@@ -75,8 +79,6 @@ internal class EventDispatcher(val type: String) {
         )
     }.toTypedArray()
 
-
-
     val HANDSHAKE: ED
     val CONNECT: ED
     val ERROR: ED
@@ -96,6 +98,21 @@ internal class EventDispatcher(val type: String) {
         CLOSE = ED(this, EDType.CLOSE)
     }
 
+
+    /**
+     * Shuts-down each event dispatcher executor, and waits for it to gracefully shutdown. Once shutdown, it cannot be restarted.
+     *
+     * @param timeout how long to wait
+     * @param timeoutUnit what the unit count is
+     */
+    fun shutdownAndWait(timeout: Long, timeoutUnit: TimeUnit) {
+        require(timeout > 0) { logger.error("The EventDispatcher shutdown timeout must be > 0!") }
+
+        HANDSHAKE.shutdownAndWait(timeout, timeoutUnit)
+        CONNECT.shutdownAndWait(timeout, timeoutUnit)
+        ERROR.shutdownAndWait(timeout, timeoutUnit)
+        CLOSE.shutdownAndWait(timeout, timeoutUnit)
+    }
 
     /**
      *  Checks if the current execution thread is running inside one of the event dispatchers.
@@ -122,9 +139,17 @@ internal class EventDispatcher(val type: String) {
     }
 
     /**
-     * Each event type runs inside its own coroutine dispatcher.
+     * shuts-down the current execution thread and waits for it complete.
+     */
+    private fun shutdownAndWait(type: EDType, timeout: Long, timeoutUnit: TimeUnit) {
+        executors[type.ordinal].shutdown()
+        executors[type.ordinal].awaitTermination(timeout, timeoutUnit)
+    }
+
+    /**
+     * Each event type runs inside its own thread executor.
      *
-     * We want EACH event type to run in its own dispatcher... on its OWN thread, in order to prevent deadlocks
+     * We want EACH event type to run in its own executor... on its OWN thread, in order to prevent deadlocks
      * This is because there are blocking dependencies: DISCONNECT -> CONNECT.
      *
      * If an event is RE-ENTRANT, then it will immediately execute!

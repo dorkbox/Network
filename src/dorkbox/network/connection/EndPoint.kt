@@ -1079,6 +1079,18 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         return networkEventPoller.isDispatch()
     }
 
+    /**
+     * Shuts-down each event dispatcher executor, and waits for it to gracefully shutdown.
+     *
+     * Once shutdown, it cannot be restarted and the application MUST recreate the endpoint
+     *
+     * @param timeout how long to wait, must be > 0
+     * @param timeoutUnit what the unit count is
+     */
+    fun shutdownEventDispatcher(timeout: Long = 15, timeoutUnit: TimeUnit = TimeUnit.SECONDS) {
+        logger.info("Waiting for Event Dispatcher to shutdown...")
+        eventDispatch.shutdownAndWait(timeout, timeoutUnit)
+    }
 
     /**
      * Reset the running state when there's an error starting up

@@ -299,7 +299,6 @@ abstract class BaseTest {
             endPoint.stopDriver()
         }
 
-
         // run actions before we actually shutdown, but after we wait
         if (!successClients || !successServers) {
             Assert.fail("Shutdown latch not triggered ($successClients|$successServers)!")
@@ -308,6 +307,7 @@ abstract class BaseTest {
         // we must always make sure that aeron is shut-down before starting again.
         clients.forEach { endPoint ->
             endPoint.ensureStopped()
+            endPoint.shutdownEventDispatcher() // once shutdown, it cannot be restarted!
 
             if (!Client.ensureStopped(endPoint.config.copy())) {
                 throw IllegalStateException("Unable to continue, AERON client was unable to stop.")
@@ -316,6 +316,7 @@ abstract class BaseTest {
 
         servers.forEach { endPoint ->
             endPoint.ensureStopped()
+            endPoint.shutdownEventDispatcher() // once shutdown, it cannot be restarted!
 
             if (!Client.ensureStopped(endPoint.config.copy())) {
                 throw IllegalStateException("Unable to continue, AERON server was unable to stop.")
