@@ -151,8 +151,8 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: Log
                     }
                     streamingDataInMemory[streamId] = FileWriter(message.totalSize.toInt(), tempFileLocation)
                 } else {
-                    if (endPoint.logger.isInfoEnabled) {
-                        endPoint.logger.info("Saving streaming data [${streamId}] in memory")
+                    if (endPoint.logger.isTraceEnabled) {
+                        endPoint.logger.trace("Saving streaming data [${streamId}] in memory")
                     }
                     // .toInt is safe because we know the total size is < than maxStreamSizeInMemoryInBytes
                     streamingDataInMemory[streamId] = AeronWriter(message.totalSize.toInt())
