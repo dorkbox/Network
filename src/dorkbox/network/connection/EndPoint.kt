@@ -24,6 +24,7 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
 import dorkbox.network.aeron.EventPoller
+import dorkbox.network.connection.buffer.BufferedMessages
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -673,6 +674,14 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                     connection.receivePing(message)
                 } catch (e: Exception) {
                     listenerManager.notifyError(connection, PingException("Error while processing Ping message: $message", e))
+                }
+            }
+
+            is BufferedMessages -> {
+                // this can potentially be an EXTREMELY large set of data -- so when there are buffered messages, it is often better
+                // to batch-send them instead of one-at-a-time (which can cause excessive CPU load and Network I/O)
+                message.messages.forEach {
+                    processMessageFromChannel(connection, it)
                 }
             }
 

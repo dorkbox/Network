@@ -26,6 +26,8 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.DisconnectMessage
 import dorkbox.network.connection.SendSync
+import dorkbox.network.connection.buffer.BufferedMessages
+import dorkbox.network.connection.buffer.BufferedSerializer
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingControlSerializer
 import dorkbox.network.connection.streaming.StreamingData
@@ -185,6 +187,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     private val pingSerializer = PingSerializer()
     private val sendSyncSerializer = SendSyncSerializer()
     private val disconnectSerializer = DisconnectSerializer()
+    private val bufferedMessageSerializer = BufferedSerializer()
 
     internal val fileContentsSerializer = FileContentsSerializer<CONNECTION>()
 
@@ -438,6 +441,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         kryo.register(SendSync::class.java, sendSyncSerializer)
         kryo.register(HandshakeMessage::class.java)
         kryo.register(DisconnectMessage::class.java, disconnectSerializer)
+        kryo.register(BufferedMessages::class.java, bufferedMessageSerializer)
 
 
         @Suppress("UNCHECKED_CAST")

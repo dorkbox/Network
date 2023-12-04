@@ -19,6 +19,7 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
+import dorkbox.network.connection.buffer.BufferedMessages
 import dorkbox.network.connection.buffer.BufferedSession
 import dorkbox.network.ping.Ping
 import dorkbox.network.rmi.RmiSupportConnection
@@ -344,13 +345,16 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     internal fun sendBufferedMessages() {
         if (enableBufferedMessages) {
-            // now send all buffered/pending messages
-            if (logger.isDebugEnabled) {
-                logger.debug("Sending buffered messages: ${bufferedSession.pendingMessagesQueue.size}")
-            }
+            val bufferedMessage = BufferedMessages()
+            val numberDrained = bufferedSession.pendingMessagesQueue.drainTo(bufferedMessage.messages)
 
-            bufferedSession.pendingMessagesQueue.forEach {
-                sendNoBuffer(it)
+            if (numberDrained > 0) {
+                // now send all buffered/pending messages
+                if (logger.isDebugEnabled) {
+                    logger.debug("Sending buffered messages: ${bufferedSession.pendingMessagesQueue.size}")
+                }
+
+                sendNoBuffer(bufferedMessage)
             }
         }
     }
