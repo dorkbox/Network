@@ -206,7 +206,7 @@ internal class ClientHandshakeDriver(
             // this check is in the "reconnect" logic
 
             // can throw an exception! We catch it in the calling class
-            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo, true)
+            val publication = aeronDriver.addPublication(publicationUri, streamIdPub, logInfo, true)
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
@@ -272,7 +272,7 @@ internal class ClientHandshakeDriver(
 
 
             // can throw an exception! We catch it in the calling class
-            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo, false)
+            val publication = aeronDriver.addPublication(publicationUri, streamIdPub, logInfo, false)
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue

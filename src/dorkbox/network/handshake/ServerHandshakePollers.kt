@@ -136,7 +136,7 @@ internal object ServerHandshakePollers {
 
                     // this will always connect to the CLIENT handshake subscription!
                     val publication = try {
-                        driver.addExclusivePublication(publicationUri, message.streamId, logInfo, true)
+                        driver.addPublication(publicationUri, message.streamId, logInfo, true)
                     }
                     catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
@@ -394,7 +394,7 @@ internal object ServerHandshakePollers {
 
                     // this will always connect to the CLIENT handshake subscription!
                     val publication = try {
-                        driver.addExclusivePublication(publicationUri, message.streamId, logInfo, false)
+                        driver.addPublication(publicationUri, message.streamId, logInfo, false)
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
