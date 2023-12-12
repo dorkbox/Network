@@ -38,6 +38,7 @@ import dorkbox.network.handshake.ClientConnectionDriver
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.handshake.ClientHandshakeDriver
 import dorkbox.network.ping.Ping
+import dorkbox.util.Sys
 import org.slf4j.LoggerFactory
 import java.net.Inet4Address
 import java.net.Inet6Address
@@ -540,9 +541,20 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             (config.enableIpc && (remoteAddress == null || isSelfMachine)) || (!config.enableIpc && remoteAddress == null)
 
         // how long does the initial handshake take to connect
-        var handshakeTimeoutNs = TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong()) + aeronDriver.publicationConnectionTimeoutNs() + aeronDriver.lingerNs()
+        val aeronTimeoutNs = aeronDriver.publicationConnectionTimeoutNs() + aeronDriver.lingerNs()
+        var handshakeTimeoutNs = TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong())
+        if (handshakeTimeoutNs < aeronTimeoutNs) {
+            handshakeTimeoutNs += aeronTimeoutNs
+            logger.warn("Handshake timeout is less than aeron timeout, increasing timeout to ${Sys.getTimePrettyFull(handshakeTimeoutNs)} to prevent aeron timeout issues")
+        }
+
         // how long before we COMPLETELY give up retrying. A '0' means try forever.
         var connectionTimoutInNs = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
+
+        if (connectionTimoutInNs in 1..<handshakeTimeoutNs) {
+            connectionTimoutInNs = 10 * handshakeTimeoutNs
+            logger.warn("Connection timeout is less than handshake timeout, increasing timeout to ${Sys.getTimePrettyFull(connectionTimoutInNs)} to prevent initial connection issues")
+        }
 
         if (DEBUG_CONNECTIONS) {
             // connections are extremely difficult to diagnose when the connection timeout is short
