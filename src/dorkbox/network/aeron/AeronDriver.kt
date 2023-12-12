@@ -477,7 +477,7 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
         // however - the code that actually does stuff is a "singleton" in regard to an aeron configuration
         val driverId = mediaDriverConfig.mediaDriverId()
 
-        logger.info("Aeron Driver [$driverId]: Initializing...")
+        logger.debug("Aeron Driver [$driverId]: Initializing...")
         val aeronDriver = driverConfigurations.get(driverId)
         if (aeronDriver == null) {
             val driver = AeronDriverInternal(endPoint, mediaDriverConfig, logger)
