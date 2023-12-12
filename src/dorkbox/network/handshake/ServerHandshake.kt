@@ -199,7 +199,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
             // VALIDATE:: we are now connected to the client and are going to create a new connection.
             val currentCountForIp = connectionsPerIpCounts.get(clientAddress)
-            if (currentCountForIp >= config.maxConnectionsPerIpAddress) {
+            if (config.maxConnectionsPerIpAddress in 1..currentCountForIp) {
                 // decrement it now, since we aren't going to permit this connection (take the extra decrement hit on failure, instead of always)
                 connectionsPerIpCounts.decrement(clientAddress, currentCountForIp)
 
