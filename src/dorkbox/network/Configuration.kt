@@ -61,7 +61,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         }
 
     /**
-     * The maximum number of client connection allowed per IP address. IPC is unlimited
+     * The maximum number of client connection allowed per IP address, Default is unlimited and IPC is always unlimited
      */
     var maxConnectionsPerIpAddress = 0
         set(value) {
