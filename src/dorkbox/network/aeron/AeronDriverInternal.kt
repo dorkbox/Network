@@ -695,7 +695,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, config: Configuration
 
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
-            val e = Exception("Aeron Driver [$driverId]: Error closing publication [$logInfo] :: sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}")
+            val e = Exception("Aeron Driver [$driverId]: Error closing subscription [$logInfo] :: sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}")
             throw e
         }
 
