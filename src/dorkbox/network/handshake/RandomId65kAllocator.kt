@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,12 @@
  */
 package dorkbox.network.handshake
 
+import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.objectPool.ObjectPool
 import dorkbox.objectPool.Pool
 import kotlinx.atomicfu.atomic
-import java.security.SecureRandom
+import org.slf4j.LoggerFactory
 
 /**
  * An allocator for random IDs, the maximum number of IDs is an unsigned short (65535).
@@ -32,28 +33,33 @@ import java.security.SecureRandom
  * @param min The minimum ID (inclusive)
  * @param max The maximum ID (exclusive)
  */
-class RandomId65kAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = Integer.MAX_VALUE) {
+class RandomId65kAllocator(private val min: Int, max: Int) {
+    constructor(size: Int): this(1, size + 1)
+
+    companion object {
+        private val logger = LoggerFactory.getLogger("RandomId65k")
+    }
+
 
     private val cache: Pool<Int>
     private val maxAssignments: Int
     private val assigned = atomic(0)
 
-
     init {
         // IllegalArgumentException
-        require(max >= min) {
-            "Maximum value $max must be >= minimum value $min"
-        }
+        require(max >= min) { "Maximum value $max must be >= minimum value $min" }
 
-        maxAssignments = (max - min).coerceIn(1, Short.MAX_VALUE * 2)
+        val max65k = Short.MAX_VALUE * 2
+        maxAssignments = (max - min).coerceIn(1, max65k)
 
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
+        // Boxing the Ints here is OK, because they are boxed in the cache as well (so it doesn't matter).
         val ids = ArrayList<Int>(maxAssignments)
-        for (id in min..(min + maxAssignments - 1)) {
+        for (id in min until min + maxAssignments) {
             ids.add(id)
         }
 
-        ids.shuffle(SecureRandom())
+        ids.shuffle(CryptoManagement.secureRandom)
 
         // populate the array of randomly assigned ID's.
         cache = ObjectPool.blocking(ids)
@@ -71,8 +77,12 @@ class RandomId65kAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = 
             throw AllocationException("No IDs left to allocate")
         }
 
-        assigned.getAndIncrement()
-        return cache.take()
+        val count = assigned.incrementAndGet()
+        val id = cache.take()
+        if (logger.isTraceEnabled) {
+            logger.trace("Allocating $id (total $count)")
+        }
+        return id
     }
 
     /**
@@ -83,13 +93,16 @@ class RandomId65kAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = 
     fun free(id: Int) {
         val assigned = assigned.decrementAndGet()
         if (assigned < 0) {
-            throw AllocationException("Unequal allocate/free method calls.")
+            throw AllocationException("Unequal allocate/free method calls attempting to free [$id] (too many 'free' calls).")
+        }
+        if (logger.isTraceEnabled) {
+            logger.trace("Freeing $id")
         }
         cache.put(id)
     }
 
-    fun isEmpty(): Boolean {
-        return assigned.value == 0
+    fun counts(): Int {
+        return assigned.value
     }
 
     override fun toString(): String {

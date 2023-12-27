@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,16 +32,14 @@ internal class HandshakeMessage private constructor() {
     // -1 means there is an error
     var state = INVALID
 
+    // used to name a connection (via the client)
+    var tag: String = ""
+
     var errorMessage: String? = null
 
-    var subscriptionPort = 0
+    var port = 0
     var streamId = 0
     var sessionId = 0
-
-
-    // by default, this will be a reliable connection. When the client connects to the server, the client will specify if the new connection
-    // is a reliable/unreliable connection when setting up the MediaDriverConnection
-    val isReliable = true
 
 
     // the client sends its registration data to the server to make sure that the registered classes are the same between the client/server
@@ -56,14 +54,15 @@ internal class HandshakeMessage private constructor() {
         const val DONE = 3
         const val DONE_ACK = 4
 
-        fun helloFromClient(connectKey: Long, publicKey: ByteArray, sessionId: Int, subscriptionPort: Int, streamId: Int): HandshakeMessage {
+        fun helloFromClient(connectKey: Long, publicKey: ByteArray, streamIdSub: Int, portSub: Int, tagName: String): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
             hello.connectKey = connectKey // this is 'bounced back' by the server, so the client knows if it's the correct connection message
             hello.publicKey = publicKey
-            hello.sessionId = sessionId
-            hello.subscriptionPort = subscriptionPort
-            hello.streamId = streamId
+            hello.sessionId = 0 // not used by the server, since it connects in a different way!
+            hello.streamId = streamIdSub
+            hello.port = portSub
+            hello.tag = tagName
             return hello
         }
 
@@ -81,12 +80,12 @@ internal class HandshakeMessage private constructor() {
             return hello
         }
 
-        fun doneFromClient(connectKey: Long, subscriptionPort: Int, streamId: Int): HandshakeMessage {
+        fun doneFromClient(connectKey: Long, sessionIdSub: Int, streamIdSub: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = DONE
             hello.connectKey = connectKey // THIS MUST NEVER CHANGE! (the server/client expect this)
-            hello.subscriptionPort = subscriptionPort
-            hello.streamId = streamId
+            hello.sessionId = sessionIdSub
+            hello.streamId = streamIdSub
             return hello
         }
 
@@ -134,6 +133,12 @@ internal class HandshakeMessage private constructor() {
             ", Error: $errorMessage"
         }
 
-        return "HandshakeMessage($stateStr$errorMsg)"
+        val connectInfo = if (connectKey != 0L) {
+            ", key=$connectKey"
+        } else {
+            ""
+        }
+
+        return "HandshakeMessage($tag :: $stateStr$errorMsg sessionId=$sessionId, streamId=$streamId, port=$port${connectInfo})"
     }
 }

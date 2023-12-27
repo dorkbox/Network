@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.BaseTest
 import org.junit.Assert
 import org.junit.Test
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.*
 
 class RmiSpamSyncTest : BaseTest() {
     private val counter = AtomicLong(0)
@@ -53,37 +53,34 @@ class RmiSpamSyncTest : BaseTest() {
      * In this test the server has two objects in an object space. The client
      * uses the first remote object to get the second remote object.
      */
-    fun rmi(config: Configuration.() -> Unit = {}) {
-        val server: Server<Connection>
-
+    private fun rmi(config: Configuration.() -> Unit = {}) {
         val mod = 400L
         val totalRuns = 1_000L
 
-        run {
+        val server = run {
             val configuration = serverConfig()
             config(configuration)
 
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
-            server = Server(configuration)
+            val server = Server<Connection>(configuration)
             addEndPoint(server)
 
             server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
-            server.bind()
+            server
         }
 
-
-        val client: Client<Connection>
-        run {
+        var ipc: Boolean
+        val client = run {
             val configuration = clientConfig()
             config(configuration)
 
-            client = Client(configuration)
+            val client = Client<Connection>(configuration)
             addEndPoint(client)
 
             client.onConnect {
                 val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
-                val obj = remoteObject as RemoteObject
+                val obj = RemoteObject.cast(remoteObject)
                 obj.async = false
 
                 var started = false
@@ -111,7 +108,15 @@ class RmiSpamSyncTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect()
+            ipc = configuration.enableIpc
+            client
+        }
+
+        server.bind(2000)
+        if (ipc) {
+            client.connectIpc()
+        } else {
+            client.connect(LOCALHOST, 2000)
         }
 
         waitForThreads()

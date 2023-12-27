@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,5 +23,5 @@ interface RemoteObjectCallback<Iface> {
     /**
      * @param remoteObject the remote object (as a proxy object) or null if there was an error creating the RMI object
      */
-    suspend fun created(remoteObject: Iface)
+    fun created(remoteObject: Iface)
 }

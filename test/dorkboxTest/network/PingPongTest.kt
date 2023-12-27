@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
+ */
+/*
  * Copyright (c) 2008, Nathan Sweet
  * All rights reserved.
  *
@@ -32,6 +33,7 @@
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 package dorkboxTest.network
 
 import dorkbox.network.Client
@@ -43,42 +45,39 @@ import org.junit.Test
 import java.util.concurrent.atomic.*
 
 class PingPongTest : BaseTest() {
-    @Volatile
-    private var fail: String? = null
     var tries = 1000
 
     @Test
     fun pingPong() {
-        fail = "Data not received."
         val data = Data()
         populateData(data)
 
-        run {
+        val server = run {
             val config = serverConfig()
             register(config.serialization)
 
 
             val server: Server<Connection> = Server(config)
             addEndPoint(server)
-            server.bind()
 
             server.onError { throwable ->
-                fail = "Error during processing. $throwable"
+                logger.error("Error during processing", throwable)
+                stopEndPoints()
+                Assert.fail("Error during processing")
             }
 
             server.onConnect {
-                server.forEachConnection { connection ->
-                    connection.logger.error("server connection: $connection")
-                }
+                this.logger.error("server connection: $this")
             }
 
             server.onMessage<Data> { message ->
                 send(message)
             }
+            server
         }
 
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
@@ -87,19 +86,20 @@ class PingPongTest : BaseTest() {
 
             client.onConnect {
                 logger.error("client connection: $this")
-
-                fail = null
                 send(data)
             }
 
             client.onError { throwable ->
-                fail = "Error during processing. $throwable"
-                throwable.printStackTrace()
+                logger.error("Error during processing", throwable)
+                stopEndPoints()
+                Assert.fail("Error during processing")
             }
 
             val counter = AtomicInteger(0)
             client.onMessage<Data> { _ ->
-                if (counter.getAndIncrement() <= tries) {
+                val count = counter.getAndIncrement()
+                if (count <= tries) {
+                    logger.error("Ran: $count")
                     send(data)
                 } else {
                     logger.error("done.")
@@ -108,16 +108,13 @@ class PingPongTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client
         }
 
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
-        waitForThreads()
-
-
-        if (fail != null) {
-            Assert.fail(fail)
-        }
+        waitForThreads(3000)
     }
 
     private fun register(manager: Serialization<*>) {

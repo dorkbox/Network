@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
+ */
+/*
  * Copyright (c) 2008, Nathan Sweet
  * All rights reserved.
  *
@@ -41,7 +42,8 @@ import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.RmiSupportConnection
-import dorkbox.network.serialization.KryoExtra
+import dorkbox.network.serialization.KryoReader
+import dorkbox.network.serialization.KryoWriter
 
 /**
  * This is to manage serializing RMI objects across the wire...
@@ -73,10 +75,10 @@ import dorkbox.network.serialization.KryoExtra
  *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
 @Suppress("UNCHECKED_CAST")
-class RmiServerSerializer<CONNECTION: Connection> : Serializer<Any>(false) {
+internal class RmiServerSerializer<CONNECTION: Connection> : Serializer<Any>(false) {
 
     override fun write(kryo: Kryo, output: Output, `object`: Any) {
-        val kryoExtra = kryo as KryoExtra<CONNECTION>
+        val kryoExtra = kryo as KryoWriter<CONNECTION>
         val connection = kryoExtra.connection
         val rmi = connection.rmi
         // have to write what the rmi ID is ONLY. A remote object sent via a connection IS ONLY a connection-scope object!
@@ -96,7 +98,7 @@ class RmiServerSerializer<CONNECTION: Connection> : Serializer<Any>(false) {
     }
 
     override fun read(kryo: Kryo, input: Input, interfaceClass: Class<*>): Any? {
-        val kryoExtra = kryo as KryoExtra<CONNECTION>
+        val kryoExtra = kryo as KryoReader<CONNECTION>
         val rmiId = input.readInt(true)
 
         val connection = kryoExtra.connection

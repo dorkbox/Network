@@ -1,0 +1,79 @@
+/*
+ * Copyright 2023 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package dorkboxTest.network
+
+import dorkbox.network.Client
+import dorkbox.network.Server
+import dorkbox.network.connection.Connection
+import kotlinx.atomicfu.atomic
+import org.junit.Assert
+import org.junit.Test
+
+class SendSyncTest : BaseTest() {
+    val counter = atomic(0)
+
+    @Test
+    fun sendSync() {
+        // session/stream count errors
+        val serverSuccess = atomic(false)
+        val clientSuccess = atomic(false)
+
+        val server = run {
+            val configuration = serverConfig()
+
+            val server: Server<Connection> = Server(configuration)
+            addEndPoint(server)
+
+            server.onMessage<String> {
+                serverSuccess.value = true
+            }
+
+            server
+        }
+
+        val client = run {
+            val config = clientConfig()
+
+            val client: Client<Connection> = Client(config)
+            addEndPoint(client)
+
+            client.onConnect {
+                repeat(100) {
+                    send("Hi, I'm waiting!") {
+                        // a send-sync object is returned, once the round-trip is complete, and we are notified
+                        val count = counter.getAndIncrement()
+                        if (count == 99) {
+                            clientSuccess.value = true
+
+                            stopEndPoints()
+                        }
+                    }
+                }
+            }
+
+            client
+        }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
+        waitForThreads()
+
+        Assert.assertTrue(clientSuccess.value)
+        Assert.assertTrue(serverSuccess.value)
+    }
+}

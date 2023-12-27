@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,33 +16,32 @@
 package dorkbox.network.handshake
 
 import dorkbox.network.Client
-import dorkbox.network.aeron.mediaDriver.MediaDriverClient
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
-import dorkbox.network.connection.ListenerManager
-import dorkbox.network.exceptions.ClientRejectedException
-import dorkbox.network.exceptions.ClientTimedOutException
-import dorkbox.network.exceptions.ServerException
+import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
+import dorkbox.network.exceptions.*
+import dorkbox.util.Sys
 import io.aeron.FragmentAssembler
+import io.aeron.Image
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
-import mu.KLogger
 import org.agrona.DirectBuffer
-import java.lang.Thread.sleep
-import java.util.concurrent.*
+import org.slf4j.Logger
 
 internal class ClientHandshake<CONNECTION: Connection>(
-    private val crypto: CryptoManagement,
-    private val endPoint: Client<CONNECTION>,
-    private val logger: KLogger
+    private val client: Client<CONNECTION>,
+    private val logger: Logger
 ) {
 
     // @Volatile is used BECAUSE suspension of coroutines can continue on a DIFFERENT thread. We want to make sure that thread visibility is
     // correct when this happens. There are no race-conditions to be wary of.
 
+    private val crypto = client.crypto
     private val handler: FragmentHandler
 
-    private val pollIdleStrategy = endPoint.config.pollIdleStrategy.cloneToNormal()
+    private val handshaker = client.handshaker
 
     // used to keep track and associate UDP/IPC handshakes between client/server
     @Volatile
@@ -61,28 +60,54 @@ internal class ClientHandshake<CONNECTION: Connection>(
     private var failedException: Exception? = null
 
     init {
-        // now we have a bi-directional connection with the server on the handshake "socket".
+        // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
+        //  we exclusively read from the DirectBuffer on a single thread.
+
+        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+        //  publication of any state to other threads and not be:
+        //   - long running
+        //   - re-entrant with the client
         handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
             val sessionId = header.sessionId()
             val streamId = header.streamId()
-            val aeronLogInfo = "$sessionId/$streamId"
 
-            val message = endPoint.readHandshakeMessage(buffer, offset, length, header, aeronLogInfo)
+            // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
+            val remoteIpAndPort = (header.context() as Image).sourceIdentity()
+
+            // split
+            val splitPoint = remoteIpAndPort.lastIndexOf(':')
+            val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
+
+            val logInfo = "$sessionId/$streamId:$clientAddressString"
 
             failedException = null
             needToRetry = false
 
-            // it must be a registration message
-            if (message !is HandshakeMessage) {
-                failedException = ClientRejectedException("[$aeronLogInfo] cancelled handshake for unrecognized message: $message")
-                return@FragmentAssembler
-            }
+
+            // ugh, this is verbose -- but necessary
+            val message = try {
+                val msg = handshaker.readMessage(buffer, offset, length)
+
+                // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                if (msg !is HandshakeMessage) {
+                    throw ClientRejectedException("[$logInfo] Connection not allowed! unrecognized message: $msg") .apply { cleanAllStackTrace() }
+                } else if (logger.isTraceEnabled) {
+                    logger.trace("[$logInfo] (${msg.connectKey}) received HS: $msg")
+                }
+                msg
+            } catch (e: Exception) {
+                client.listenerManager.notifyError(ClientHandshakeException("[$logInfo] Error de-serializing handshake message!!", e))
+                null
+            } ?: return@FragmentAssembler
+
+
 
             // this is an error message
             if (message.state == HandshakeMessage.INVALID) {
-                val cause = ServerException(message.errorMessage ?: "Unknown").apply { stackTrace = stackTrace.copyOfRange(0, 1) }
-                failedException = ClientRejectedException("[$aeronLogInfo} - ${message.connectKey}] cancelled handshake", cause)
+                val cause = ServerException(message.errorMessage ?: "Unknown").apply { stackTrace = emptyArray() }
+                failedException = ClientRejectedException("[$logInfo}] (${message.connectKey}) cancelled handshake", cause)
+                    .apply { cleanAllStackTrace() }
                 return@FragmentAssembler
             }
 
@@ -94,7 +119,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             }
 
             if (connectKey != message.connectKey) {
-                logger.error("[$aeronLogInfo - $connectKey] ignored handshake for ${message.connectKey} (Was for another client)")
+                logger.error("[$logInfo] ($connectKey) ignored handshake for ${message.connectKey} (Was for another client)")
                 return@FragmentAssembler
             }
 
@@ -110,28 +135,20 @@ internal class ClientHandshake<CONNECTION: Connection>(
                     if (registrationData != null && serverPublicKeyBytes != null) {
                         connectionHelloInfo = crypto.decrypt(registrationData, serverPublicKeyBytes)
                     } else {
-                        failedException = ClientRejectedException("[$aeronLogInfo} - ${message.connectKey}] canceled handshake for message without registration and/or public key info")
+                        failedException = ClientRejectedException("[$logInfo}] (${message.connectKey}) canceled handshake for message without registration and/or public key info")
+                            .apply { cleanAllStackTrace() }
                     }
                 }
                 HandshakeMessage.HELLO_ACK_IPC -> {
                     // The message was intended for this client. Try to parse it as one of the available message types.
                     // this message is NOT-ENCRYPTED!
-                    val cryptInput = crypto.cryptInput
+                    val serverPublicKeyBytes = message.publicKey
 
-                    if (registrationData != null) {
-                        cryptInput.buffer = registrationData
-
-                        val sessId = cryptInput.readInt()
-                        val streamPubId = cryptInput.readInt()
-                        val regDetailsSize = cryptInput.readInt()
-                        val regDetails = cryptInput.readBytes(regDetailsSize)
-
-                        // now read data off
-                        connectionHelloInfo = ClientConnectionInfo(sessionId = sessId,
-                                                                   port = streamPubId,
-                                                                   kryoRegistrationDetails = regDetails)
+                    if (registrationData != null && serverPublicKeyBytes != null) {
+                        connectionHelloInfo = crypto.nocrypt(registrationData, serverPublicKeyBytes)
                     } else {
-                        failedException = ClientRejectedException("[$aeronLogInfo - ${message.connectKey}] canceled handshake for message without registration data")
+                        failedException = ClientRejectedException("[$logInfo}] (${message.connectKey}) canceled handshake for message without registration and/or public key info")
+                                .apply { cleanAllStackTrace() }
                     }
                 }
                 HandshakeMessage.DONE_ACK -> {
@@ -139,7 +156,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 }
                 else -> {
                     val stateString = HandshakeMessage.toStateString(message.state)
-                    failedException = ClientRejectedException("[$aeronLogInfo - ${message.connectKey}] cancelled handshake for message that is $stateString")
+                    failedException = ClientRejectedException("[$logInfo] (${message.connectKey}) cancelled handshake for message that is $stateString")
+                        .apply { cleanAllStackTrace() }
                 }
             }
         }
@@ -149,76 +167,75 @@ internal class ClientHandshake<CONNECTION: Connection>(
      * Make sure that NON-ZERO is returned
      */
     private fun getSafeConnectKey(): Long {
-        var key = endPoint.crypto.secureRandom.nextLong()
+        var key = CryptoManagement.secureRandom.nextLong()
         while (key == 0L) {
-            key = endPoint.crypto.secureRandom.nextLong()
+            key = CryptoManagement.secureRandom.nextLong()
         }
 
         return key
     }
 
     // called from the connect thread
-    fun hello(handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) : ClientConnectionInfo {
-        failedException = null
+    // when exceptions are thrown, the handshake pub/sub will be closed
+    fun hello(
+        tagName: String,
+        endPoint: EndPoint<CONNECTION>,
+        handshakeConnection: ClientHandshakeDriver,
+        handshakeTimeoutNs: Long
+    ) : ClientConnectionInfo {
+        val pubSub = handshakeConnection.pubSub
+
+        // is our pub still connected??
+        if (!pubSub.pub.isConnected) {
+            throw ClientException("Handshake publication is not connected, and it is expected to be connected!")
+        }
+
+        // always make sure that we reset the state when we start (in the event of reconnects)
+        reset()
         connectKey = getSafeConnectKey()
-        val publicKey = endPoint.storage.getPublicKey()!!
-
-        val aeronLogInfo = "${handshakeConnection.remoteSessionId}/${handshakeConnection.streamId}"
-
-        // Send the one-time pad to the server.
-        val publication = handshakeConnection.publication
-        val subscription = handshakeConnection.subscription
 
         try {
-            endPoint.writeHandshakeMessage(publication, aeronLogInfo,
-                                           HandshakeMessage.helloFromClient(connectKey, publicKey,
-                                                                            handshakeConnection.localSessionId,
-                                                                            handshakeConnection.subscriptionPort,
-                                                                            handshakeConnection.subscription.streamId()))
+            // Send the one-time pad to the server.
+            handshaker.writeMessage(pubSub.pub, handshakeConnection.details,
+                                    HandshakeMessage.helloFromClient(
+                                        connectKey = connectKey,
+                                        publicKey = client.storage.publicKey,
+                                        streamIdSub = pubSub.streamIdSub,
+                                        portSub = pubSub.portSub,
+                                        tagName = tagName
+                                    ))
         } catch (e: Exception) {
-            subscription.close()
-            publication.close()
-
-            logger.error("[$aeronLogInfo] Handshake error!", e)
-            throw e
+            handshakeConnection.close(endPoint)
+            throw TransmitException("$handshakeConnection Handshake message error!", e)
         }
 
         // block until we receive the connection information from the server
-        var pollCount: Int
-        pollIdleStrategy.reset()
 
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + endPoint.aeronDriver.getLingerNs()
         val startTime = System.nanoTime()
-        while (System.nanoTime() - startTime < timoutInNanos) {
+        while (System.nanoTime() - startTime < handshakeTimeoutNs) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-            pollCount = subscription.poll(handler, 1)
+            pubSub.sub.poll(handler, 1)
 
             if (failedException != null || connectionHelloInfo != null) {
                 break
             }
 
-            // 0 means we idle. >0 means reset and don't idle (because there are likely more)
-            pollIdleStrategy.idle(pollCount)
+            Thread.sleep(100)
         }
 
         val failedEx = failedException
         if (failedEx != null) {
-            // no longer necessary to hold this connection open (if not a failure, we close the handshake after the DONE message)
-            subscription.close()
-            publication.close()
+            handshakeConnection.close(endPoint)
 
-            ListenerManager.cleanStackTraceInternal(failedEx)
+            failedEx.cleanStackTraceInternal()
             throw failedEx
         }
 
         if (connectionHelloInfo == null) {
-            // no longer necessary to hold this connection open (if not a failure, we close the handshake after the DONE message)
-            subscription.close()
-            publication.close()
+            handshakeConnection.close(endPoint)
 
-            val exception = ClientTimedOutException("[$aeronLogInfo] Waiting for registration response from server")
-            ListenerManager.cleanStackTraceInternal(exception)
+            val exception = ClientTimedOutException("$handshakeConnection Waiting for registration response from server for more than ${Sys.getTimePrettyFull(handshakeTimeoutNs)}")
             throw exception
         }
 
@@ -226,37 +243,45 @@ internal class ClientHandshake<CONNECTION: Connection>(
     }
 
     // called from the connect thread
-    fun done(handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) {
-        val registrationMessage = HandshakeMessage.doneFromClient(connectKey,
-                                                                  handshakeConnection.subscriptionPort,
-                                                                  handshakeConnection.subscription.streamId())
+    // when exceptions are thrown, the handshake pub/sub will be closed
+    fun done(
+        endPoint: EndPoint<CONNECTION>,
+        handshakeConnection: ClientHandshakeDriver,
+        clientConnection: ClientConnectionDriver,
+        handshakeTimeoutNs: Long,
+        logInfo: String
+    ) {
+        val pubSub = clientConnection.connectionInfo
+        val handshakePubSub = handshakeConnection.pubSub
 
-        val aeronLogInfo = "${handshakeConnection.remoteSessionId}/${handshakeConnection.streamId}"
+        // is our pub still connected??
+        if (!pubSub.pub.isConnected) {
+            throw ClientException("Handshake publication is not connected, and it is expected to be connected!")
+        }
 
         // Send the done message to the server.
         try {
-            endPoint.writeHandshakeMessage(handshakeConnection.publication, aeronLogInfo, registrationMessage)
+            handshaker.writeMessage(handshakeConnection.pubSub.pub, logInfo,
+                                    HandshakeMessage.doneFromClient(
+                                        connectKey = connectKey,
+                                        sessionIdSub = handshakePubSub.sessionIdSub,
+                                        streamIdSub = handshakePubSub.streamIdSub
+                                    ))
         } catch (e: Exception) {
-            handshakeConnection.subscription.close()
-            handshakeConnection.publication.close()
-            throw e
+            handshakeConnection.close(endPoint)
+            throw TransmitException("$handshakeConnection Handshake message error!", e)
         }
 
-        // block until we receive the connection information from the server
 
         failedException = null
-        pollIdleStrategy.reset()
+        connectionDone = false
 
-        var pollCount: Int
-
-        val subscription = handshakeConnection.subscription
-
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
+        // block until we receive the connection information from the server
         var startTime = System.nanoTime()
-        while (System.nanoTime() - startTime < timoutInNanos) {
+        while (System.nanoTime() - startTime < handshakeTimeoutNs) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-            pollCount = subscription.poll(handler, 1)
+            handshakePubSub.sub.poll(handler, 1)
 
             if (failedException != null || connectionDone) {
                 break
@@ -269,20 +294,21 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 startTime = System.nanoTime()
             }
 
-            sleep(100L)
-
-            // 0 means we idle. >0 means reset and don't idle (because there are likely more)
-            pollIdleStrategy.idle(pollCount)
+            Thread.sleep(100)
         }
 
         val failedEx = failedException
         if (failedEx != null) {
+            handshakeConnection.close(endPoint)
+
             throw failedEx
         }
 
         if (!connectionDone) {
-            val exception = ClientTimedOutException("Waiting for registration response from server")
-            ListenerManager.cleanStackTraceInternal(exception)
+            // since this failed, close everything
+            handshakeConnection.close(endPoint)
+
+            val exception = ClientTimedOutException("Timed out waiting for registration response from server: ${Sys.getTimePrettyFull(handshakeTimeoutNs)}")
             throw exception
         }
     }

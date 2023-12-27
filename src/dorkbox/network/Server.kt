@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,25 +15,18 @@
  */
 package dorkbox.network
 
-import dorkbox.netUtil.IPv4
-import dorkbox.netUtil.IPv6
-import dorkbox.netUtil.Inet4
-import dorkbox.netUtil.Inet6
-import dorkbox.network.aeron.AeronDriver
-import dorkbox.network.aeron.AeronPoller
-import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EndPoint
-import dorkbox.network.connectionType.ConnectionRule
-import dorkbox.network.exceptions.AllocationException
+import dorkbox.hex.toHexString
+import dorkbox.network.aeron.*
+import dorkbox.network.connection.*
+import dorkbox.network.connection.IpInfo.Companion.IpListenType
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
+import dorkbox.network.connection.buffer.BufferManager
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.handshake.ServerHandshakePollers
+import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.rmi.RmiSupportServer
-import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import org.slf4j.LoggerFactory
 import java.net.InetAddress
 import java.util.concurrent.*
 
@@ -47,90 +40,41 @@ import java.util.concurrent.*
  * @param connectionFunc allows for custom connection implementations defined as a unit function
  * @param loggerName allows for a custom logger name for this endpoint (for when there are multiple endpoints)
  */
-open class Server<CONNECTION : Connection>(
-        config: ServerConfiguration = ServerConfiguration(),
-        connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
-        loggerName: String = Server::class.java.simpleName)
-    : EndPoint<CONNECTION>(config, connectionFunc, loggerName) {
-
-    /**
-     * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
-     * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
-     *
-     * To put it bluntly, ONLY have the server do work inside a listener!
-     *
-     * @param config these are the specific connection options
-     * @param loggerName allows for a custom logger name for this endpoint (for when there are multiple endpoints)
-     * @param connectionFunc allows for custom connection implementations defined as a unit function
-     */
-    constructor(config: ServerConfiguration,
-                loggerName: String,
-                connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION)
-            : this(config, connectionFunc, loggerName)
-
-
-    /**
-     * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
-     * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
-     *
-     * To put it bluntly, ONLY have the server do work inside of a listener!
-     *
-     * @param config these are the specific connection options
-     * @param connectionFunc allows for custom connection implementations defined as a unit function
-     */
-    constructor(config: ServerConfiguration,
-                connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION)
-            : this(config, connectionFunc, Server::class.java.simpleName)
-
-
-    /**
-     * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
-     * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
-     *
-     * To put it bluntly, ONLY have the server do work inside of a listener!
-     *
-     * @param config these are the specific connection options
-     * @param loggerName allows for a custom logger name for this endpoint (for when there are multiple endpoints)
-     */
-    constructor(config: ServerConfiguration,
-                loggerName: String = Server::class.java.simpleName)
-            : this(config,
-                   {
-                        @Suppress("UNCHECKED_CAST")
-                        Connection(it) as CONNECTION
-                   },
-                   loggerName)
-
-    /**
-     * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
-     * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
-     *
-     * To put it bluntly, ONLY have the server do work inside of a listener!
-     *
-     * @param config these are the specific connection options
-     */
-    constructor(config: ServerConfiguration)
-            : this(config,
-                   {
-                        @Suppress("UNCHECKED_CAST")
-                        Connection(it) as CONNECTION
-                   },
-                   Server::class.java.simpleName)
-
+open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerConfiguration(), loggerName: String = Server::class.java.simpleName)
+    : EndPoint<CONNECTION>(config, loggerName) {
 
     companion object {
         /**
          * Gets the version number.
          */
-        const val version = "5.32"
+        const val version = Configuration.version
+
+        /**
+         * Ensures that an endpoint (using the specified configuration) is NO LONGER running.
+         *
+         * NOTE: This method should only be used to check if a server is running for a DIFFERENT configuration than the currently running server
+         *
+         * By default, we will wait the [Configuration.connectionCloseTimeoutInSeconds] * 2 amount of time before returning.
+         *
+         * @return true if the media driver is STOPPED.
+         */
+        fun ensureStopped(configuration: ServerConfiguration): Boolean {
+            val timeout = TimeUnit.SECONDS.toMillis(configuration.connectionCloseTimeoutInSeconds.toLong() * 2)
+
+            val logger = LoggerFactory.getLogger(Server::class.java.simpleName)
+            return AeronDriver.ensureStopped(configuration.copy(), logger, timeout)
+        }
 
         /**
          * Checks to see if a server (using the specified configuration) is running.
          *
-         * This method should only be used to check if a server is running for a DIFFERENT configuration than the currently running server
+         * NOTE: This method should only be used to check if a server is running for a DIFFERENT configuration than the currently running server
+         *
+         * @return true if the media driver is active and running
          */
         fun isRunning(configuration: ServerConfiguration): Boolean {
-            return AeronDriver(configuration).isRunning()
+            val logger = LoggerFactory.getLogger(Server::class.java.simpleName)
+            return AeronDriver.isRunning(configuration.copy(), logger)
         }
 
         init {
@@ -144,261 +88,310 @@ open class Server<CONNECTION : Connection>(
      */
     val rmiGlobal = RmiSupportServer(logger, rmiGlobalSupport)
 
-    /**
-     * @return true if this server has successfully bound to an IP address and is running
-     */
-    private var bindAlreadyCalled = atomic(false)
+//    /**
+//     * Maintains a thread-safe collection of rules used to define the connection type with this server.
+//     */
+//    private val connectionRules = CopyOnWriteArrayList<ConnectionRule>()
 
     /**
-     * These are run in lock-step to shutdown/close the server. Afterwards, bind() can be called again
+     * the IP address information, if available.
      */
+    internal val ipInfo = IpInfo(config)
+
     @Volatile
-    private var shutdownPollLatch = CountDownLatch(1)
-
-    @Volatile
-    private var shutdownEventLatch = CountDownLatch(1)
+    internal lateinit var handshake: ServerHandshake<CONNECTION>
 
     /**
-     * Maintains a thread-safe collection of rules used to define the connection type with this server.
+     * Different connections (to the same client) can be "buffered", meaning that if they "go down" because of a network glitch -- the data
+     * being sent is not lost (it is buffered) and then re-sent once the new connection is established. References to the old connection
+     * will also redirect to the new connection.
      */
-    private val connectionRules = CopyOnWriteArrayList<ConnectionRule>()
+    internal val bufferedManager: BufferManager<CONNECTION>
 
-    /**
-     * true if the following network stacks are available for use
-     */
-    internal val canUseIPv4 = config.enableIPv4 && IPv4.isAvailable
-    internal val canUseIPv6 = config.enableIPv6 && IPv6.isAvailable
-
-
-    // localhost/loopback IP might not always be 127.0.0.1 or ::1
-    // We want to listen on BOTH IPv4 and IPv6 (config option lets us configure this)
-    internal val listenIPv4Address: InetAddress? =
-        if (canUseIPv4) {
-            when (config.listenIpAddress) {
-                "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv4.LOCALHOST
-                "0", "::", "0.0.0.0", "*" -> {
-                    // this is the "wildcard" address. Windows has problems with this.
-                    IPv4.WILDCARD
-                }
-                else -> Inet4.toAddress(config.listenIpAddress) // Inet4Address.getAllByName(config.listenIpAddress)[0]
-            }
-        }
-        else {
-            null
-        }
-
-
-    internal val listenIPv6Address: InetAddress? =
-        if (canUseIPv6) {
-            when (config.listenIpAddress) {
-                "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv6.LOCALHOST
-                "0", "::", "0.0.0.0", "*" -> {
-                    // this is the "wildcard" address. Windows has problems with this.
-                    IPv6.WILDCARD
-                }
-                else -> Inet6.toAddress(config.listenIpAddress)
-            }
-        }
-        else {
-            null
-        }
+    private val string0: String by lazy {
+        "EndPoint [Server: ${storage.publicKey.toHexString()}]"
+    }
 
     init {
-        // we are done with initial configuration, now finish serialization
-        serialization.finishInit(type)
+        bufferedManager = BufferManager(config, listenerManager, aeronDriver, config.bufferedConnectionTimeoutSeconds)
     }
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
-        return ServerException(message, cause)
+        // +2 because we do not want to see the stack for the abstract `newException`
+        val serverException = ServerException(message, cause)
+        serverException.cleanStackTrace(2)
+        return serverException
     }
 
     /**
-     * Binds the server to AERON configuration
+     * Binds the server IPC only, using the previously set AERON configuration
+     */
+    fun bindIpc() {
+        if (!config.enableIpc) {
+            logger.warn("IPC explicitly requested, but not enabled. Enabling IPC...")
+            // we explicitly requested IPC, make sure it's enabled
+            config.contextDefined = false
+            config.enableIpc = true
+            config.contextDefined = true
+        }
+
+        if (config.enableIPv4) { logger.warn("IPv4 is enabled, but only IPC will be used.") }
+        if (config.enableIPv6) { logger.warn("IPv6 is enabled, but only IPC will be used.") }
+
+        internalBind(port1 = 0, port2 = 0, onlyBindIpc = true, runShutdownCheck = true)
+    }
+
+    /**
+     * Binds the server to UDP ports, using the previously set AERON configuration
+     *
+     * @param port1 this is the network port which will be listening for incoming connections
+     * @param port2 this is the network port that the server will use to work around NAT firewalls. By default, this is port1+1, but
+     *              can also be configured independently. This is required, and must be different from port1.
      */
     @Suppress("DuplicatedCode")
-    fun bind() {
-        // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
+    fun bind(port1: Int, port2: Int = port1+1) {
+        if (config.enableIPv4 || config.enableIPv6) {
+            require(port1 != port2) { "port1 cannot be the same as port2" }
+            require(port1 > 0) { "port1 must be > 0" }
+            require(port2 > 0) { "port2 must be > 0" }
+            require(port1 < 65535) { "port1 must be < 65535" }
+            require(port2 < 65535) { "port2 must be < 65535" }
+        }
 
-        if (bindAlreadyCalled.getAndSet(true)) {
-            logger.error { "Unable to bind when the server is already running!" }
+        internalBind(port1 = port1, port2 = port2, onlyBindIpc = false, runShutdownCheck = true)
+    }
+
+    @Suppress("DuplicatedCode")
+    private fun internalBind(port1: Int, port2: Int, onlyBindIpc: Boolean, runShutdownCheck: Boolean) {
+        // the lifecycle of a server is the ENDPOINT (measured via the network event poller)
+        if (endpointIsRunning.value) {
+            listenerManager.notifyError(ServerException("Unable to start, the server is already running!"))
+            return
+        }
+
+        if (runShutdownCheck && !waitForEndpointShutdown()) {
+            listenerManager.notifyError(ServerException("Unable to start the server!"))
             return
         }
 
         try {
             startDriver()
-        } catch (e: Exception) {
-            logger.error(e) { "Unable to start the network driver" }
+            initializeState()
+        }
+        catch (e: Exception) {
+            resetOnError()
+            listenerManager.notifyError(ServerException("Unable to start the server!", e))
             return
         }
 
-        shutdownPollLatch = CountDownLatch(1)
-        shutdownEventLatch = CountDownLatch(1)
+        this@Server.port1 = port1
+        this@Server.port2 = port2
 
         config as ServerConfiguration
 
-        val handshake = ServerHandshake(logger, config, listenerManager, aeronDriver)
-
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
 
-        // this forces the current thread to WAIT until poll system has started
-        val pollStartupLatch = CountDownLatch(1)
-
         val server = this@Server
-        val ipcPoller: AeronPoller = ServerHandshakePollers.ipc(aeronDriver, config, server, handshake)
+        handshake = ServerHandshake(config, listenerManager, aeronDriver, eventDispatch)
 
-        // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
-        val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address == IPv6.WILDCARD
-        val ipv4Poller: AeronPoller
-        val ipv6Poller: AeronPoller
-
-        if (isWildcard) {
-            if (canUseIPv4 && canUseIPv6) {
-                // IPv6 will bind to IPv4 wildcard as well, so don't bind both!
-                ipv4Poller = ServerHandshakePollers.disabled("IPv4 Disabled")
-                ipv6Poller = ServerHandshakePollers.ip6Wildcard(aeronDriver, config, server, handshake)
-            } else {
-                // only 1 will be a real poller
-                ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, server, handshake)
-                ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, server, handshake)
-            }
+        val ipcPoller: AeronPoller = if (config.enableIpc || onlyBindIpc) {
+            ServerHandshakePollers.ipc(server, handshake)
         } else {
-            ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, server, handshake)
-            ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, server, handshake)
+            ServerHandshakePollers.disabled("IPC Disabled")
         }
 
 
-        val networkEventProcessor = Runnable {
-            pollStartupLatch.countDown()
+        val ipPoller = if (onlyBindIpc) {
+            ServerHandshakePollers.disabled("IPv4/6 Disabled")
+        } else {
+            when (ipInfo.ipType) {
+                // IPv6 will bind to IPv4 wildcard as well, so don't bind both!
+                IpListenType.IPWildcard   -> ServerHandshakePollers.ip6Wildcard(server, handshake)
+                IpListenType.IPv4Wildcard -> ServerHandshakePollers.ip4(server, handshake)
+                IpListenType.IPv6Wildcard -> ServerHandshakePollers.ip6(server, handshake)
+                IpListenType.IPv4 -> ServerHandshakePollers.ip4(server, handshake)
+                IpListenType.IPv6 -> ServerHandshakePollers.ip6(server, handshake)
+                IpListenType.IPC  -> ServerHandshakePollers.disabled("IPv4/6 Disabled")
+            }
+        }
 
-            val pollIdleStrategy = config.pollIdleStrategy.cloneToNormal()
-            try {
-                var pollCount: Int
 
-                while (!isShutdown()) {
-                    pollCount = 0
+        logger.info(ipcPoller.info)
+        logger.info(ipPoller.info)
 
+        // if we shutdown/close before the poller starts, we don't want to block forever
+        pollerClosedLatch = CountDownLatch(1)
+        networkEventPoller.submit(
+        action = object : EventActionOperator {
+            override fun invoke(): Int {
+                return if (!shutdownEventPoller) {
                     // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
                     //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
 
-                    // this checks to see if there are NEW clients on the handshake ports
-                    pollCount += ipv4Poller.poll()
-                    pollCount += ipv6Poller.poll()
-
-                    // this checks to see if there are NEW clients via IPC
-                    pollCount += ipcPoller.poll()
+                    // this checks to see if there are NEW clients to handshake with
+                    var pollCount = ipcPoller.poll() + ipPoller.poll()
 
                     // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
                     // so we can modify this as we go
                     connections.forEach { connection ->
-                        if (!connection.isClosedViaAeron()) {
+                        if (connection.canPoll()) {
                             // Otherwise, poll the connection for messages
                             pollCount += connection.poll()
                         } else {
                             // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                            logger.debug { "[${connection.id}/${connection.streamId}] connection expired" }
+                            if (logger.isDebugEnabled) {
+                                logger.debug("[${connection}] connection expired (cleanup)")
+                            }
 
+                            // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
                             removeConnection(connection)
 
-                            // this will call removeConnection again, but that is ok
-                            // this is blocking, because the connection MUST be removed in the same thread that is processing events
+                            // we already removed the connection, we can call it again without side effects
                             connection.close()
-
-                            // have to manually notify the server-listenerManager that this connection was closed
-                            // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
-                            // instantly notified and on cleanup, the server-listenermanager is called
-
-                            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                            actionDispatch.launch {
-                                listenerManager.notifyDisconnect(connection)
-                            }
                         }
                     }
 
-                    // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
-                    pollIdleStrategy.idle(pollCount)
+                    pollCount
+                } else {
+                    // remove ourselves from processing
+                    EventPoller.REMOVE
                 }
+            }
+        },
+        onClose = object : EventCloseOperator {
+            override fun invoke() {
+                val mustRestartDriverOnError = aeronDriver.internal.mustRestartDriverOnError
+                logger.debug("Server event dispatch closing...")
 
-                logger.debug { "Network event dispatch closing..." }
-
-                // we want to process **actual** close cleanup events on this thread as well, otherwise we will have threading problems
-                shutdownPollLatch.await()
-
-                // we have to manually cleanup the connections and call server-notifyDisconnect because otherwise this will never get called
-                val jobs = mutableListOf<Job>()
-
-                // we want to clear all the connections FIRST (since we are shutting down)
-                val cons = mutableListOf<CONNECTION>()
-                connections.forEach { cons.add(it) }
-                connections.clear()
-
-                cons.forEach { connection ->
-                    logger.info { "[${connection.id}/${connection.streamId}] Connection cleanup and close" }
-
-                    // make sure the connection is closed (close can only happen once, so a duplicate call does nothing!)
-                    connection.close()
-
-                    // have to manually notify the server-listenerManager that this connection was closed
-                    // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
-                    // instantly notified and on cleanup, the server-listenermanager is called
-                    // NOTE: this must be the LAST thing happening!
-
-                    // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    val job = actionDispatch.launch {
-                        listenerManager.notifyDisconnect(connection)
-                    }
-                    jobs.add(job)
-                }
-
-                // when we close a client or a server, we want to make sure that ALL notifications are finished.
-                // when it's just a connection getting closed, we don't care about this. We only care when it's "global" shutdown
-                runBlocking {
-                    jobs.forEach { it.join() }
-                }
-            } catch (e: Exception) {
-                logger.error(e) { "Unexpected error during server message polling!" }
-            } finally {
-                ipv4Poller.close()
-                ipv6Poller.close()
                 ipcPoller.close()
+                ipPoller.close()
 
                 // clear all the handshake info
                 handshake.clear()
 
-                try {
-                    // make sure that we have de-allocated all connection data
-                    handshake.checkForMemoryLeaks()
-                } catch (e: AllocationException) {
-                    logger.error(e) { "Error during server cleanup" }
+
+                // we only need to run shutdown methods if there was a network outage or D/C
+                if (!shutdownInProgress.value) {
+                    // this is because we restart automatically on driver errors
+                    this@Server.close(closeEverything = false, sendDisconnectMessage = true, releaseWaitingThreads = !mustRestartDriverOnError)
                 }
 
-                // finish closing -- this lets us make sure that we don't run into race conditions on the thread that calls close()
-                try {
-                    shutdownEventLatch.countDown()
-                } catch (ignored: Exception) {}
-            }
-        }
-        config.networkInterfaceEventDispatcher.submit(networkEventProcessor)
 
-        // wait for the polling thread to startup before letting bind() return
-        pollStartupLatch.await()
+                if (mustRestartDriverOnError) {
+                    logger.error("Critical driver error detected, restarting server.")
+
+                    eventDispatch.CLOSE.launch {
+                        waitForEndpointShutdown()
+
+                        // also wait for everyone else to shutdown!!
+                        aeronDriver.internal.endPointUsages.forEach {
+                            if (it !== this@Server) {
+                                it.waitForEndpointShutdown()
+                            }
+                        }
+
+
+                        // if we restart/reconnect too fast, errors from the previous run will still be present!
+                        aeronDriver.delayLingerTimeout()
+
+                        val p1 = this@Server.port1
+                        val p2 = this@Server.port2
+
+                        if (p1 == 0 && p2 == 0) {
+                            internalBind(port1 = 0, port2 = 0, onlyBindIpc = true, runShutdownCheck = false)
+                        } else {
+                            internalBind(port1 = p1, port2 = p2, onlyBindIpc = false, runShutdownCheck = false)
+                        }
+                    }
+                }
+
+                // we can now call bind again
+                endpointIsRunning.lazySet(false)
+                logger.debug("Closed the Network Event Poller task.")
+                pollerClosedLatch.countDown()
+            }
+        })
+    }
+
+
+//    /**
+//     * Adds an IP+subnet rule that defines what type of connection this IP+subnet should have.
+//     * - NOTHING : Nothing happens to the in/out bytes
+//     * - COMPRESS: The in/out bytes are compressed with LZ4-fast
+//     * - COMPRESS_AND_ENCRYPT: The in/out bytes are compressed (LZ4-fast) THEN encrypted (AES-256-GCM)
+//     *
+//     * If no rules are defined, then for LOOPBACK, it will always be `COMPRESS` and for everything else it will always be `COMPRESS_AND_ENCRYPT`.
+//     *
+//     * If rules are defined, then everything by default is `COMPRESS_AND_ENCRYPT`.
+//     *
+//     * The compression algorithm is LZ4-fast, so there is a small performance impact for a very large gain
+//     * Compress   :       6.210 micros/op;  629.0 MB/s (output: 55.4%)
+//     * Uncompress :       0.641 micros/op; 6097.9 MB/s
+//     */
+//    fun addConnectionRules(vararg rules: ConnectionRule) {
+//        connectionRules.addAll(listOf(*rules))
+//    }
+
+    /**
+     * Adds an IP+subnet rule that defines if that IP+subnet is allowed/denied connectivity to this server.
+     *
+     * By default, if there are no filter rules, then all connections are allowed to connect
+     * If there are filter rules - then ONLY connections for the filter that returns true are allowed to connect (all else are denied)
+     *
+     * If ANY filter rule that is applied returns true, then the connection is permitted
+     *
+     * This function will be called for **only** network clients (IPC client are excluded)
+     *
+     * @param ipFilterRule the IpFilterRule to determine if this connection will be allowed to connect
+     */
+    fun filter(ipFilterRule: IpFilterRule) {
+        listenerManager.filter(ipFilterRule)
     }
 
     /**
-     * Adds an IP+subnet rule that defines what type of connection this IP+subnet should have.
-     * - NOTHING : Nothing happens to the in/out bytes
-     * - COMPRESS: The in/out bytes are compressed with LZ4-fast
-     * - COMPRESS_AND_ENCRYPT: The in/out bytes are compressed (LZ4-fast) THEN encrypted (AES-256-GCM)
+     * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if a connection
+     * should be allowed
      *
-     * If no rules are defined, then for LOOPBACK, it will always be `COMPRESS` and for everything else it will always be `COMPRESS_AND_ENCRYPT`.
+     * By default, if there are no filter rules, then all connections are allowed to connect
+     * If there are filter rules - then ONLY connections for the filter that returns true are allowed to connect (all else are denied)
      *
-     * If rules are defined, then everything by default is `COMPRESS_AND_ENCRYPT`.
+     * It is the responsibility of the custom filter to write the error, if there is one
      *
-     * The compression algorithm is LZ4-fast, so there is a small performance impact for a very large gain
-     * Compress   :       6.210 micros/op;  629.0 MB/s (output: 55.4%)
-     * Uncompress :       0.641 micros/op; 6097.9 MB/s
+     * If the function returns TRUE, then the connection will continue to connect.
+     * If the function returns FALSE, then the other end of the connection will
+     *   receive a connection error
+     *
+     *
+     * If ANY filter rule that is applied returns true, then the connection is permitted
+     *
+     * This function will be called for **only** network clients (IPC client are excluded)
+     *
+     * @param function clientAddress: UDP connection address
+     *                       tagName: the connection tag name
      */
-    fun addConnectionRules(vararg rules: ConnectionRule) {
-        connectionRules.addAll(listOf(*rules))
+    fun filter(function: (clientAddress: InetAddress, tagName: String) -> Boolean)  {
+        listenerManager.filter(function)
+    }
+
+    /**
+     * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if buffered messages
+     * for a connection should be enabled
+     *
+     * By default, if there are no rules, then all connections will have buffered messages enabled
+     * If there are rules - then ONLY connections for the rule that returns true will have buffered messages enabled (all else are disabled)
+     *
+     * It is the responsibility of the custom filter to write the error, if there is one
+     *
+     * If the function returns TRUE, then the buffered messages for a connection are enabled.
+     * If the function returns FALSE, then the buffered messages for a connection is disabled.
+     *
+     * If ANY rule that is applied returns true, then the buffered messages for a connection are enabled
+     *
+     * @param function clientAddress: not-null when UDP connection, null when IPC connection
+     *                       tagName: the connection tag name
+     */
+    fun enableBufferedMessages(function: (clientAddress: InetAddress?, tagName: String) -> Boolean)  {
+        listenerManager.enableBufferedMessages(function)
     }
 
     /**
@@ -411,20 +404,36 @@ open class Server<CONNECTION : Connection>(
     }
 
     /**
-     * Closes the server and all it's connections. After a close, you may call 'bind' again.
+     * Will throw an exception if there are resources that are still in use
      */
-    final override fun close0() {
-        // when we call close, it will shutdown the polling mechanism, then wait for us to tell it to cleanup connections.
-        //
-        // Aeron + the Media Driver will have already been shutdown at this point.
-        if (bindAlreadyCalled.getAndSet(false)) {
-            // These are run in lock-step
-            shutdownPollLatch.countDown()
-            shutdownEventLatch.await()
-        }
+    fun checkForMemoryLeaks() {
+        AeronDriver.checkForMemoryLeaks()
+
+        // make sure that we have de-allocated all connection data
+        handshake.checkForMemoryLeaks()
     }
 
+    /**
+     * By default, if you call close() on the server, it will shut down all parts of the endpoint (listeners, driver, event polling, etc).
+     *
+     * @param closeEverything if true, all parts of the server will be closed (listeners, driver, event polling, etc)
+     */
+    fun close(closeEverything: Boolean = true) {
+        bufferedManager.close()
+        close(closeEverything = closeEverything, sendDisconnectMessage = true, releaseWaitingThreads = true)
+    }
 
+    override fun toString(): String {
+       return string0
+    }
+
+    fun <R> use(block: (Server<CONNECTION>) -> R): R {
+        return try {
+            block(this)
+        } finally {
+            close()
+        }
+    }
 
 //    /**
 //     * Only called by the server!

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,22 +15,21 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.classUtil.ClassHelper
+import dorkbox.classUtil.ClassHierarchy
 import dorkbox.collections.IdentityMap
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.os.OS
-import dorkbox.util.classes.ClassHelper
-import dorkbox.util.classes.ClassHierarchy
-import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import mu.KLogger
 import net.jodah.typetools.TypeResolver
+import org.slf4j.Logger
+import java.net.InetAddress
+import java.util.concurrent.locks.*
+import kotlin.concurrent.write
 
 /**
  * Manages all of the different connect/disconnect/etc listeners
  */
-internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogger) {
+internal class ListenerManager<CONNECTION: Connection>(private val logger: Logger, val eventDispatch: EventDispatcher) {
     companion object {
         /**
          * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
@@ -42,13 +41,13 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
-        fun cleanStackTrace(throwable: Throwable, adjustedStartOfStack: Int = 0) {
+        fun Throwable.cleanStackTrace(adjustedStartOfStack: Int = 0): Throwable {
             // we never care about coroutine stacks, so filter then to start with.
-            val origStackTrace = throwable.stackTrace
+            val origStackTrace = this.stackTrace
             val size = origStackTrace.size
 
             if (size == 0) {
-                return
+                return this
             }
 
             val stackTrace = origStackTrace.filterNot {
@@ -85,15 +84,17 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
             if (newEndIndex > 0) {
                 if (savedFirstStack != null) {
                     // we want to save the FIRST stack frame also, maybe
-                    throwable.stackTrace = savedFirstStack + stackTrace.copyOfRange(newStartIndex, newEndIndex)
+                    this.stackTrace = savedFirstStack + stackTrace.copyOfRange(newStartIndex, newEndIndex)
                 } else {
-                    throwable.stackTrace = stackTrace.copyOfRange(newStartIndex, newEndIndex)
+                    this.stackTrace = stackTrace.copyOfRange(newStartIndex, newEndIndex)
                 }
 
             } else {
                 // keep just one, since it's a stack frame INSIDE our network library, and we need that!
-                throwable.stackTrace = stackTrace.copyOfRange(0, 1)
+                this.stackTrace = stackTrace.copyOfRange(0, 1)
             }
+
+            return this
         }
 
         /**
@@ -101,9 +102,9 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
-        fun cleanStackTraceInternal(throwable: Throwable) {
+        fun Throwable.cleanStackTraceInternal() {
             // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-            val stackTrace = throwable.stackTrace
+            val stackTrace = this.stackTrace
             val size = stackTrace.size
 
             if (size == 0) {
@@ -114,7 +115,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
             val firstDorkboxIndex = stackTrace.indexOfFirst { it.className.startsWith("dorkbox.network.") }
             val lastDorkboxIndex = stackTrace.indexOfLast { it.className.startsWith("dorkbox.network.") }
 
-            throwable.stackTrace = stackTrace.filterIndexed { index, element ->
+            this.stackTrace = stackTrace.filterIndexed { index, element ->
                 val stackName = element.className
                 if (index <= firstDorkboxIndex && index >= lastDorkboxIndex) {
                     false
@@ -131,54 +132,72 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          *
          * We only want the error message, because we do something based on it (and the full stack trace is meaningless)
          */
-        fun cleanAllStackTrace(throwable: Throwable) {
-            val stackTrace = throwable.stackTrace
+        fun Throwable.cleanAllStackTrace(): Throwable{
+            val stackTrace = this.stackTrace
             val size = stackTrace.size
 
             if (size == 0) {
-                return
+                return this
             }
 
             // throw everything out
-            throwable.stackTrace = stackTrace.copyOfRange(0, 1)
+            this.stackTrace = stackTrace.copyOfRange(0, 1)
+            return this
+        }
+
+        internal inline fun <reified T: Any> add(thing: T, array: Array<T>): Array<T> {
+            val currentLength: Int = array.size
+
+            // add the new subscription to the END of the array
+            @Suppress("UNCHECKED_CAST")
+            val newMessageArray = array.copyOf(currentLength + 1) as Array<T>
+            newMessageArray[currentLength] = thing
+
+            return newMessageArray
+        }
+
+        internal inline fun <reified T: Any> remove(thing: T, array: Array<T>): Array<T> {
+            // remove the subscription form the array
+            // THIS IS IDENTITY CHECKS, NOT EQUALITY
+            return array.filter { it !== thing }.toTypedArray()
         }
     }
 
-    // initialize a emtpy arrays
-    private val onConnectFilterList = atomic(Array<(CONNECTION.() -> Boolean)>(0) { { true } })
-    private val onConnectFilterMutex = Mutex()
+    // initialize emtpy arrays
+    @Volatile
+    private var onConnectFilterList = Array<((InetAddress, String) -> Boolean)>(0) { { _, _ -> true } }
+    private val onConnectFilterLock = ReentrantReadWriteLock()
 
-    private val onInitList = atomic(Array<suspend (CONNECTION.() -> Unit)>(0) { { } })
-    private val onInitMutex = Mutex()
+    @Volatile
+    private var onConnectBufferedMessageFilterList = Array<((InetAddress?, String) -> Boolean)>(0) { { _, _ -> true } }
+    private val onConnectBufferedMessageFilterLock = ReentrantReadWriteLock()
 
-    private val onConnectList = atomic(Array<suspend (CONNECTION.() -> Unit)>(0) { { } })
-    private val onConnectMutex = Mutex()
+    @Volatile
+    private var onInitList = Array<(CONNECTION.() -> Unit)>(0) { { } }
+    private val onInitLock = ReentrantReadWriteLock()
 
-    private val onDisconnectList = atomic(Array<suspend CONNECTION.() -> Unit>(0) { { } })
-    private val onDisconnectMutex = Mutex()
+    @Volatile
+    private var onConnectList = Array<(CONNECTION.() -> Unit)>(0) { { } }
+    private val onConnectLock = ReentrantReadWriteLock()
 
-    private val onErrorList = atomic(Array<CONNECTION.(Throwable) -> Unit>(0) { {  } })
-    private val onErrorMutex = Mutex()
+    @Volatile
+    private var onDisconnectList = Array<CONNECTION.() -> Unit>(0) { { } }
+    private val onDisconnectLock = ReentrantReadWriteLock()
 
-    private val onErrorGlobalList = atomic(Array<Throwable.() -> Unit>(0) { { } })
-    private val onErrorGlobalMutex = Mutex()
+    @Volatile
+    private var onErrorList = Array<CONNECTION.(Throwable) -> Unit>(0) { {  } }
+    private val onErrorLock = ReentrantReadWriteLock()
 
-    private val onMessageMap = atomic(IdentityMap<Class<*>, Array<suspend CONNECTION.(Any) -> Unit>>(32, LOAD_FACTOR))
-    private val onMessageMutex = Mutex()
+    @Volatile
+    private var onErrorGlobalList = Array<Throwable.() -> Unit>(0) { { } }
+    private val onErrorGlobalLock = ReentrantReadWriteLock()
+
+    @Volatile
+    private var onMessageMap = IdentityMap<Class<*>, Array<CONNECTION.(Any) -> Unit>>(32, LOAD_FACTOR)
+    private val onMessageLock = ReentrantReadWriteLock()
 
     // used to keep a cache of class hierarchy for distributing messages
     private val classHierarchyCache = ClassHierarchy(LOAD_FACTOR)
-
-    private inline fun <reified T> add(thing: T, array: Array<T>): Array<T> {
-        val currentLength: Int = array.size
-
-        // add the new subscription to the array
-        @Suppress("UNCHECKED_CAST")
-        val newMessageArray = array.copyOf(currentLength + 1) as Array<T>
-        newMessageArray[currentLength] = thing
-
-        return newMessageArray
-    }
 
     /**
      * Adds an IP+subnet rule that defines if that IP+subnet is allowed or denied connectivity to this server.
@@ -186,10 +205,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * If there are no rules added, then all connections are allowed
      * If there are rules added, then a rule MUST be matched to be allowed
      */
-    suspend fun filter(ipFilterRule: IpFilterRule) {
-        filter {
-            // IPC will not filter, so this is OK to coerce to not-null
-            ipFilterRule.matches(remoteAddress!!)
+    fun filter(ipFilterRule: IpFilterRule) {
+        filter { clientAddress, _ ->
+            // IPC will not filter
+            ipFilterRule.matches(clientAddress)
         }
     }
 
@@ -198,18 +217,51 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if a connection
      * should be allowed
      *
+     * By default, if there are no filter rules, then all connections are allowed to connect
+     * If there are filter rules - then ONLY connections for the filter that returns true are allowed to connect (all else are denied)
+     *
      * It is the responsibility of the custom filter to write the error, if there is one
      *
      * If the function returns TRUE, then the connection will continue to connect.
      * If the function returns FALSE, then the other end of the connection will
      *   receive a connection error
      *
-     * For a server, this function will be called for ALL clients.
+     *
+     * If ANY filter rule that is applied returns true, then the connection is permitted
+     *
+     * This function will be called for **only** network clients (IPC client are excluded)
+     *
+     * @param function clientAddress: UDP connection address
+     *                       tagName: the connection tag name
      */
-    suspend fun filter(function: CONNECTION.() -> Boolean) {
-        onConnectFilterMutex.withLock {
+    fun filter(function: (clientAddress: InetAddress, tagName: String) -> Boolean) {
+        onConnectFilterLock.write {
             // we have to follow the single-writer principle!
-            onConnectFilterList.lazySet(add(function, onConnectFilterList.value))
+            onConnectFilterList = add(function, onConnectFilterList)
+        }
+    }
+
+    /**
+     * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if buffered messages
+     * for a connection should be enabled
+     *
+     * By default, if there are no rules, then all connections will have buffered messages enabled
+     * If there are rules - then ONLY connections for the rule that returns true will have buffered messages enabled (all else are disabled)
+     *
+     * It is the responsibility of the custom filter to write the error, if there is one
+     *
+     * If the function returns TRUE, then the buffered messages for a connection are enabled.
+     * If the function returns FALSE, then the buffered messages for a connection is disabled.
+     *
+     * If ANY rule that is applied returns true, then the buffered messages for a connection are enabled
+     *
+     * @param function clientAddress: not-null when UDP connection, null when IPC connection
+     *                       tagName: the connection tag name
+     */
+    fun enableBufferedMessages(function: (clientAddress: InetAddress?, tagName: String) -> Boolean) {
+        onConnectBufferedMessageFilterLock.write {
+            // we have to follow the single-writer principle!
+            onConnectBufferedMessageFilterList = add(function, onConnectBufferedMessageFilterList)
         }
     }
 
@@ -219,10 +271,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * For a server, this function will be called for ALL client connections.
      */
-    suspend fun onInit(function: suspend CONNECTION.() -> Unit) {
-        onInitMutex.withLock {
+    fun onInit(function: CONNECTION.() -> Unit) {
+        onInitLock.write {
             // we have to follow the single-writer principle!
-            onInitList.lazySet(add(function, onInitList.value))
+            onInitList = add(function, onInitList)
         }
     }
 
@@ -230,10 +282,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * Adds a function that will be called when a client/server connection first establishes a connection with the remote end.
      * 'onInit()' callbacks will execute for both the client and server before `onConnect()` will execute will "connects" with each other
      */
-    suspend fun onConnect(function: suspend CONNECTION.() -> Unit) {
-        onConnectMutex.withLock {
+    fun onConnect(function: CONNECTION.() -> Unit) {
+        onConnectLock.write {
             // we have to follow the single-writer principle!
-            onConnectList.lazySet(add(function, onConnectList.value))
+            onConnectList = add(function, onConnectList)
         }
     }
 
@@ -242,10 +294,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * Do not try to send messages! The connection will already be closed, resulting in an error if you attempt to do so.
      */
-    suspend fun onDisconnect(function: suspend CONNECTION.() -> Unit) {
-        onDisconnectMutex.withLock {
+    fun onDisconnect(function: CONNECTION.() -> Unit) {
+        onDisconnectLock.write {
             // we have to follow the single-writer principle!
-            onDisconnectList.lazySet(add(function, onDisconnectList.value))
+            onDisconnectList = add(function, onDisconnectList)
         }
     }
 
@@ -254,10 +306,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * The error is also sent to an error log before this method is called.
      */
-    suspend fun onError(function: CONNECTION.(Throwable) -> Unit) {
-        onErrorMutex.withLock {
+    fun onError(function: CONNECTION.(Throwable) -> Unit) {
+        onErrorLock.write {
             // we have to follow the single-writer principle!
-            onErrorList.lazySet(add(function, onErrorList.value))
+            onErrorList = add(function, onErrorList)
         }
     }
 
@@ -266,10 +318,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * The error is also sent to an error log before this method is called.
      */
-    suspend fun onError(function: Throwable.() -> Unit) {
-        onErrorGlobalMutex.withLock {
+    fun onError(function: Throwable.() -> Unit) {
+        onErrorGlobalLock.write {
             // we have to follow the single-writer principle!
-            onErrorGlobalList.lazySet(add(function, onErrorGlobalList.value))
+            onErrorGlobalList = add(function, onErrorGlobalList)
         }
     }
 
@@ -278,8 +330,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
-    suspend fun <MESSAGE> onMessage(function: suspend CONNECTION.(MESSAGE) -> Unit) {
-        onMessageMutex.withLock {
+    fun <MESSAGE> onMessage(function: CONNECTION.(MESSAGE) -> Unit) {
+        onMessageLock.write {
             // we have to follow the single-writer principle!
 
             // this is the connection generic parameter for the listener, works for lambda expressions as well
@@ -300,27 +352,27 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
             }
 
             if (success) {
-                // NOTE: https://github.com/Kotlin/kotlinx.atomicfu
+                // https://github.com/Kotlin/kotlinx.atomicfu
                 // this is EXPLICITLY listed as a "Don't" via the documentation. The ****ONLY**** reason this is actually OK is because
                 // we are following the "single-writer principle", so only ONE THREAD can modify this at a time.
-                val tempMap = onMessageMap.value
+                val tempMap = onMessageMap
 
                 @Suppress("UNCHECKED_CAST")
-                val func = function as suspend (CONNECTION, Any) -> Unit
+                val func = function as (CONNECTION, Any) -> Unit
 
-                val newMessageArray: Array<suspend (CONNECTION, Any) -> Unit>
-                val onMessageArray: Array<suspend (CONNECTION, Any) -> Unit>? = tempMap.get(messageClass)
+                val newMessageArray: Array<(CONNECTION, Any) -> Unit>
+                val onMessageArray: Array<(CONNECTION, Any) -> Unit>? = tempMap[messageClass]
 
                 if (onMessageArray != null) {
                     newMessageArray = add(function, onMessageArray)
                 } else {
                     @Suppress("RemoveExplicitTypeArguments")
-                    newMessageArray = Array<suspend (CONNECTION, Any) -> Unit>(1) { { _, _ -> } }
+                    newMessageArray = Array<(CONNECTION, Any) -> Unit>(1) { { _, _ -> } }
                     newMessageArray[0] = func
                 }
 
-                tempMap.put(messageClass, newMessageArray)
-                onMessageMap.lazySet(tempMap)
+                tempMap.put(messageClass!!, newMessageArray)
+                onMessageMap = tempMap
             } else {
                 throw IllegalArgumentException("Unable to add incompatible types! Detected connection/message classes: $connectionClass, $messageClass")
             }
@@ -332,23 +384,18 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * It is the responsibility of the custom filter to write the error, if there is one
      *
-     * @return true if the connection will be allowed to connect. False if we should terminate this connection
+     * This is run directly on the thread that calls it!
+     *
+     * @return true if the client address is allowed to connect. False if we should terminate this connection
      */
-     fun notifyFilter(connection: CONNECTION): Boolean {
-        // remote address will NOT be null at this stage, but best to verify.
-        val remoteAddress = connection.remoteAddress
-        if (remoteAddress == null) {
-            logger.error("Connection ${connection.id}: Unable to attempt connection stages when no remote address is present")
-            return false
-        }
-
+    fun notifyFilter(clientAddress: InetAddress, clientTagName: String): Boolean {
         // by default, there is a SINGLE rule that will always exist, and will always ACCEPT ALL connections.
         // This is so the array types can be setup (the compiler needs SOMETHING there)
-        val arrayOfIpFilterRules = onConnectFilterList.value
+        val list = onConnectFilterList
 
         // if there is a rule, a connection must match for it to connect
-        arrayOfIpFilterRules.forEach {
-            if (it.invoke(connection)) {
+        list.forEach {
+            if (it.invoke(clientAddress, clientTagName)) {
                 return true
             }
         }
@@ -356,70 +403,135 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
         // default if nothing matches
         // NO RULES ADDED -> ACCEPT
         //    RULES ADDED -> DENY
-        return arrayOfIpFilterRules.isEmpty()
+        return list.isEmpty()
+    }
+
+    /**
+     * Invoked just after a connection is created, but before it is connected.
+     *
+     * It is the responsibility of the custom filter to write the error, if there is one
+     *
+     * This is run directly on the thread that calls it!
+     *
+     * @return true if the connection will have buffered messages enabled. False if buffered messages for this connection should be disabled.
+     */
+    fun notifyEnableBufferedMessages(clientAddress: InetAddress?, clientTagName: String): Boolean {
+        // by default, there is a SINGLE rule that will always exist, and will always PERMIT buffered messages.
+        // This is so the array types can be setup (the compiler needs SOMETHING there)
+        val list = onConnectBufferedMessageFilterList
+
+        // if there is a rule, a connection must match for it to enable buffered messages
+        list.forEach {
+            if (it.invoke(clientAddress, clientTagName)) {
+                return true
+            }
+        }
+
+        // default if nothing matches
+        // NO RULES ADDED -> ALLOW Buffered Messages
+        //    RULES ADDED -> DISABLE Buffered Messages
+        return list.isEmpty()
     }
 
     /**
      * Invoked when a connection is first initialized, but BEFORE it's connected to the remote address.
+     *
+     * NOTE: This is run directly on the thread that calls it! Things that happen in event are TIME-CRITICAL, and must happen before connect happens.
+     * Because of this guarantee, init is immediately executed where connect is on a separate thread
      */
     fun notifyInit(connection: CONNECTION) {
-        runBlocking {
-            onInitList.value.forEach {
-                try {
-                    it(connection)
-                } catch (t: Throwable) {
-                    // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                    cleanStackTrace(t)
-                    logger.error("Connection ${connection.id} error", t)
-                }
+        val list = onInitList
+        list.forEach {
+            try {
+                it(connection)
+            } catch (t: Throwable) {
+                // when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                t.cleanStackTrace()
+                logger.error("Connection ${connection.id} error", t)
             }
         }
     }
 
     /**
      * Invoked when a connection is connected to a remote address.
+     *
+     * This is run on the EventDispatch!
      */
-    suspend fun notifyConnect(connection: CONNECTION) {
-        onConnectList.value.forEach {
-            try {
-                it(connection)
-            } catch (t: Throwable) {
-                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
-                logger.error("Connection ${connection.id} error", t)
+    fun notifyConnect(connection: CONNECTION) {
+        val list = onConnectList
+        if (list.isNotEmpty()) {
+            connection.endPoint.eventDispatch.CONNECT.launch {
+                list.forEach {
+                    try {
+                        it(connection)
+                    } catch (t: Throwable) {
+                        //  when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                        t.cleanStackTrace()
+                        logger.error("Connection ${connection.id} error", t)
+                    }
+                }
             }
         }
     }
 
     /**
      * Invoked when a connection is disconnected to a remote address.
+     *
+     * This is exclusively called from a connection, when that connection is closed!
+     *
+     * This is run on the EventDispatch!
      */
-    suspend fun notifyDisconnect(connection: CONNECTION) {
-        onDisconnectList.value.forEach {
-            try {
-                it(connection)
-            } catch (t: Throwable) {
-                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
-                logger.error("Connection ${connection.id} error", t)
+    fun notifyDisconnect(connection: Connection) {
+        connection.notifyDisconnect()
+
+        @Suppress("UNCHECKED_CAST")
+        directNotifyDisconnect(connection as CONNECTION)
+    }
+
+    /**
+     * This is invoked by either a GLOBAL listener manager, or for a SPECIFIC CONNECTION listener manager.
+     */
+    fun directNotifyDisconnect(connection: CONNECTION) {
+        val list = onDisconnectList
+        if (list.isNotEmpty()) {
+            connection.endPoint.eventDispatch.CLOSE.launch {
+                list.forEach {
+                    try {
+                        it(connection)
+                    } catch (t: Throwable) {
+                        // when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                        t.cleanStackTrace()
+                        logger.error("Connection ${connection.id} error", t)
+                    }
+                }
             }
         }
     }
+
 
     /**
      * Invoked when there is an error for a specific connection
      *
      * The error is also sent to an error log before notifying callbacks
+     *
+     * This is run on the EventDispatch!
      */
     fun notifyError(connection: CONNECTION, exception: Throwable) {
-        onErrorList.value.forEach {
-            try {
-                it(connection, exception)
-            } catch (t: Throwable) {
-                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
-                logger.error("Connection ${connection.id} error", t)
+        val list = onErrorList
+        if (list.isNotEmpty()) {
+            connection.endPoint.eventDispatch.ERROR.launch {
+                list.forEach {
+                    try {
+                        it(connection, exception)
+                    } catch (t: Throwable) {
+                        // when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                        t.cleanStackTrace()
+                        logger.error("Connection ${connection.id} error", t)
+                    }
+                }
             }
+        } else {
+            logger.error("Error with connection $connection", exception)
         }
     }
 
@@ -428,15 +540,22 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * The error is also sent to an error log before notifying callbacks
      */
-    val notifyError: (exception: Throwable) -> Unit = { exception ->
-        onErrorGlobalList.value.forEach {
-            try {
-                it(exception)
-            } catch (t: Throwable) {
-                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
-                logger.error("Global error", t)
+    fun notifyError(exception: Throwable) {
+        val list = onErrorGlobalList
+        if (list.isNotEmpty()) {
+            eventDispatch.ERROR.launch {
+                list.forEach {
+                    try {
+                        it(exception)
+                    } catch (t: Throwable) {
+                        // when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                        t.cleanStackTrace()
+                        logger.error("Global error", t)
+                    }
+                }
             }
+        } else {
+            logger.error("Global error", exception)
         }
     }
 
@@ -445,7 +564,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * @return true if there were listeners assigned for this message type
      */
-    suspend fun notifyOnMessage(connection: CONNECTION, message: Any): Boolean {
+    fun notifyOnMessage(connection: CONNECTION, message: Any): Boolean {
         val messageClass: Class<*> = message.javaClass
 
         // have to save the types + hierarchy (note: duplicates are OK, since they will just be overwritten)
@@ -465,10 +584,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
 
         // cache the lookup
         //   we don't care about race conditions, since the object hierarchy will be ALREADY established at this exact moment
-        val tempMap = onMessageMap.value
+        val tempMap = onMessageMap
         var hasListeners = false
         hierarchy.forEach { clazz ->
-            val onMessageArray: Array<suspend (CONNECTION, Any) -> Unit>? = tempMap.get(clazz)
+            val onMessageArray: Array<(CONNECTION, Any) -> Unit>? = tempMap[clazz]
             if (onMessageArray != null) {
                 hasListeners = true
 
@@ -476,8 +595,6 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                     try {
                         func(connection, message)
                     } catch (t: Throwable) {
-                        cleanStackTrace(t)
-                        logger.error("Connection ${connection.id} error", t)
                         notifyError(connection, t)
                     }
                 }
@@ -485,5 +602,38 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
         }
 
         return hasListeners
+    }
+
+    /**
+     * This will remove all listeners that have been registered!
+     */
+    fun close() {
+        // we have to follow the single-writer principle!
+        logger.debug("Closing the listener manager")
+
+        onConnectFilterLock.write {
+            onConnectFilterList = Array(0) { { _, _ -> true } }
+        }
+        onConnectBufferedMessageFilterLock.write {
+            onConnectBufferedMessageFilterList = Array(0) { { _, _ -> true } }
+        }
+        onInitLock.write {
+            onInitList = Array(0) { { } }
+        }
+        onConnectLock.write {
+            onConnectList = Array(0) { { } }
+        }
+        onDisconnectLock.write {
+            onDisconnectList = Array(0) { { } }
+        }
+        onErrorLock.write {
+            onErrorList = Array(0) { {  } }
+        }
+        onErrorGlobalLock.write {
+            onErrorGlobalList = Array(0) { { } }
+        }
+        onMessageLock.write {
+            onMessageMap = IdentityMap(32, LOAD_FACTOR)
+        }
     }
 }

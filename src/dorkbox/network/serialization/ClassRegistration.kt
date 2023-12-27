@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import com.esotericsoftware.kryo.Serializer
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.messages.RmiServerSerializer
 
-internal abstract class ClassRegistration<CONNECTION: Connection>(val clazz: Class<*>, val serializer: Serializer<*>? = null, var id: Int = 0) {
+internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: Serializer<*>? = null, var id: Int = 0) {
     companion object {
         const val IGNORE_REGISTRATION = -1
     }
@@ -33,7 +33,7 @@ internal abstract class ClassRegistration<CONNECTION: Connection>(val clazz: Cla
      * If so, we ignore it - any IFACE or IMPL that already has been assigned to an RMI serializer, *MUST* remain an RMI serializer
      * If this class registration will EVENTUALLY be for RMI, then [ClassRegistrationForRmi] will reassign the serializer
      */
-    open fun register(kryo: KryoExtra<CONNECTION>, rmi: RmiHolder) {
+    open fun register(kryo: Kryo, rmi: RmiHolder) {
         // ClassRegistrationForRmi overrides this method
         if (id == IGNORE_REGISTRATION) {
             // we have previously specified that this registration should be ignored!

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,14 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.aeron.mediaDriver.MediaDriverConnectInfo
+import dorkbox.network.handshake.PubSub
+import javax.crypto.spec.SecretKeySpec
 
 data class ConnectionParams<CONNECTION : Connection>(
+    val publicKey: ByteArray,
     val endPoint: EndPoint<CONNECTION>,
-    val connectionInfo: MediaDriverConnectInfo,
-    val publicKeyValidation: PublicKeyValidationState
+    val connectionInfo: PubSub,
+    val publicKeyValidation: PublicKeyValidationState,
+    val enableBufferedMessages: Boolean,
+    val cryptoKey: SecretKeySpec
 )

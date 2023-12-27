@@ -1,6 +1,6 @@
 
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,6 @@ import dorkbox.storage.Storage
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.RmiCommonTest
 import dorkboxTest.network.rmi.cows.TestCow
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.slf4j.LoggerFactory
 
@@ -79,7 +78,7 @@ object TestClient {
             logger.error("Starting test for: Client -> Server")
 
             rmi.getGlobal<TestCow>(12123).apply {
-                RmiCommonTest.runTests(this@onConnect, this, 12123)
+                RmiCommonTest.runTests(this@onConnect, this@apply, 12123)
                 logger.error("DONE")
 
                 // now send this remote object ACROSS the wire to the server (on the server, this is where the IMPLEMENTATION lives)
@@ -102,10 +101,7 @@ object TestClient {
             close()
         }
 
-        client.connect(BaseTest.LOCALHOST)
-
-        runBlocking {
-            client.waitForClose()
-        }
+        client.connect(BaseTest.LOCALHOST, 2000)
+        client.waitForClose()
     }
 }

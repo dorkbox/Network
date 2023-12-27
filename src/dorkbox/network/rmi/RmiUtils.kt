@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +18,9 @@ package dorkbox.network.rmi
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.reflectasm.MethodAccess
+import dorkbox.classUtil.ClassHelper
 import dorkbox.network.connection.Connection
-import dorkbox.util.classes.ClassHelper
-import mu.KLogger
+import org.slf4j.Logger
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.*
@@ -75,7 +75,7 @@ object RmiUtils {
         throw RuntimeException("Two methods with same signature! ('$o1Name', '$o2Name'")
     }
 
-    private fun getReflectAsmMethod(logger: KLogger, clazz: Class<*>): MethodAccess? {
+    private fun getReflectAsmMethod(logger: Logger, clazz: Class<*>): MethodAccess? {
         return try {
             val methodAccess = MethodAccess.get(clazz)
 
@@ -95,7 +95,7 @@ object RmiUtils {
      * @param iFace this is never null.
      * @param impl this is NULL on the rmi "client" side. This is NOT NULL on the "server" side (where the object lives)
      */
-    fun getCachedMethods(logger: KLogger, kryo: Kryo, asmEnabled: Boolean, iFace: Class<*>, impl: Class<*>?, classId: Int): Array<CachedMethod> {
+    fun getCachedMethods(logger: Logger, kryo: Kryo, asmEnabled: Boolean, iFace: Class<*>, impl: Class<*>?, classId: Int): Array<CachedMethod> {
         var ifaceAsmMethodAccess: MethodAccess? = null
         var implAsmMethodAccess: MethodAccess? = null
 
@@ -495,7 +495,7 @@ object RmiUtils {
      *
      * We do this because these stack frames are not useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
      */
-    fun cleanStackTraceForProxy(localException: Exception, remoteException: Exception? = null) {
+    fun cleanStackTraceForProxy(localException: Throwable, remoteException: Throwable? = null) {
         val myClassName = RmiClient::class.java.name
         val stackTrace = localException.stackTrace
         var newStartIndex = 0
@@ -553,7 +553,7 @@ object RmiUtils {
      *
      * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
      */
-    fun cleanStackTraceForImpl(exception: Exception, isSuspendFunction: Boolean) {
+    fun cleanStackTraceForImpl(exception: Throwable, isSuspendFunction: Boolean) {
         val packageName = RmiUtils::class.java.packageName
 
         val stackTrace = exception.stackTrace
@@ -578,7 +578,8 @@ object RmiUtils {
         // step 2: starting at newEndIndex -> 0, find the start of reflection information (we are java11+ ONLY, so this is easy)
         for (i in newEndIndex downTo 0) {
             // this will be either JAVA reflection or ReflectASM reflection
-            val stackModule = stackTrace[i].moduleName
+            val stackTraceElement: StackTraceElement = stackTrace[i]
+            val stackModule = stackTraceElement.moduleName
             if (stackModule == "java.base") {
                 newEndIndex--
             } else {

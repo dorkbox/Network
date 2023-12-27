@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,14 +22,10 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.BaseTest
-import kotlinx.coroutines.delay
-import org.junit.Assert
 import org.junit.Test
-import java.util.concurrent.atomic.*
+import java.util.concurrent.*
 
 class RmiSpamAsyncTest : BaseTest() {
-    private val counter = AtomicLong(0)
-
     private val RMI_ID = 12251
 
 
@@ -49,13 +45,12 @@ class RmiSpamAsyncTest : BaseTest() {
      * In this test the server has two objects in an object space. The client
      * uses the first remote object to get the second remote object.
      */
-    fun rmi(config: Configuration.() -> Unit = {}) {
-        val server: Server<Connection>
-
+    private fun rmi(config: Configuration.() -> Unit = {}) {
         val mod = 100_000L
-        val totalRuns = 1_000_000L
+        val totalRuns = 1_000_000
+        val latch = CountDownLatch(totalRuns)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
             config(configuration)
 
@@ -64,28 +59,27 @@ class RmiSpamAsyncTest : BaseTest() {
 
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
-            server = Server(configuration)
+            val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
-            server.bind()
+            server.rmiGlobal.save(TestObjectImpl(latch), RMI_ID)
+            server
         }
 
 
-        val client: Client<Connection>
-        run {
+        val client = run {
             val configuration = clientConfig()
             config(configuration)
 
             // the logger cannot keep-up if it's on trace
             setLogLevel(Level.DEBUG)
 
-            client = Client<Connection>(configuration)
+            val client = Client<Connection>(configuration)
             addEndPoint(client)
 
             client.onConnect {
                 val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
-                val obj = remoteObject as RemoteObject
+                val obj = RemoteObject.cast(remoteObject)
                 obj.async = true
 
                 var started = false
@@ -107,37 +101,27 @@ class RmiSpamAsyncTest : BaseTest() {
                         e.printStackTrace()
                     }
                 }
-
-                // The async nature means that we don't know EXACTLY when all the messages will arrive. For testing, this is the closest
-                // we can do to attempt to have a correct info lookup.
-                var count = 0
-                while (counter.get() < totalRuns && count < 30) {
-                    logger.error("Waiting for ${totalRuns - counter.get()} more messages...")
-                    count++
-                    delay(1_000)
-                }
-
-
-                // have to do this first, so it will wait for the client responses!
-                // if we close the client first, the connection will be closed, and the responses will never arrive to the server
-                stopEndPoints()
             }
 
-            client.connect(LOCALHOST)
+            client
         }
 
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
+        latch.await()
+        stopEndPoints()
         waitForThreads()
-        Assert.assertEquals(totalRuns, counter.get())
     }
 
     private interface TestObject {
-        fun setOther(value: Long): Boolean
+        fun setOther(value: Int): Boolean
     }
 
-    private class TestObjectImpl(private val counter: AtomicLong) : TestObject {
+    private class TestObjectImpl(private val latch: CountDownLatch) : TestObject {
         @Override
-        override fun setOther(value: Long): Boolean {
-            counter.getAndIncrement()
+        override fun setOther(value: Int): Boolean {
+            latch.countDown()
             return true
         }
     }

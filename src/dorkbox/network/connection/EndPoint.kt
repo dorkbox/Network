@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,57 +15,55 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.collections.ConcurrentIterator
+import dorkbox.netUtil.IP
 import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
+import dorkbox.network.aeron.EventPoller
+import dorkbox.network.connection.buffer.BufferedMessages
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
-import dorkbox.network.exceptions.ClientException
-import dorkbox.network.exceptions.ServerException
-import dorkbox.network.handshake.HandshakeMessage
-import dorkbox.network.ipFilter.IpFilterRule
+import dorkbox.network.exceptions.*
+import dorkbox.network.handshake.Handshaker
 import dorkbox.network.ping.Ping
-import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.ResponseManager
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.RmiManagerGlobal
 import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.rmi.messages.RmiMessage
-import dorkbox.network.serialization.KryoExtra
+import dorkbox.network.serialization.KryoReader
+import dorkbox.network.serialization.KryoWriter
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.serialization.SettingsStore
+import dorkbox.objectPool.BoundedPoolObject
+import dorkbox.objectPool.ObjectPool
+import dorkbox.objectPool.Pool
+import dorkbox.os.OS
 import io.aeron.Publication
+import io.aeron.driver.ThreadingMode
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.plus
-import kotlinx.coroutines.runBlocking
-import mu.KLogger
-import mu.KotlinLogging
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.trySendBlocking
 import org.agrona.DirectBuffer
-import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.util.concurrent.*
 
-fun CoroutineScope.eventLoop(block: suspend CoroutineScope.() -> Unit): Job {
-    // UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently in a different thread
-    //   we want this behavior to prevent "stack overflow" in case there are nested calls
-    return launch(start = CoroutineStart.UNDISPATCHED, block = block)
-}
+
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
 // it results in severe UDP packet loss and contention.
 //
 // http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM
-// also, a google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
+// also, a Google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
 // Usually it's with ISPs.
 /**
  * represents the base of a client/server end point for interacting with aeron
@@ -76,82 +74,98 @@ fun CoroutineScope.eventLoop(block: suspend CoroutineScope.() -> Unit): Job {
  *
  *  @throws SecurityException if unable to initialize/generate ECC keys
 */
-abstract class EndPoint<CONNECTION : Connection>
-internal constructor(val type: Class<*>,
-                     internal val config: Configuration,
-                     internal val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
-                     loggerName: String)
-             : AutoCloseable {
+abstract class EndPoint<CONNECTION : Connection> private constructor(val type: Class<*>, val config: Configuration, loggerName: String) {
 
     protected constructor(config: Configuration,
-                          connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                           loggerName: String)
-            : this(Client::class.java, config, connectionFunc, loggerName)
+        : this(Client::class.java, config, loggerName)
 
     protected constructor(config: ServerConfiguration,
-                          connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                           loggerName: String)
-            : this(Server::class.java, config, connectionFunc, loggerName)
+        : this(Server::class.java, config, loggerName)
 
     companion object {
-        /**
-         * @return the error code text for the specified number
-         */
-        private fun errorCodeName(result: Long): String {
-            return when (result) {
-                // The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
-                Publication.NOT_CONNECTED -> "Not connected"
+        // connections are extremely difficult to diagnose when the connection timeout is short
+        internal const val DEBUG_CONNECTIONS = false
 
-                // The offer failed due to back pressure from the subscribers preventing further transmission.
-                Publication.BACK_PRESSURED -> "Back pressured"
+        internal const val IPC_NAME = "IPC"
 
-                // The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
-                Publication.ADMIN_ACTION -> "Administrative action"
+        internal val networkEventPoller = EventPoller()
+        internal val responseManager = ResponseManager()
 
-                // The Publication has been closed and should no longer be used.
-                Publication.CLOSED -> "Publication is closed"
-
-                // If this happens then the publication should be closed and a new one added. To make it less likely to happen then increase the term buffer length.
-                Publication.MAX_POSITION_EXCEEDED -> "Maximum term position exceeded"
-
-                else -> throw IllegalStateException("Unknown error code: $result")
-            }
-        }
+        internal val lanAddress = IP.lanAddress()
     }
 
-    val logger: KLogger = KotlinLogging.logger(loggerName)
+    val logger: Logger = LoggerFactory.getLogger(loggerName)
+
+    internal val eventDispatch = EventDispatcher(loggerName)
 
     private val handler = CoroutineExceptionHandler { _, exception ->
-        logger.error(exception) { "Uncaught Coroutine Error!" }
+        logger.error("Uncaught Coroutine Error: ${exception.stackTraceToString()}")
     }
 
-    internal val actionDispatch = config.dispatch + handler
+    // this is rather silly, BUT if there are more complex errors WITH the coroutine that occur, a regular try/catch WILL NOT catch it.
+    // ADDITIONALLY, an error handler is ONLY effective at the first, top-level `launch`. IT WILL NOT WORK ANY OTHER WAY.
+    private val messageCoroutineScope = CoroutineScope(Dispatchers.IO + handler + SupervisorJob())
+    private val messageChannel = Channel<Paired<CONNECTION>>()
+    private val pairedPool: Pool<Paired<CONNECTION>>
 
-    internal val listenerManager = ListenerManager<CONNECTION>(logger)
-    internal val connections = ConnectionManager<CONNECTION>()
+    internal val listenerManager = ListenerManager<CONNECTION>(logger, eventDispatch)
 
-    internal val aeronDriver: AeronDriver
+    val connections = ConcurrentIterator<CONNECTION>()
+
+    @Volatile
+    internal var aeronDriver: AeronDriver
 
     /**
-     * Returns the serialization wrapper if there is an object type that needs to be added outside of the basic types.
+     * Returns the serialization wrapper if there is an object type that needs to be added in addition to the basic types.
      */
     val serialization: Serialization<CONNECTION>
 
-    private val handshakeKryo: KryoExtra<CONNECTION>
+    /**
+     * Read and Write can be concurrent (different buffers are used)
+     * GLOBAL, single threaded only kryo instances.
+     *
+     * This WILL RE-CONFIGURED during the client handshake! (it is all the same thread, so object visibility is not a problem)
+     */
+    @Volatile
+    internal lateinit var readKryo: KryoReader<CONNECTION>
 
-    private val sendIdleStrategy: IdleStrategy
-    private val pollIdleStrategy: IdleStrategy
-    private val handshakeSendIdleStrategy: IdleStrategy
+    internal val handshaker: Handshaker<CONNECTION>
 
     /**
      * Crypto and signature management
      */
     internal val crypto: CryptoManagement
 
-    private val shutdown = atomic(false)
+
+    private val hook: Thread
+
+
+    // manage the startup state of the endpoint. True if the endpoint is running
+    internal val endpointIsRunning = atomic(false)
+
+    // this only prevents multiple shutdowns (in the event this close() is called multiple times)
+    private var shutdown = atomic(false)
+    internal val shutdownInProgress = atomic(false)
 
     @Volatile
-    private var shutdownLatch = CountDownLatch(1)
+    internal var shutdownEventPoller = false
+
+    @Volatile
+    private var shutdownLatch = CountDownLatch(0)
+
+    /**
+     * This is run in lock-step to shutdown/close the client/server event poller. Afterward, connect/bind can be called again
+     */
+    @Volatile
+    internal var pollerClosedLatch = CountDownLatch(0)
+
+    /**
+     * This is only notified when endpoint.close() is called where EVERYTHING is to be closed.
+     */
+    @Volatile
+    internal var closeLatch = CountDownLatch(0)
 
     /**
      * Returns the storage used by this endpoint. This is the backing data structure for key/value pairs, and can be a database, file, etc
@@ -160,38 +174,69 @@ internal constructor(val type: Class<*>,
      */
     val storage: SettingsStore
 
-    internal val responseManager = ResponseManager(logger, actionDispatch)
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger)
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
-    private val streamingManager = StreamingManager<CONNECTION>(logger, actionDispatch)
+    private val streamingManager = StreamingManager<CONNECTION>(logger, config)
 
-    internal val pingManager = PingManager<CONNECTION>()
+    /**
+     * The primary machine port that the server will listen for connections on
+     */
+    @Volatile
+    var port1: Int = 0
+        internal set
+
+    /**
+     * The secondary machine port that the server will use to work around NAT firewalls (this is required, and will be different from the primary)
+     */
+    @Volatile
+    var port2: Int = 0
+        internal set
 
     init {
-        require(!config.previouslyUsed) { "${type.simpleName} configuration cannot be reused!" }
-        config.validate() // this happens more than once! (this is ok)
+        if (DEBUG_CONNECTIONS) {
+            logger.error("DEBUG_CONNECTIONS is enabled. This should not happen in release!")
+        }
+
+        // this happens more than once! (this is ok)
+        config.validate()
 
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
         serialization = config.serialization as Serialization<CONNECTION>
-        sendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
-        pollIdleStrategy = config.pollIdleStrategy.cloneToNormal()
-        handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
+        serialization.finishInit(type, config.networkMtuSize)
 
-        handshakeKryo = serialization.initHandshakeKryo()
+        serialization.fileContentsSerializer.streamingManager = streamingManager
+
+        // we are done with initial configuration, now finish serialization
+        // the CLIENT will reassign these in the `connect0` method (because it registers what the server says to register)
+        if (type == Server::class.java) {
+            readKryo = serialization.newReadKryo()
+        }
+
 
         // we have to be able to specify the property store
-        storage = SettingsStore(config.settingsStore.logger(logger), logger)
-
+        storage = SettingsStore(config.settingsStore, logger)
         crypto = CryptoManagement(logger, storage, type, config.enableRemoteSignatureValidation)
 
         // Only starts the media driver if we are NOT already running!
-        try {
-            aeronDriver = AeronDriver(config, type, logger, listenerManager.notifyError)
+        // NOTE: in the event that we are IPC -- only ONE SERVER can be running IPC at a time for a single driver!
+        if (type == Server::class.java && config.enableIpc) {
+            val configuration = config.copy()
+            if (AeronDriver.isLoaded(configuration, logger)) {
+                val e = ServerException("Only one server at a time can share a single aeron driver! Make the driver unique or change it's directory: ${configuration.aeronDirectory}")
+                listenerManager.notifyError(e)
+                throw e
+            }
+        }
+
+        aeronDriver = try {
+            @Suppress("LeakingThis")
+            AeronDriver.new(this@EndPoint)
         } catch (e: Exception) {
-            logger.error("Error initialize endpoint", e)
-            throw e
+            val exception = Exception("Error initializing endpoint", e)
+            listenerManager.notifyError(exception)
+            throw exception
         }
 
         rmiConnectionSupport = if (type.javaClass == Server::class.java) {
@@ -204,24 +249,139 @@ internal constructor(val type: Class<*>,
                 return@RmiManagerConnections rmiGlobalSupport.getGlobalRemoteObject(connection, objectId, interfaceClass)
             }
         }
+
+        handshaker = Handshaker(logger, config, serialization, listenerManager, aeronDriver) { errorMessage, exception ->
+            return@Handshaker newException(errorMessage, exception)
+        }
+
+        hook = Thread {
+            close(closeEverything = true, sendDisconnectMessage = true, releaseWaitingThreads = true)
+        }
+
+        Runtime.getRuntime().addShutdownHook(hook)
+
+
+
+        val poolObject = object : BoundedPoolObject<Paired<CONNECTION>>() {
+            override fun newInstance(): Paired<CONNECTION> {
+                return Paired()
+            }
+        }
+
+        // The purpose of this, is to lessen the impact of garbage created on the heap.
+        pairedPool = ObjectPool.nonBlockingBounded(poolObject, 256)
+    }
+
+
+    internal val typeName: String
+        get() {
+            return if (type == Server::class.java) {
+                "server"
+            } else {
+                "client"
+            }
+        }
+
+    internal val otherTypeName: String
+        get() {
+            return if (type == Server::class.java) {
+                "client"
+            } else {
+                "server"
+            }
+        }
+
+    internal fun isServer(): Boolean {
+        return type === Server::class.java
+    }
+
+    internal fun isClient(): Boolean {
+        return type === Client::class.java
+    }
+
+    /**
+     * Make sure that shutdown latch is properly initialized
+     *
+     * The client calls this every time it attempts a connection.
+     */
+    internal fun initializeState() {
+        // on repeated runs, we have to make sure that we release the original latches so we don't appear to deadlock.
+        val origCloseLatch = closeLatch
+        val origShutdownLatch = shutdownLatch
+        val origPollerLatch = pollerClosedLatch
+
+        // on the first run, we depend on these to be 0
+        shutdownLatch = CountDownLatch(1)
+        closeLatch = CountDownLatch(1)
+
+        // make sure we don't deadlock if we are waiting for the server to close
+        origCloseLatch.countDown()
+        origShutdownLatch.countDown()
+        origPollerLatch.countDown()
+
+        endpointIsRunning.lazySet(true)
+        shutdown.lazySet(false)
+        shutdownEventPoller = false
+
+        // there are threading issues if there are client(s) and server's within the same JVM, where we have thread starvation
+        // this resolves the problem. Additionally, this is tied-to specific a specific endpoint instance
+        networkEventPoller.configure(logger, config, this)
+
+
+
+        // how to select the number of threads that will fetch/use data off the network stack.
+        // The default is a minimum of 1, but maximum of 4.
+        // Account for
+        //  - Aeron Threads (3, usually - defined in config)
+        //  - Leave 2 threads for "the box"
+
+        val aeronThreads = when (config.threadingMode) {
+            ThreadingMode.SHARED -> 1
+            ThreadingMode.SHARED_NETWORK -> 2
+            ThreadingMode.DEDICATED -> 3
+            else -> 3
+        }
+
+
+        // create a new one when the endpoint starts up, because we close it when the endpoint shuts down or when the client retries
+        // this leaves 2 for the box and XX for aeron
+        val messageProcessThreads = (OS.optimumNumberOfThreads - aeronThreads).coerceAtLeast(1).coerceAtMost(4)
+
+        // create a new one when the endpoint starts up, because we close it when the endpoint shuts down or when the client retries
+        repeat(messageProcessThreads) {
+            messageCoroutineScope.launch {
+                // this is only true while the endpoint is running.
+                while (endpointIsRunning.value) {
+                    val paired = messageChannel.receive()
+                    val connection = paired.connection
+                    val message = paired.message
+                    pairedPool.put(paired)
+
+                    processMessageFromChannel(connection, message)
+                }
+            }
+        }
     }
 
     /**
      * Only starts the media driver if we are NOT already running!
      *
+     * If we were previously closed, we will start a new again. This is concurrent safe!
+     *
      * @throws Exception if there is a problem starting the media driver
      */
     fun startDriver() {
+        // recreate the driver if we have previously closed. If we have never run, this does nothing
+        aeronDriver = aeronDriver.newIfClosed()
         aeronDriver.start()
-        shutdown.value = false
     }
 
     /**
      * Stops the network driver.
      *
      * @param forceTerminate if true, then there is no caution when restarting the Aeron driver, and any other process on the machine using
-     * the same driver will probably crash (unless they have been appropriately stopped). If false (the default), then the Aeron driver is
-     * only stopped if it is safe to do so
+     * the same driver will probably crash (unless they have been appropriately stopped).
+     * If false, then the Aeron driver is only stopped if it is safe to do so
      */
     fun stopDriver(forceTerminate: Boolean = false) {
         if (forceTerminate) {
@@ -229,6 +389,14 @@ internal constructor(val type: Class<*>,
         } else {
             aeronDriver.closeIfSingle()
         }
+    }
+
+    /**
+     * This is called whenever a new connection is made. By overriding this, it is possible to customize the Connection type.
+     */
+    open fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION {
+        @Suppress("UNCHECKED_CAST")
+        return Connection(connectionParameters) as CONNECTION
     }
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
@@ -267,62 +435,25 @@ internal constructor(val type: Class<*>,
     }
 
     /**
-     * Adds an IP+subnet rule that defines if that IP+subnet is allowed/denied connectivity to this server.
-     *
-     * By default, if there are no filter rules, then all connections are allowed to connect
-     * If there are filter rules - then ONLY connections for the filter that returns true are allowed to connect (all else are denied)
-     *
-     * This function will be called for **only** network clients (IPC client are excluded)
-     */
-    fun filter(ipFilterRule: IpFilterRule) {
-        actionDispatch.launch {
-            listenerManager.filter(ipFilterRule)
-        }
-    }
-
-    /**
-     * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if a connection
-     * should be allowed
-     *
-     * By default, if there are no filter rules, then all connections are allowed to connect
-     * If there are filter rules - then ONLY connections for the filter that returns true are allowed to connect (all else are denied)
-     *
-     * It is the responsibility of the custom filter to write the error, if there is one
-     *
-     * If the function returns TRUE, then the connection will continue to connect.
-     * If the function returns FALSE, then the other end of the connection will
-     *   receive a connection error
-     *
-     * This function will be called for **only** network clients (IPC client are excluded)
-     */
-    fun filter(function: CONNECTION.() -> Boolean) {
-        actionDispatch.launch {
-            listenerManager.filter(function)
-        }
-    }
-
-    /**
      * Adds a function that will be called when a client/server connection is FIRST initialized, but before it's
      * connected to the remote endpoint.
      *
      * NOTE: This callback is executed IN-LINE with network IO, so one must be very careful about what is executed.
      *
+     * Things that happen in this event are TIME-CRITICAL, and must happen before anything else. If you block here, you will block network IO
+     *
      * For a server, this function will be called for ALL client connections.
      */
-    fun onInit(function: suspend CONNECTION.() -> Unit) {
-        actionDispatch.launch {
-            listenerManager.onInit(function)
-        }
+    fun onInit(function: CONNECTION.() -> Unit){
+        listenerManager.onInit(function)
     }
 
     /**
      * Adds a function that will be called when a client/server connection first establishes a connection with the remote end.
      * 'onInit()' callbacks will execute for both the client and server before `onConnect()` will execute will "connects" with each other
      */
-    fun onConnect(function: suspend CONNECTION.() -> Unit) {
-        actionDispatch.launch {
-            listenerManager.onConnect(function)
-        }
+    fun onConnect(function: CONNECTION.() -> Unit) {
+        listenerManager.onConnect(function)
     }
 
     /**
@@ -330,10 +461,8 @@ internal constructor(val type: Class<*>,
      *
      * Do not try to send messages! The connection will already be closed, resulting in an error if you attempt to do so.
      */
-    fun onDisconnect(function: suspend CONNECTION.() -> Unit) {
-        actionDispatch.launch {
-            listenerManager.onDisconnect(function)
-        }
+    fun onDisconnect(function: CONNECTION.() -> Unit) {
+        listenerManager.onDisconnect(function)
     }
 
     /**
@@ -342,9 +471,7 @@ internal constructor(val type: Class<*>,
      * The error is also sent to an error log before this method is called.
      */
     fun onError(function: CONNECTION.(Throwable) -> Unit) {
-        actionDispatch.launch {
-            listenerManager.onError(function)
-        }
+        listenerManager.onError(function)
     }
 
     /**
@@ -353,9 +480,7 @@ internal constructor(val type: Class<*>,
      * The error is also sent to an error log before this method is called.
      */
     fun onErrorGlobal(function: (Throwable) -> Unit) {
-        actionDispatch.launch {
-            listenerManager.onError(function)
-        }
+        listenerManager.onError(function)
     }
 
     /**
@@ -363,152 +488,265 @@ internal constructor(val type: Class<*>,
      *
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
-    fun <Message : Any> onMessage(function: suspend CONNECTION.(Message) -> Unit) {
-        actionDispatch.launch {
-            listenerManager.onMessage(function)
-        }
+    fun <Message : Any> onMessage(function: CONNECTION.(Message) -> Unit) {
+        listenerManager.onMessage(function)
     }
 
     /**
-     * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
+     * This is designed to permit modifying/overriding how data is processed on the network.
      *
-     * @return true if the message was successfully sent by aeron
-     */
-    internal suspend fun ping(connection: Connection, pingTimeoutMs: Int, function: suspend Ping.() -> Unit): Boolean {
-        return pingManager.ping(connection, pingTimeoutMs, actionDispatch, responseManager, logger, function)
-    }
-
-    /**
-     * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
-     *       CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+     * This will split a message if it's too large to send in a single network message.
      *
-     * @return true if the message was successfully sent by aeron
+     * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    @Suppress("DuplicatedCode")
-    internal fun writeHandshakeMessage(publication: Publication, aeronLogInfo: String, message: HandshakeMessage) {
-        // The handshake sessionId IS NOT globally unique
-        logger.trace { "[$aeronLogInfo - ${message.connectKey}] send HS: $message" }
+    open fun write(
+        message: Any,
+        publication: Publication,
+        sendIdleStrategy: IdleStrategy,
+        connection: Connection,
+        maxMessageSize: Int,
+        abortEarly: Boolean
+    ): Boolean {
+        @Suppress("UNCHECKED_CAST")
+        connection as CONNECTION
 
-        try {
-            val buffer = handshakeKryo.write(message)
-            val objectSize = buffer.position()
-            val internalBuffer = buffer.internalBuffer
+        // prep for idle states
+        sendIdleStrategy.reset()
 
-            var timeoutInNanos = 0L
-            var startTime = 0L
+        // A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
+        val success = try {
+            // since ANY thread can call 'send', we have to take kryo instances in a safe way
+            val kryo = serialization.take()
+            try {
+                val buffer = kryo.write(connection, message)
+                val objectSize = buffer.position()
+                val internalBuffer = buffer.internalBuffer
 
-            var result: Long
-            while (true) {
-                result = publication.offer(internalBuffer, 0, objectSize)
-                if (result >= 0) {
-                    // success!
-                    return
-                }
-
-                /**
-                 * Since the publication is not connected, we weren't able to send data to the remote endpoint.
-                 *
-                 * According to Aeron Docs, Pubs and Subs can "come and go", whatever that means. We just want to make sure that we
-                 * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
-                 */
-                if (result == Publication.NOT_CONNECTED) {
-                    if (timeoutInNanos == 0L) {
-                        timeoutInNanos = (aeronDriver.getLingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
-                        startTime = System.nanoTime()
-                    }
-
-                    if (System.nanoTime() - startTime < timeoutInNanos) {
-                        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
-                        //  publication of any state to other threads and not be long running or re-entrant with the client.
-                        // on close, the publication CAN linger (in case a client goes away, and then comes back)
-                        // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
-
-                        //fixme: this should be the linger timeout, not a retry count!
-
-                        // we should retry.
-                        handshakeSendIdleStrategy.idle()
-                        continue
-                    } else if (!publication.isClosed) {
-                        // more critical error sending the message. we shouldn't retry or anything.
-                        // this exception will be a ClientException or a ServerException
-                        val exception = newException(
-                            "[$aeronLogInfo] Error sending message. (Connection in non-connected state longer than linger timeout ${errorCodeName(result)})"
+                // one small problem! What if the message is too big to send all at once?
+                // The maximum size we can send in a "single fragment" is the maxPayloadLength() function, which is the MTU length less header (with defaults this is 1,376 bytes).
+                if (objectSize >= maxMessageSize) {
+                    val kryoStream = serialization.take()
+                    try {
+                        // we must split up the message! It's too large for Aeron to manage.
+                        streamingManager.send(
+                            publication = publication,
+                            originalBuffer = internalBuffer,
+                            objectSize = objectSize,
+                            maxMessageSize = maxMessageSize,
+                            endPoint = this@EndPoint,
+                            kryo = kryoStream, // this is safe, because we save out the bytes from the original object!
+                            sendIdleStrategy = sendIdleStrategy,
+                            connection = connection
                         )
-                        ListenerManager.cleanStackTraceInternal(exception)
-                        listenerManager.notifyError(exception)
-                        throw exception
+                    } finally {
+                        serialization.put(kryoStream)
                     }
-                    else {
-                        // publication was actually closed, so no bother throwing an error
-                        return
-                    }
+                } else {
+                    aeronDriver.send(publication, internalBuffer, kryo.bufferClaim, 0, objectSize, sendIdleStrategy, connection, abortEarly, listenerManager)
                 }
-
-                /**
-                 * The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
-                 *  val NOT_CONNECTED: Long = -1
-                 *
-                 * The offer failed due to back pressure from the subscribers preventing further transmission.
-                 *  val BACK_PRESSURED: Long = -2
-                 *
-                 * The offer failed due to an administration action and should be retried.
-                 * The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
-                 *  val ADMIN_ACTION: Long = -3
-                 */
-                if (result >= Publication.ADMIN_ACTION) {
-                    // we should retry.
-                    handshakeSendIdleStrategy.idle()
-                    continue
-                }
-
-                // more critical error sending the message. we shouldn't retry or anything.
-                // this exception will be a ClientException or a ServerException
-                val exception = newException("[$aeronLogInfo] Error sending handshake message. $message (${errorCodeName(result)})")
-                ListenerManager.cleanStackTraceInternal(exception)
-                listenerManager.notifyError(exception)
-                throw exception
+            } finally {
+                serialization.put(kryo)
             }
-        } catch (e: Exception) {
-            if (e is ClientException || e is ServerException) {
-                throw e
+        } catch (e: Throwable) {
+            // if the driver is closed due to a network disconnect or a remote-client termination, we also must close the connection.
+            if (aeronDriver.internal.mustRestartDriverOnError) {
+                // we had a HARD network crash/disconnect, we close the driver and then reconnect automatically
+                //NOTE: notifyDisconnect IS NOT CALLED!
+            }
+
+            // make sure we atomically create the listener manager, if necessary
+            else if (message is MethodResponse && message.result is Exception) {
+                val result = message.result as Exception
+                val newException = SerializationException("Error serializing message ${message.javaClass.simpleName}: '$message'", result)
+                listenerManager.notifyError(connection, newException)
+            } else if (message is ClientException || message is ServerException) {
+                val newException = TransmitException("Error with message ${message.javaClass.simpleName}: '$message'", e)
+                listenerManager.notifyError(connection, newException)
             } else {
-                val exception = newException("[$aeronLogInfo] Error serializing handshake message $message", e)
-                ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
-                listenerManager.notifyError(exception)
-                throw exception
+                val newException = TransmitException("Error sending message ${message.javaClass.simpleName}: '$message'", e)
+                listenerManager.notifyError(connection, newException)
             }
-        } finally {
-            handshakeSendIdleStrategy.reset()
+
+            false
         }
+
+        return success
     }
 
     /**
-     * @param buffer The buffer
-     * @param offset The offset from the start of the buffer
-     * @param length The number of bytes to extract
-     * @param header The aeron header information
+     * This is designed to permit modifying/overriding how data is processed on the network.
      *
-     * @return the message
+     * This will NOT split a message if it's too large. Aeron will just crash. This is used by the exclusively by the streaming manager.
+     *
+     * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, aeronLogInfo: String): Any? {
-        return try {
-            // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
-            val message = handshakeKryo.read(buffer, offset, length) as HandshakeMessage
+    open fun writeUnsafe(message: Any, publication: Publication, sendIdleStrategy: IdleStrategy, connection: CONNECTION, kryo: KryoWriter<CONNECTION>): Boolean {
+        // NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
 
-            logger.trace { "[$aeronLogInfo - ${message.connectKey}] received HS: $message" }
+        // since ANY thread can call 'send', we have to take kryo instances in a safe way
+        // the maximum size that this buffer can be is:
+        //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
+        val buffer = kryo.write(connection, message)
+        val objectSize = buffer.position()
+        val internalBuffer = buffer.internalBuffer
+        val bufferClaim = kryo.bufferClaim
 
-            message
-        } catch (e: Exception) {
-            // The handshake sessionId IS NOT globally unique
-            logger.error("[$aeronLogInfo] Error de-serializing message on connection ${header.sessionId()}!", e)
-            listenerManager.notifyError(e)
-            null
+        return aeronDriver.send(publication, internalBuffer, bufferClaim, 0, objectSize, sendIdleStrategy, connection, false, listenerManager)
+    }
+
+    /**
+     * Processes a message that has been read off the network.
+     *
+     * The thread that reads this data, IS NOT the thread that consumes data off the network socket, but rather the data is consumed off
+     * of the logfile (hopefully on a mem-disk). This allows for backpressure and network messages to arrive **faster** that what can be
+     * processed.
+     *
+     * This is written in a way that permits modifying/overriding how data is processed on the network
+     *
+     * There are custom objects that are used (Ping, RmiMessages, Streaming object, etc.) are manage and use custom object types. These types
+     * must be EXPLICITLY used by the implementation, and if a custom message processor is to be used (ie: a state machine) you must
+     * guarantee that Ping, RMI, Streaming object, etc. are not used (as it would not function without this custom
+     */
+    open fun processMessage(message: Any?, connection: CONNECTION, readKryo: KryoReader<CONNECTION>) {
+        // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept data BEFORE it goes to a coroutine
+        when (message) {
+            // the remote endPoint will send this message if it is closing the connection.
+            // IF we get this message in time, then we do not have to wait for the connection to expire before closing it
+            is DisconnectMessage -> {
+                val closeEverything = message.closeEverything
+
+                if (logger.isDebugEnabled) {
+                    if (closeEverything) {
+                        logger.debug("Received disconnect message from $otherTypeName")
+                    } else {
+                        logger.debug("Received session disconnect message from $otherTypeName")
+                    }
+                }
+
+                // make sure we flag the connection as NOT to timeout!!
+                connection.isClosedWithTimeout() // we only need this to update fields
+                connection.close(sendDisconnectMessage = false, closeEverything = closeEverything)
+            }
+
+            // streaming message. This is used when the published data is too large for a single Aeron message.
+            // TECHNICALLY, we could arbitrarily increase the size of the permitted Aeron message, however this doesn't let us
+            // send arbitrarily large pieces of data (gigs in size, potentially).
+            // This will recursively call into this method for each of the unwrapped blocks of data.
+            is StreamingControl -> {
+                // NOTE: this CANNOT be on a separate threads, because we must guarantee that this happens first!
+                streamingManager.processControlMessage(message, this@EndPoint, connection)
+            }
+            is StreamingData -> {
+                // NOTE: this CANNOT be on a separate threads, because we must guarantee that this happens in-order!
+                try {
+                    streamingManager.processDataMessage(message, this@EndPoint, connection)
+                } catch (e: Exception) {
+                    listenerManager.notifyError(connection, StreamingException("Error processing StreamingMessage", e))
+                }
+            }
+
+            is Any -> {
+                // NOTE: This MUST be on a new threads (otherwise RMI has issues where it will be blocking)
+                val paired = pairedPool.take()
+                paired.connection = connection
+                paired.message = message
+
+                // This will try to send the element (blocking if necessary)
+                messageChannel.trySendBlocking(paired)
+            }
+
+            else -> {
+                listenerManager.notifyError(connection, MessageDispatchException("Unknown message received!!"))
+            }
         }
     }
 
     /**
-     * read the message from the aeron buffer
+     * This is also what process the incoming message when it is received from the aeron network.
+     *
+     * THIS IS PROCESSED ON MULTIPLE THREADS!
+     */
+    internal fun processMessageFromChannel(connection: CONNECTION, message: Any) {
+        when (message) {
+            is Ping -> {
+                // PING will also measure APP latency, not just NETWORK PIPE latency
+                try {
+                    connection.receivePing(message)
+                } catch (e: Exception) {
+                    listenerManager.notifyError(connection, PingException("Error while processing Ping message: $message", e))
+                }
+            }
+
+            is BufferedMessages -> {
+                // this can potentially be an EXTREMELY large set of data -- so when there are buffered messages, it is often better
+                // to batch-send them instead of one-at-a-time (which can cause excessive CPU load and Network I/O)
+                message.messages.forEach {
+                    processMessageFromChannel(connection, it)
+                }
+            }
+
+            // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
+            // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
+            // go in "lock step"
+            is RmiMessage -> {
+                // if we are an RMI message/registration, we have very specific, defined behavior.
+                // We do not use the "normal" listener callback pattern because this requires special functionality
+                try {
+                    rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
+                } catch (e: Exception) {
+                    listenerManager.notifyError(connection, RMIException("Error while processing RMI message", e))
+                }
+            }
+
+            is SendSync -> {
+                // SendSync enables us to NOTIFY the remote endpoint that we have received the message. This is to guarantee happens-before!
+                // Using this will depend upon APP+NETWORK latency, and is (by design) not as performant as sending a regular message!
+                try {
+                    val message2 = message.message
+                    if (message2 != null) {
+                        // this is on the "remote end". Make sure to dispatch/notify the message BEFORE we send a message back!
+                        try {
+                            var hasListeners = listenerManager.notifyOnMessage(connection, message2)
+
+                            // each connection registers, and is polled INDEPENDENTLY for messages.
+                            hasListeners = hasListeners or connection.notifyOnMessage(message2)
+
+                            if (!hasListeners) {
+                                listenerManager.notifyError(connection, MessageDispatchException("No send-sync message callbacks found for ${message2::class.java.name}"))
+                            }
+                        } catch (e: Exception) {
+                            listenerManager.notifyError(connection, MessageDispatchException("Error processing send-sync message ${message2::class.java.name}", e))
+                        }
+                    }
+
+                    connection.receiveSendSync(message)
+                } catch (e: Exception) {
+                    listenerManager.notifyError(connection, SendSyncException("Error while processing send-sync message: $message", e))
+                }
+            }
+
+            else -> {
+                try {
+                    var hasListeners = listenerManager.notifyOnMessage(connection, message)
+
+                    // each connection registers, and is polled INDEPENDENTLY for messages.
+                    hasListeners = hasListeners or connection.notifyOnMessage(message)
+
+                    if (!hasListeners) {
+                        listenerManager.notifyError(connection, MessageDispatchException("No message callbacks found for ${message::class.java.name}"))
+                    }
+                } catch (e: Exception) {
+                    listenerManager.notifyError(connection, MessageDispatchException("Error processing message ${message::class.java.name}", e))
+                }
+            }
+        }
+    }
+
+
+    /**
+     * reads the message from the aeron buffer and figures out how to process it.
+     *
+     * This can be overridden should you want to customize exactly how data is received.
      *
      * @param buffer The buffer
      * @param offset The offset from the start of the buffer
@@ -516,249 +754,42 @@ internal constructor(val type: Class<*>,
      * @param header The aeron header information
      * @param connection The connection this message happened on
      */
-    internal fun processMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection) {
+    internal fun dataReceive(
+        buffer: DirectBuffer,
+        offset: Int,
+        length: Int,
+        header: Header,
+        connection: Connection
+    ) {
         // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
         @Suppress("UNCHECKED_CAST")
         connection as CONNECTION
 
         try {
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
-            val message = serialization.readMessage(buffer, offset, length, connection)
-            logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
-
-            // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept date BEFORE it goes to a coroutine
-
-            when (message) {
-                is CloseMessage -> {
-                    // immediately close the connection
-                    connection.close()
-                }
-
-                is Ping -> {
-                    // NOTE: This MUST be on a new co-routine
-                    actionDispatch.launch {
-                        try {
-                            pingManager.manage(connection, responseManager, message, logger)
-                        } catch (e: Exception) {
-                            logger.error("Error processing message", e)
-                            listenerManager.notifyError(connection, e)
-                        }
-                    }
-                }
-
-                // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
-                // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
-                // go in "lock step"
-                is RmiMessage -> {
-                    // if we are an RMI message/registration, we have very specific, defined behavior.
-                    // We do not use the "normal" listener callback pattern because this requires special functionality
-                    // NOTE: This MUST be on a new co-routine
-                    actionDispatch.launch {
-                        try {
-                            rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
-                        } catch (e: Exception) {
-                            logger.error("Error processing message", e)
-                            listenerManager.notifyError(connection, e)
-                        }
-                    }
-                }
-
-                // streaming/chunked message. This is used when the published data is too large for a single Aeron message.
-                // TECHNICALLY, we could arbitrarily increase the size of the permitted Aeron message, however this doesn't let us
-                // send arbitrarily large pieces of data (gigs in size, potentially).
-                // This will recursively call into this method for each of the unwrapped chunks of data.
-                is StreamingControl -> {
-                    streamingManager.processControlMessage(message, this@EndPoint, connection)
-                }
-                is StreamingData -> {
-                    // NOTE: this will read extra data from the kryo input as necessary (which is why it's not on action dispatch)!
-                    val rawInput = serialization.readRaw()
-                    val dataLength = rawInput.readVarInt(true)
-                    message.payload = rawInput.readBytes(dataLength)
-
-
-                    // NOTE: This MUST NOT be on a new co-routine. It must be on the same thread!
-                    try {
-                        streamingManager.processDataMessage(message, this@EndPoint)
-                    } catch (e: Exception) {
-                        logger.error("Error processing StreamingMessage", e)
-                        listenerManager.notifyError(connection, e)
-                    }
-                }
-
-
-                is Any -> {
-                    // NOTE: This MUST be on a new co-routine
-                    actionDispatch.launch {
-                        try {
-                            var hasListeners = listenerManager.notifyOnMessage(connection, message)
-
-                            // each connection registers, and is polled INDEPENDENTLY for messages.
-                            hasListeners = hasListeners or connection.notifyOnMessage(message)
-
-                            if (!hasListeners) {
-                                logger.error("No message callbacks found for ${message::class.java.name}")
-                            }
-                        } catch (e: Exception) {
-                            logger.error("Error processing message ${message::class.java.name}", e)
-                            listenerManager.notifyError(connection, e)
-                        }
-                    }
-                }
-
-                else -> {
-                    logger.error("Unknown message received!!")
-                }
+            val message = readKryo.read(buffer, offset, length, connection)
+            if (logger.isTraceEnabled) {
+                // don't automatically create the lambda when trace is disabled! Because this uses 'outside' scoped info, it's a new lambda each time!
+                logger.trace("[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message")
             }
+            processMessage(message, connection, readKryo)
         } catch (e: Exception) {
-            // The handshake sessionId IS NOT globally unique
-            logger.error("[${header.sessionId()}] Error de-serializing message", e)
-            listenerManager.notifyError(connection, e)
+            listenerManager.notifyError(connection, newException("Error de-serializing message", e))
         }
     }
 
     /**
-     * NOTE: this **MUST** stay on the same thread/coroutine that calls "send". This cannot be re-dispatched onto a different coroutine!
+     * Ensures that an endpoint (using the specified configuration) is NO LONGER running.
      *
-     * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
-     */
-    @Suppress("DuplicatedCode", "UNCHECKED_CAST")
-    internal fun send(message: Any, publication: Publication, connection: Connection): Boolean {
-        // The handshake sessionId IS NOT globally unique
-        logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
-
-        connection as CONNECTION
-
-        // since ANY thread can call 'send', we have to take kryo instances in a safe way
-        val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
-        try {
-            // the maximum size that this buffer can be is:
-            //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
-            val buffer = kryo.write(connection, message)
-            val objectSize = buffer.position()
-            val internalBuffer = buffer.internalBuffer
-
-
-            // one small problem! What if the message is too big to send all at once?
-            val maxMessageLength = publication.maxMessageLength()
-            if (objectSize >= maxMessageLength) {
-                // we must split up the message! It's too large for Aeron to manage.
-                // this will split up the message, construct the necessary control message and state, then CALL the sendData
-                // method directly for each subsequent message.
-                return streamingManager.send(publication, internalBuffer,
-                                             objectSize, this, connection)
-            }
-
-            return sendData(publication, internalBuffer, 0, objectSize, connection)
-        } catch (e: Exception) {
-            if (message is MethodResponse && message.result is Exception) {
-                val result = message.result as Exception
-                logger.error("[${publication.sessionId()}] Error serializing message '$message'", result)
-                listenerManager.notifyError(connection, result)
-            } else if (message is ClientException || message is ServerException) {
-                logger.error("[${publication.sessionId()}] Error for message '$message'", e)
-                listenerManager.notifyError(connection, e)
-            } else {
-                logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
-                listenerManager.notifyError(connection, e)
-            }
-        } finally {
-            sendIdleStrategy.reset()
-            serialization.returnKryo(kryo)
-        }
-
-        return false
-    }
-
-    /**
-     * the actual bits that send data on the network.
+     * By default, we will wait the [Configuration.connectionCloseTimeoutInSeconds] * 2 amount of time before returning, and
+     * 50ms between checks of the endpoint running
      *
-     * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
+     * @return true if the media driver is STOPPED.
      */
-    internal fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
-        var timeoutInNanos = 0L
-        var startTime = 0L
+    fun ensureStopped(timeoutMS: Long = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong() * 2),
+                              intervalTimeoutMS: Long = 500): Boolean {
 
-        var result: Long
-        while (true) {
-            result = publication.offer(internalBuffer, offset, objectSize)
-            if (result >= 0) {
-                // success!
-                return true
-            }
-
-            /**
-             * Since the publication is not connected, we weren't able to send data to the remote endpoint.
-             *
-             * According to Aeron Docs, Pubs and Subs can "come and go", whatever that means. We just want to make sure that we
-             * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
-             */
-            if (result == Publication.NOT_CONNECTED) {
-                if (timeoutInNanos == 0L) {
-                    timeoutInNanos = (aeronDriver.getLingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
-                    startTime = System.nanoTime()
-                }
-
-                if (System.nanoTime() - startTime < timeoutInNanos) {
-                    // we should retry.
-                    sendIdleStrategy.idle()
-                    continue
-                } else if (!publication.isClosed) {
-                    // more critical error sending the message. we shouldn't retry or anything.
-                    val errorMessage = "[${publication.sessionId()}] Error sending message. (Connection in non-connected state longer than linger timeout. ${errorCodeName(result)})"
-
-                    // either client or server. No other choices. We create an exception, because it's more useful!
-                    val exception = newException(errorMessage)
-
-                    // +2 because we do not want to see the stack for the abstract `newException`
-                    // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
-                    // where we see who is calling "send()"
-                    ListenerManager.cleanStackTrace(exception, 5)
-                    return false
-                } else {
-                    // publication was actually closed, so no bother throwing an error
-                    return false
-                }
-            }
-
-            /**
-             * The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
-             *  val NOT_CONNECTED: Long = -1
-             *
-             * The offer failed due to back pressure from the subscribers preventing further transmission.
-             *  val BACK_PRESSURED: Long = -2
-             *
-             * The offer failed due to an administration action and should be retried.
-             * The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
-             *  val ADMIN_ACTION: Long = -3
-             */
-            if (result >= Publication.ADMIN_ACTION) {
-                // we should retry, BUT we want to suspend ANYONE ELSE trying to write at the same time!
-                sendIdleStrategy.idle()
-                continue
-            }
-
-
-            if (result == Publication.CLOSED && connection.isClosedViaAeron()) {
-                // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
-                // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
-                // send the message.
-                // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
-                return false
-            }
-
-            // more critical error sending the message. we shouldn't retry or anything.
-            val errorMessage = "[${publication.sessionId()}] Error sending message. (${errorCodeName(result)})"
-
-            // either client or server. No other choices. We create an exception, because it's more useful!
-            val exception = newException(errorMessage)
-
-            // +2 because we do not want to see the stack for the abstract `newException`
-            // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
-            // where we see who is calling "send()"
-            ListenerManager.cleanStackTrace(exception, 5)
-            return false
-        }
+        return aeronDriver.ensureStopped(timeoutMS, intervalTimeoutMS)
     }
 
     /**
@@ -784,16 +815,34 @@ internal constructor(val type: Class<*>,
         return aeronDriver.driverBacklog()
     }
 
+    /**
+     * @param errorAction callback for each of the errors reported by the Aeron driver in the current Aeron directory
+     */
+    fun driverErrors(errorAction: (observationCount: Int, firstObservationTimestamp: Long, lastObservationTimestamp: Long, encodedException: String) -> Unit) {
+        aeronDriver.driverErrors(errorAction)
+    }
 
     /**
-     * @return the internal heartbeat of the Aeron driver in the current aeron directory
+     * @param lossStats callback for each of the loss statistic entries reported by the Aeron driver in the current Aeron directory
+     */
+    fun driverLossStats(lossStats: (observationCount: Long,
+                                    totalBytesLost: Long,
+                                    firstObservationTimestamp: Long,
+                                    lastObservationTimestamp: Long,
+                                    sessionId: Int, streamId: Int,
+                                    channel: String, source: String) -> Unit): Int {
+        return aeronDriver.driverLossStats(lossStats)
+    }
+
+    /**
+     * @return the internal heartbeat of the Aeron driver in the current Aeron directory
      */
     fun driverHeartbeatMs(): Long {
         return aeronDriver.driverHeartbeatMs()
     }
 
     /**
-     * @return the internal version of the Aeron driver in the current aeron directory
+     * @return the internal version of the Aeron driver in the current Aeron directory
      */
     fun driverVersion(): String {
         return aeronDriver.driverVersion()
@@ -814,91 +863,244 @@ internal constructor(val type: Class<*>,
     }
 
     /**
-     * Waits for this endpoint to be closed
+     * Waits for this endpoint to be internally shutdown, but not 100% fully closed (which only happens manually)
+     *
+     * @return true if the wait completed before the timeout
      */
-    fun waitForClose() {
-        var latch: CountDownLatch? = null
+    internal fun waitForEndpointShutdown(timeoutMS: Long = 0L): Boolean {
+        // default is true, because if we haven't started up yet, we don't even check the latches
+        var success = true
 
-        while (latch !== shutdownLatch) {
-            latch = shutdownLatch
-            // if we are restarting the network state, we want to continue to wait for a proper close event. Because we RESET the latch,
-            // we must continue to check
-            latch.await()
+
+        var origPollerLatch: CountDownLatch?
+        var origShutdownLatch: CountDownLatch? = null
+
+
+        // don't need to check for both, as they are set together (we just have to check the later of the two)
+        while (origShutdownLatch !== shutdownLatch) {
+            // if we redefine the latches WHILE we are waiting for them, then we will NEVER release (since we lose the reference to the
+            // original latch). This makes sure to check again to make sure we don't appear to deadlock
+            origPollerLatch = pollerClosedLatch
+            origShutdownLatch = shutdownLatch
+
+
+            if (timeoutMS > 0) {
+                success = success && origPollerLatch.await(timeoutMS, TimeUnit.MILLISECONDS)
+                success = success && origShutdownLatch.await(timeoutMS, TimeUnit.MILLISECONDS)
+            } else {
+                origPollerLatch.await()
+                origShutdownLatch.await()
+                success = true
+            }
         }
+
+        return success
     }
 
-    final override fun close() {
-        if (shutdown.compareAndSet(expect = false, update = true)) {
-            logger.info { "Shutting down..." }
 
-
-            // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
-            // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
-            val enableRemove = type == Client::class.java
-            connections.forEach {
-                logger.info { "[${it.id}/${it.streamId}] Closing connection" }
-                it.close(enableRemove)
-            }
-
-            runBlocking {
-                // Connections are closed first, because we want to make sure that no RMI messages can be received
-                // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
-                // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via and RMI method)
-                responseManager.close()
-            }
-
-            // the storage is closed via this as well.
-            storage.close()
-
-            close0()
-
-            aeronDriver.close()
-
-            shutdownLatch = CountDownLatch(1)
-
-            // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
-            shutdownLatch.countDown()
-
-            logger.info { "Done shutting down..." }
-        }
+    /**
+     * Waits for this endpoint to be fully closed. A disconnect from the network (or remote endpoint) will not signal this to continue.
+     */
+    fun waitForClose(): Boolean {
+        return waitForClose(0L)
     }
 
     /**
-     * Close in such a way that we enable us to be restarted. This is the same as a "normal close", but DOES NOT close
-     *  - response manager
-     *  - storage
+     * Waits for this endpoint to be fully closed. A disconnect from the network (or remote endpoint) will not signal this to continue.
+     *
+     * @return true if the wait completed before the timeout
      */
-    fun closeForRestart() {
-        if (shutdown.compareAndSet(expect = false, update = true)) {
-            logger.info { "Shutting down for restart..." }
+    fun waitForClose(timeoutMS: Long = 0L): Boolean {
+        // if we are restarting the network state, we want to continue to wait for a proper close event.
+        // when shutting down, it can take up to 5 seconds to fully register as "shutdown"
 
-
-            // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
-            // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
-            val enableRemove = type == Client::class.java
-            connections.forEach {
-                logger.info { "[${it.id}/${it.streamId}] Closing connection" }
-                it.close(enableRemove)
-            }
-
-            close0()
-
-            aeronDriver.close()
-
-            shutdownLatch = CountDownLatch(1)
-
-            // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
-            shutdownLatch.countDown()
-
-            logger.info { "Done shutting down for restart..." }
+        if (networkEventPoller.isDispatch()) {
+            // we cannot wait for a connection while inside the network event dispatch, since it has to close itself and this method waits for it!!
+            throw IllegalStateException("Unable to 'waitForClose()' while inside the network event dispatch, this will deadlock!")
         }
+
+        logger.trace("Waiting for endpoint to close...")
+
+        var origCloseLatch: CountDownLatch? = null
+
+        var success = false
+        while (origCloseLatch !== closeLatch) {
+            // if we redefine the latches WHILE we are waiting for them, then we will NEVER release (since we lose the reference to the
+            // original latch). This makes sure to check again to make sure we don't appear to deadlock
+            origCloseLatch = closeLatch
+
+
+            success = if (timeoutMS > 0) {
+                origCloseLatch.await(timeoutMS, TimeUnit.MILLISECONDS)
+            } else {
+                origCloseLatch.await()
+                true
+            }
+        }
+
+        return success
     }
 
-    internal open fun close0() {}
+
+    /**
+     * Shall we preserve state when we shutdown, or do we remove all onConnect/Disconnect/etc events from memory.
+     *
+     * There are two viable concerns when we close the connection/client.
+     *  1) We should reset 100% of the state+events, so that every time we connect, everything is redone
+     *  2) We preserve the state+event, BECAUSE adding the onConnect/Disconnect/message event states might be VERY expensive.
+     *
+     * NOTE: This method does NOT block, as the connection state is asynchronous. Use "waitForClose()" to wait for this to finish
+     *
+     * @param closeEverything unless explicitly called, this is only false when a connection is closed in the client.
+     */
+    internal fun close(
+        closeEverything: Boolean,
+        sendDisconnectMessage: Boolean,
+        releaseWaitingThreads: Boolean)
+    {
+        if (!eventDispatch.CLOSE.isDispatch()) {
+            eventDispatch.CLOSE.launch {
+                close(closeEverything, sendDisconnectMessage, releaseWaitingThreads)
+            }
+            return
+        }
+
+        if (logger.isDebugEnabled) {
+            logger.debug("Requesting close: closeEverything=$closeEverything, sendDisconnectMessage=$sendDisconnectMessage, releaseWaitingThreads=$releaseWaitingThreads")
+        }
+
+        // 1) endpoints can call close()
+        // 2) client can close the endpoint if the connection is D/C from aeron (and the endpoint was not closed manually)
+        val shutdownPreviouslyStarted = shutdownInProgress.getAndSet(true)
+        if (closeEverything && shutdownPreviouslyStarted) {
+            if (logger.isDebugEnabled) {
+                logger.debug("Shutdown previously started, cleaning up...")
+            }
+            // this is only called when the client network event poller shuts down
+            // if we have clientConnectionClosed, then run that logic (because it doesn't run on the client when the connection is closed remotely)
+
+            // Clears out all registered events
+            listenerManager.close()
+
+            // Remove from memory the data from the back-end storage
+            storage.close()
+
+            // don't do anything more, since we've already shutdown!
+            return
+        }
+
+        if (shutdownPreviouslyStarted) {
+            if (logger.isDebugEnabled) {
+                logger.debug("Shutdown previously started, ignoring...")
+            }
+            return
+        }
+
+        if (Thread.currentThread() != hook) {
+            try {
+                Runtime.getRuntime().removeShutdownHook(hook)
+            } catch (ignored: Exception) {
+            } catch (ignored: RuntimeException) {
+            }
+        }
 
 
-    override fun toString(): String {
-        return "EndPoint [${type.simpleName}]"
+
+        if (logger.isDebugEnabled) {
+            logger.debug("Shutting down endpoint...")
+        }
+
+
+        // always do this. It is OK to run this multiple times
+        // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
+        // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
+        connections.forEach {
+            it.closeImmediately(sendDisconnectMessage = sendDisconnectMessage, closeEverything = closeEverything)
+        }
+
+
+        // this closes the endpoint specific instance running in the poller
+
+        // THIS WILL SHUT DOWN THE EVENT POLLER IMMEDIATELY! BUT IN AN ASYNC MANNER!
+        shutdownEventPoller = true
+
+        // if we close the poller AND listener manager too quickly, events will not get published
+        // this waits for the ENDPOINT to finish running its tasks in the poller.
+        pollerClosedLatch.await()
+
+
+
+        // this will ONLY close the event dispatcher if ALL endpoints have closed it.
+        // when an endpoint closes, the poll-loop shuts down, and removes itself from the list of poll actions that need to be performed.
+        networkEventPoller.close(logger, this)
+
+        // Connections MUST be closed first, because we want to make sure that no RMI messages can be received
+        // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
+        // IF CLOSED VIA RMI: this will wait for RMI timeouts if there are RMI in-progress.
+        if (closeEverything) {
+            // only close out RMI if we are closing everything!
+            responseManager.close(logger)
+        }
+
+
+        // don't do these things if we are "closed" from a client connection disconnect
+        // if there are any events going on, we want to schedule them to run AFTER all other events for this endpoint are done
+        if (closeEverything) {
+            // when the client connection is closed, we don't close the driver/etc.
+
+            // Clears out all registered events
+            listenerManager.close()
+
+            // Remove from memory the data from the back-end storage
+            storage.close()
+        }
+
+        // we might be restarting the aeron driver, so make sure it's closed.
+        aeronDriver.close()
+
+        shutdown.lazySet(true)
+
+        // the shutdown here must be in the launchSequentially lambda, this way we can guarantee the driver is closed before we move on
+        shutdownInProgress.lazySet(false)
+        shutdownLatch.countDown()
+
+        if (releaseWaitingThreads) {
+            logger.trace("Counting down the close latch...")
+            closeLatch.countDown()
+        }
+
+        logger.info("Done shutting down the endpoint.")
+    }
+
+    /**
+     * @return true if the current execution thread is in the primary network event dispatch
+     */
+    fun isDispatch(): Boolean {
+        return networkEventPoller.isDispatch()
+    }
+
+    /**
+     * Shuts-down each event dispatcher executor, and waits for it to gracefully shutdown.
+     *
+     * Once shutdown, it cannot be restarted and the application MUST recreate the endpoint
+     *
+     * @param timeout how long to wait, must be > 0
+     * @param timeoutUnit what the unit count is
+     */
+    fun shutdownEventDispatcher(timeout: Long = 15, timeoutUnit: TimeUnit = TimeUnit.SECONDS) {
+        logger.info("Waiting for Event Dispatcher to shutdown...")
+        eventDispatch.shutdownAndWait(timeout, timeoutUnit)
+    }
+
+    /**
+     * Reset the running state when there's an error starting up
+     */
+    internal fun resetOnError() {
+        shutdownLatch.countDown()
+        pollerClosedLatch.countDown()
+        endpointIsRunning.lazySet(false)
+        shutdown.lazySet(false)
+        shutdownEventPoller = false
     }
 
     override fun hashCode(): Int {

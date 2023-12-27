@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,15 @@
 
 package dorkbox.network.rmi
 
+import dorkbox.classUtil.ClassHelper
 import dorkbox.collections.LockFreeIntMap
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ListenerManager
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
 import dorkbox.network.serialization.Serialization
-import dorkbox.util.classes.ClassHelper
-import mu.KLogger
+import org.slf4j.Logger
+import java.lang.reflect.Proxy
 
 /**
  * Only the server can create or delete a global object
@@ -34,20 +35,32 @@ import mu.KLogger
  *
  *  Connection scope objects can be remotely created or deleted by either end of the connection. Only the server can create/delete a global scope object
  */
-class RmiSupportConnection<CONNECTION: Connection> internal constructor(
-    private val logger: KLogger,
-    private val connection: CONNECTION,
-    private val responseManager: ResponseManager,
-    private val serialization: Serialization<CONNECTION>,
+class RmiSupportConnection<CONNECTION: Connection> : RmiObjectCache {
+    private val connection: CONNECTION
+    private val responseManager: ResponseManager
+    val serialization: Serialization<CONNECTION>
     private val getGlobalAction: (connection: CONNECTION, objectId: Int, interfaceClass: Class<*>) -> Any
-) : RmiObjectCache(logger) {
 
+    internal constructor(
+        logger: Logger,
+        connection: CONNECTION,
+        responseManager: ResponseManager,
+        serialization: Serialization<CONNECTION>,
+        getGlobalAction: (connection: CONNECTION, objectId: Int, interfaceClass: Class<*>) -> Any
+    ) : super(logger) {
+        this.connection = connection
+        this.responseManager = responseManager
+        this.serialization = serialization
+        this.getGlobalAction = getGlobalAction
+        this.proxyObjects = LockFreeIntMap<RemoteObject<*>>()
+        this.remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
+    }
 
     // It is critical that all of the RMI proxy objects are unique, and are saved/cached PER CONNECTION. These cannot be shared between connections!
-    private val proxyObjects = LockFreeIntMap<RemoteObject>()
+    private val proxyObjects: LockFreeIntMap<RemoteObject<*>>
 
     // callbacks for when a REMOTE object has been created
-    private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
+    private val remoteObjectCreationCallbacks: RemoteObjectStorage
 
     /**
      * Removes a proxy object from the system
@@ -58,21 +71,62 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
         return proxyObjects.remove(rmiId) != null
     }
 
-    private fun getProxyObject(rmiId: Int): RemoteObject? {
+    private fun getProxyObject(rmiId: Int): RemoteObject<*>? {
         return proxyObjects[rmiId]
     }
 
-    private fun saveProxyObject(rmiId: Int, remoteObject: RemoteObject) {
+    private fun saveProxyObject(rmiId: Int, remoteObject: RemoteObject<*>) {
         proxyObjects.put(rmiId, remoteObject)
     }
 
-    private fun <Iface> registerCallback(callback: suspend Iface.() -> Unit): Int {
+    private fun <Iface> registerCallback(callback: Iface.(Int) -> Unit): Int {
         return remoteObjectCreationCallbacks.register(callback)
     }
 
-    internal fun removeCallback(callbackId: Int): suspend Any.() -> Unit {
+    internal fun removeCallback(callbackId: Int): Any.(Int) -> Unit {
         // callback's area always correct, because we track them ourselves.
         return remoteObjectCreationCallbacks.remove(callbackId)!!
+    }
+
+    internal fun getAllCallbacks(): List<Pair<Int, Any.(Int) -> Unit>> {
+        @Suppress("UNCHECKED_CAST")
+        return remoteObjectCreationCallbacks.getAll() as List<Pair<Int, Any.(Int) -> Unit>>
+    }
+
+    internal fun restoreCallbacks(oldProxyCallbacks: List<Pair<Int, Any.(Int) -> Unit>>) {
+        remoteObjectCreationCallbacks.restoreAll(oldProxyCallbacks)
+    }
+
+    /**
+     * @return all the RMI proxy objects used by this connection. This is used by session management in order to preserve RMI functionality.
+     */
+    internal fun getAllProxyObjects(): List<RemoteObject<*>> {
+        return proxyObjects.values.toList()
+    }
+
+    /**
+     * Recreate all the proxy objects for this connection. This is used by session management in order to preserve RMI functionality.
+     */
+    internal fun recreateProxyObjects(oldProxyObjects: List<RemoteObject<*>>) {
+        oldProxyObjects.forEach {
+            // the interface we care about is ALWAYS the second one!
+            val iface = it.javaClass.interfaces[1]
+
+            val kryoId = connection.endPoint.serialization.getKryoIdForRmiClient(iface)
+            val rmiClient = Proxy.getInvocationHandler(it) as RmiClient
+            val rmiId = rmiClient.rmiObjectId
+
+            val proxyObject = RmiManagerGlobal.createProxyObject(
+                rmiClient.isGlobal,
+                connection,
+                serialization,
+                responseManager,
+                kryoId, rmiId,
+                iface
+            )
+
+            saveProxyObject(rmiId, proxyObject)
+        }
     }
 
 
@@ -80,7 +134,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
     /**
      * Tells us to save an existing object in the CONNECTION scope, so a remote connection can get it via [Connection.rmi.get()]
      *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
+     * NOTE:: Methods can throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
@@ -98,7 +152,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
         val rmiId = saveImplObject(`object`)
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
+            exception.cleanStackTrace()
             logger.error("RMI error connection ${connection.id}", exception)
         }
 
@@ -108,7 +162,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
     /**
      * Tells us to save an existing object in the CONNECTION scope using the specified ID, so a remote connection can get it via [Connection.rmi.get()]
      *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
+     * NOTE:: Methods can throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
@@ -125,7 +179,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
         val success = saveImplObject(`object`, objectId)
         if (!success) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
+            exception.cleanStackTrace()
             logger.error("RMI error connection ${connection.id}", exception)
         }
         return success
@@ -134,7 +188,8 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
     /**
      * Creates create a new proxy object where the implementation exists in a remote connection.
      *
-     * The callback will be notified when the remote object has been created.
+     * We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
+     * have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
      *
      * Methods that return a value will throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
      *
@@ -146,36 +201,47 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      *
      * @see RemoteObject
      */
-    fun <Iface> create(vararg objectParameters: Any?, callback: suspend Iface.() -> Unit) {
-        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0)
+    fun <Iface> create(vararg objectParameters: Any?, callback: Iface.(rmiId: Int) -> Unit) {
+        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0) ?: callback.javaClass
         val kryoId = serialization.getKryoIdForRmiClient(iFaceClass)
 
         @Suppress("UNCHECKED_CAST")
         objectParameters as Array<Any?>
 
-        createRemoteObject(connection, kryoId, objectParameters, callback)
+        val callbackId = registerCallback(callback)
+
+        // There is no rmiID yet, because we haven't created it!
+        val message = ConnectionObjectCreateRequest(RmiUtils.packShorts(callbackId, kryoId), objectParameters)
+
+        connection.send(message)
     }
 
     /**
      * Creates create a new proxy object where the implementation exists in a remote connection.
      *
-     * The callback will be notified when the remote object has been created.
+     * We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
+     * have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
      *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
+     * NOTE:: Methods can throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
      *
      * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
+     * ie:  `val remoteObject = RemoteObject.cast(obj)`
      *
      * @see RemoteObject
      */
-    fun <Iface> create(callback: suspend Iface.() -> Unit) {
-        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0)
+    fun <Iface> create(callback: Iface.(rmiId: Int) -> Unit) {
+        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0) ?: callback.javaClass
         val kryoId = serialization.getKryoIdForRmiClient(iFaceClass)
 
-        createRemoteObject(connection, kryoId, null, callback)
+        val callbackId = registerCallback(callback)
+
+        // There is no rmiID yet, because we haven't created it!
+        val message = ConnectionObjectCreateRequest(RmiUtils.packShorts(callbackId, kryoId), null)
+
+        connection.send(message)
     }
 
     /**
@@ -188,11 +254,17 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
     fun delete(rmiObjectId: Int) {
         // we only create the proxy + execute the callback if the RMI id is valid!
         if (rmiObjectId == RemoteObjectStorage.INVALID_RMI) {
-            val exception = Exception("RMI ID '${rmiObjectId}' is invalid. Unable to delete RMI object!")
-            ListenerManager.cleanStackTrace(exception)
+            val exception = Exception("Unable to delete RMI object!")
+            exception.cleanStackTrace()
             logger.error("RMI error connection ${connection.id}", exception)
             return
         }
+
+
+        // it DOESN'T matter which "side" we are, just delete both (RMI id's must always represent the same object on both sides)
+        removeProxyObject(rmiObjectId)
+        removeImplObject<Any?>(rmiObjectId)
+
 
         // ALWAYS send a message because we don't know if we are the "client" or the "server" - and we want ALL sides cleaned up
         connection.send(ConnectionObjectDeleteRequest(rmiObjectId))
@@ -203,6 +275,8 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     *NOTE:: Methods can throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
      *
      * If one wishes to change the remote object behavior, cast the object to a [RemoteObject] to access the different methods, for example:
      * ie:  `val remoteObject = test as RemoteObject`
@@ -219,6 +293,8 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
 
     /**
      * Gets a GLOBAL scope object via the ID. Global remote objects share their state among all connections.
+     *
+     * NOTE:: Methods can throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
@@ -237,13 +313,21 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
     }
 
 
+    /**
+     * Casts this remote object (specified by it's RMI ID) to the "RemoteObject" type, so that those methods can more easily be called
+     */
+    inline fun <reified T> cast(rmiId: Int): RemoteObject<T> {
+        val obj = get<T>(rmiId)
+        @Suppress("UNCHECKED_CAST")
+        return obj as RemoteObject<T>
+    }
 
 
     /**
      * on the connection+client to get a connection-specific remote object (that exists on the server/client)
      */
     internal fun <Iface> getProxyObject(isGlobal: Boolean, connection: CONNECTION, rmiId: Int, interfaceClass: Class<Iface>): Iface {
-        require(interfaceClass.isInterface) { "iface must be an interface." }
+        require(interfaceClass.isInterface) { "'interfaceClass' must be an interface!" }
 
         // so we can just instantly create the proxy object (or get the cached one)
         var proxyObject = getProxyObject(rmiId)
@@ -269,10 +353,11 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      * on the connection+client to get a connection-specific remote object (that exists on the server/client)
      */
     internal fun <Iface> getProxyObject(isGlobal: Boolean, connection: CONNECTION, kryoId: Int, rmiId: Int, interfaceClass: Class<Iface>): Iface {
-        require(interfaceClass.isInterface) { "iface must be an interface." }
+        require(interfaceClass.isInterface) { "'interfaceClass' must be an interface!" }
 
         // so we can just instantly create the proxy object (or get the cached one)
-        var proxyObject = getProxyObject(rmiId)
+        @Suppress("UNCHECKED_CAST")
+        var proxyObject = getProxyObject(rmiId) as RemoteObject<Iface>?
         if (proxyObject == null) {
             proxyObject = RmiManagerGlobal.createProxyObject(isGlobal,
                                                              connection,
@@ -289,25 +374,9 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
         return proxyObject as Iface
     }
 
-
-    /**
-     * on the "client" to create a connection-specific remote object (that exists on the server)
-     */
-    private fun <Iface> createRemoteObject(connection: CONNECTION, kryoId: Int, objectParameters: Array<Any?>?, callback: suspend Iface.() -> Unit) {
-        val callbackId = registerCallback(callback)
-
-        // There is no rmiID yet, because we haven't created it!
-        val message = ConnectionObjectCreateRequest(RmiUtils.packShorts(callbackId, kryoId), objectParameters)
-
-        // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
-        // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
-
-        // this means we are creating a NEW object on the server
-        connection.send(message)
-    }
-
-    internal fun clear() {
+    override fun clear() {
+        super.clear()
         proxyObjects.clear()
-        remoteObjectCreationCallbacks.close()
+        remoteObjectCreationCallbacks.clear()
     }
 }

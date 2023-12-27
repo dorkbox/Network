@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,90 +15,80 @@
  */
 package dorkbox.network.rmi
 
+import dorkbox.objectPool.ObjectPool
+import dorkbox.objectPool.Pool
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedSendChannelException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import mu.KLogger
+import org.slf4j.Logger
 import java.util.concurrent.locks.*
-import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 /**
  * Manages the "pending response" from method invocation.
  *
- * response ID's and the memory they hold will leak if the response never arrives!
+ *
+ * Response IDs are used for in-flight RMI on the network stack. and are limited to 65,535 TOTAL
+ *
+ *  - these are just looped around in a ring buffer.
+ *  - these are stored here as int, however these are REALLY shorts and are int-packed when transferring data on the wire
+ *
+ *  (By default, for RMI/Ping/SendSync...)
+ *  - 0 is reserved for INVALID
+ *  - 1 is reserved for ASYNC (the response will never be sent back, and we don't wait for it)
+ *
  */
-internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) {
+internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int = 2) {
     companion object {
-        val TIMEOUT_EXCEPTION = Exception()
+        val TIMEOUT_EXCEPTION = TimeoutException().apply { stackTrace = arrayOf<StackTraceElement>() }
     }
 
-
-    // Response ID's are for ALL in-flight RMI on the network stack. instead of limited to (originally) 64, we are now limited to 65,535
-    // these are just looped around in a ring buffer.
-    // These are stored here as int, however these are REALLY shorts and are int-packed when transferring data on the wire
-    // 65535 IN FLIGHT RMI method invocations is plenty
-    //   0 is reserved for INVALID
-    //   1 is reserved for ASYNC
-    private val maxValuesInCache = 65535
-    private val rmiWaitersInUse = atomic(0)
-    private val waiterCache = Channel<ResponseWaiter>(maxValuesInCache)
+    private val responseWaitersInUse = atomic(0)
+    private val waiterCache: Pool<ResponseWaiter>
 
     private val pendingLock = ReentrantReadWriteLock()
     private val pending = arrayOfNulls<Any?>(maxValuesInCache+1) // +1 because it's possible to have the value 65535 in the cache
 
     init {
+        require(maxValuesInCache <= 65535) { "The maximum size for the values in the response manager is 65535"}
+        require(maxValuesInCache > minimumValue) { "< $minimumValue (0 and 1 for RMI/Ping/SendSync) are reserved"}
+        require(minimumValue > 1) { "The minimum value $minimumValue must be > 1"}
+
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
-        val ids = mutableListOf<Int>()
+        val ids = mutableListOf<ResponseWaiter>()
 
-        // MIN (32768) -> -1 (65535)
-        // ZERO is special, and is never added!
-        // ONE is special, and is used for ASYNC (the response will never be sent back)
-        // 2 (2) -> MAX (32767)
-
-
-        for (id in Short.MIN_VALUE..-1) {
-            ids.add(id)
-        }
-        for (id in 2..Short.MAX_VALUE) {
-            ids.add(id)
+        // 0 is special, and is never added!
+        // 1 is special, and is used for ASYNC (the response will never be sent back)
+        for (id in minimumValue..maxValuesInCache) {
+            ids.add(ResponseWaiter(id))
         }
         ids.shuffle()
 
-        // populate the array of randomly assigned ID's + waiters. It is OK for this to happen in a new thread
-        actionDispatch.launch {
-            try {
-                for (it in ids) {
-                    waiterCache.send(ResponseWaiter(it))
-                }
-            } catch (e: ClosedSendChannelException) {
-                // this can happen if we are starting/stopping an endpoint (and thus a response-manager) VERY quickly, and can be ignored
-                logger.trace("Error during RMI preparation. Usually this is caused by fast a start-then-stop")
-            }
-        }
+        // populate the array of randomly assigned ID's + waiters.
+        waiterCache = ObjectPool.blocking(ids)
     }
 
     /**
      * Called when we receive the answer for our initial request. If no response data, then the pending rmi data entry is deleted
      *
      * resume any pending remote object method invocations (if they are not async, or not manually waiting)
+     *
      * NOTE: async RMI will never call this (because async doesn't return a response)
      */
-    suspend fun notifyWaiter(rmiId: Int, result: Any?, logger: KLogger) {
-        logger.trace { "RMI return message: $rmiId" }
+    fun notifyWaiter(id: Int, result: Any?, logger: Logger) {
+        if (logger.isTraceEnabled) {
+            logger.trace("[RM] notify: [$id]")
+        }
 
         val previous = pendingLock.write {
-            val previous = pending[rmiId]
-            pending[rmiId] = result
+            val previous = pending[id]
+            pending[id] = result
             previous
         }
 
         // if NULL, since either we don't exist (because we were async), or it was cancelled
         if (previous is ResponseWaiter) {
-            logger.trace { "RMI valid-cancel onMessage: $rmiId" }
+            if (logger.isTraceEnabled) {
+                logger.trace("[RM] valid-notify: [$id]")
+            }
 
             // this means we were NOT timed out! (we cannot be timed out here)
             previous.doNotify()
@@ -110,12 +100,14 @@ internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) 
      *
      * This is ONLY called when we want to get the data out of the stored entry, because we are operating ASYNC. (pure RMI async is different)
      */
-    suspend fun <T> getWaiterCallback(rmiId: Int, logger: KLogger): T? {
-        logger.trace { "RMI return message: $rmiId" }
+    fun <T> removeWaiterCallback(id: Int, logger: Logger): T? {
+        if (logger.isTraceEnabled) {
+            logger.trace("[RM] get-callback: [$id]")
+        }
 
         val previous = pendingLock.write {
-            val previous = pending[rmiId]
-            pending[rmiId] = null
+            val previous = pending[id]
+            pending[id] = null
             previous
         }
 
@@ -124,8 +116,9 @@ internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) 
             val result = previous.result
 
             // always return this to the cache!
-            waiterCache.send(previous)
-            rmiWaitersInUse.getAndDecrement()
+            previous.result = null
+            waiterCache.put(previous)
+            responseWaitersInUse.getAndDecrement()
 
             return result as T
         }
@@ -138,22 +131,21 @@ internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) 
      *
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
-    suspend fun prep(logger: KLogger): ResponseWaiter {
-        val responseRmi = waiterCache.receive()
-        rmiWaitersInUse.getAndIncrement()
-        logger.trace { "RMI count: ${rmiWaitersInUse.value}" }
-
-        // this will replace the waiter if it was cancelled (waiters are not valid if cancelled)
-        responseRmi.prep()
-
-        val rmiId = RmiUtils.unpackUnsignedRight(responseRmi.id)
-
-        pendingLock.write {
-            // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
-            pending[rmiId] = responseRmi
+    fun prep(logger: Logger): ResponseWaiter {
+        val waiter = waiterCache.take()
+        responseWaitersInUse.getAndIncrement()
+        if (logger.isTraceEnabled) {
+            logger.trace("[RM] prep in-use: [${waiter.id}] ${responseWaitersInUse.value}")
         }
 
-        return responseRmi
+        // this will initialize the result
+        waiter.prep()
+
+        pendingLock.write {
+            pending[waiter.id] = waiter
+        }
+
+        return waiter
     }
 
     /**
@@ -161,126 +153,96 @@ internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) 
      *
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
-    suspend fun prepWithCallback(function: Any, logger: KLogger): Int {
-        val responseRmi = waiterCache.receive()
-        rmiWaitersInUse.getAndIncrement()
-        logger.trace { "RMI count: ${rmiWaitersInUse.value}" }
+    fun prepWithCallback(logger: Logger, function: Any): Int {
+        val waiter = waiterCache.take()
+        responseWaitersInUse.getAndIncrement()
+        if (logger.isTraceEnabled) {
+            logger.trace("[RM] prep in-use: [${waiter.id}]  ${responseWaitersInUse.value}")
+        }
 
-        // this will replace the waiter if it was cancelled (waiters are not valid if cancelled)
-        responseRmi.prep()
+        // this will initialize the result
+        waiter.prep()
 
         // assign the callback that will be notified when the return message is received
-        responseRmi.result = function
+        waiter.result = function
 
-        val rmiId = RmiUtils.unpackUnsignedRight(responseRmi.id)
+        val id = RmiUtils.unpackUnsignedRight(waiter.id)
 
         pendingLock.write {
-            pending[rmiId] = responseRmi
+            pending[id] = waiter
         }
 
-        return rmiId
+        return id
     }
 
-
-    /**
-     * Cancels the RMI request in the given timeout, the callback is executed inside the read lock
-     */
-    fun cancelRequest(actionDispatch: CoroutineScope, timeoutMillis: Long, rmiId: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
-        actionDispatch.launch {
-            delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
-
-            // check if we have a result or not
-            pendingLock.read {
-                val maybeResult = pending[rmiId]
-                if (maybeResult is ResponseWaiter) {
-                    logger.trace { "RMI timeout ($timeoutMillis) with callback cancel: $rmiId" }
-
-                    maybeResult.cancel()
-                    onCancelled(maybeResult)
-                }
-            }
-        }
-    }
 
     /**
      * We only wait for a reply if we are SYNC.
      *
-     * ASYNC does not send a response
+     * ASYNC does not send a response and does not call this method
      *
      * @return the result (can be null) or timeout exception
      */
-    suspend fun waitForReply(actionDispatch: CoroutineScope, responseWaiter: ResponseWaiter, timeoutMillis: Long, logger: KLogger): Any? {
-        val rmiId = RmiUtils.unpackUnsignedRight(responseWaiter.id)
+    fun getReply(responseWaiter: ResponseWaiter, timeoutMillis: Long, logger: Logger): Any? {
+        val id = RmiUtils.unpackUnsignedRight(responseWaiter.id)
 
-        logger.trace {
-            "RMI waiting: $rmiId"
+        if (logger.isTraceEnabled) {
+            logger.trace("[RM] get: [$id]")
         }
-
-        // NOTE: we ALWAYS send a response from the remote end (except when async).
-        //
-        // 'async' -> DO NOT WAIT (no response)
-        // 'timeout > 0' -> WAIT w/ TIMEOUT
-        // 'timeout == 0' -> WAIT FOREVER
-        if (timeoutMillis > 0) {
-            val responseTimeoutJob = actionDispatch.launch {
-                delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
-
-                // check if we have a result or not
-                val maybeResult = pendingLock.read { pending[rmiId] }
-                if (maybeResult is ResponseWaiter) {
-                    logger.trace { "RMI timeout ($timeoutMillis) cancel: $rmiId" }
-
-                    maybeResult.cancel()
-                }
-            }
-
-            // wait for the response.
-            //
-            // If the response is ALREADY here, the doWait() returns instantly (with result)
-            // if no response yet, it will suspend and either
-            //   A) get response
-            //   B) timeout
-            responseWaiter.doWait()
-
-            // always cancel the timeout
-            responseTimeoutJob.cancel()
-        } else {
-            // wait for the response --- THIS WAITS FOREVER (there is no timeout)!
-            //
-            // If the response is ALREADY here, the doWait() returns instantly (with result)
-            // if no response yet, it will suspend and
-            //   A) get response
-            responseWaiter.doWait()
-        }
-
 
         // deletes the entry in the map
         val resultOrWaiter = pendingLock.write {
-            val previous = pending[rmiId]
-            pending[rmiId] = null
+            val previous = pending[id]
+            pending[id] = null
             previous
         }
 
         // always return the waiter to the cache
-        waiterCache.send(responseWaiter)
-        rmiWaitersInUse.getAndDecrement()
+        responseWaiter.result = null
+        waiterCache.put(responseWaiter)
+        responseWaitersInUse.getAndDecrement()
 
         if (resultOrWaiter is ResponseWaiter) {
-            logger.trace { "RMI was canceled ($timeoutMillis): $rmiId" }
+            if (logger.isTraceEnabled) {
+                logger.trace("[RM] timeout cancel: [$id] ($timeoutMillis)")
+            }
 
+            // always throw an exception if we timeout. EVEN if the connection is closed, we want to make sure to raise awareness!
             return TIMEOUT_EXCEPTION
         }
 
         return resultOrWaiter
     }
 
-    suspend fun close() {
-        // wait for responses, or wait for timeouts!
-        while (rmiWaitersInUse.value > 0) {
-            delay(100)
+    fun abort(responseWaiter: ResponseWaiter, logger: Logger) {
+        val id = RmiUtils.unpackUnsignedRight(responseWaiter.id)
+
+        if (logger.isTraceEnabled) {
+            logger.trace("[RM] abort: [$id]")
         }
 
-        waiterCache.close()
+        // deletes the entry in the map
+        pendingLock.write {
+            pending[id] = null
+        }
+
+        // always return the waiter to the cache
+        responseWaiter.result = null
+        waiterCache.put(responseWaiter)
+        responseWaitersInUse.getAndDecrement()
+    }
+
+    // This is only closed when shutting down the client/server.
+    fun close(logger: Logger) {
+        // technically, this isn't closing it, so much as it's cleaning it out
+        if (logger.isDebugEnabled) {
+            logger.debug("Closing the response manager")
+        }
+
+        // wait for responses, or wait for timeouts!
+        while (responseWaitersInUse.value > 0) {
+            Thread.sleep(50)
+        }
 
         pendingLock.write {
             pending.forEachIndexed { index, _ ->

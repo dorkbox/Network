@@ -1,3 +1,19 @@
+/*
+ * Copyright 2023 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package dorkboxTest.network
 
 import dorkbox.netUtil.IPv4
@@ -11,26 +27,27 @@ import kotlinx.atomicfu.atomic
 import org.junit.Assert
 import org.junit.Test
 
+@Suppress("UNUSED_ANONYMOUS_PARAMETER")
 class ConnectionFilterTest : BaseTest() {
     @Test
     fun autoAcceptAll() {
         val serverConnectSuccess = atomic(false)
         val clientConnectSuccess = atomic(false)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
 
             server.onConnect {
                 serverConnectSuccess.value = true
                 close()
             }
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
@@ -44,14 +61,17 @@ class ConnectionFilterTest : BaseTest() {
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                stopEndPoints()
-                throw e
-            }
+            client
         }
 
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads()
+            throw e
+        }
 
         waitForThreads()
 
@@ -64,22 +84,21 @@ class ConnectionFilterTest : BaseTest() {
         val serverConnectSuccess = atomic(false)
         val clientConnectSuccess = atomic(false)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
             server.filter(IpSubnetFilterRule(IPv4.WILDCARD, 0))
             server.filter(IpSubnetFilterRule(IPv6.WILDCARD, 0))
-
             server.onConnect {
                 serverConnectSuccess.value = true
                 close()
             }
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
@@ -93,12 +112,16 @@ class ConnectionFilterTest : BaseTest() {
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                stopEndPoints()
-                throw e
-            }
+            client
+        }
+
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads()
+            throw e
         }
 
         waitForThreads()
@@ -112,12 +135,12 @@ class ConnectionFilterTest : BaseTest() {
         val serverConnectSuccess = atomic(false)
         val clientConnectSuccess = atomic(false)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+
             server.filter(IpSubnetFilterRule("1.1.1.1", 0))
             server.filter(IpSubnetFilterRule("::1.1.1.1", 0)) // compressed ipv6
 
@@ -125,9 +148,10 @@ class ConnectionFilterTest : BaseTest() {
                 serverConnectSuccess.value = true
                 close()
             }
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
@@ -141,12 +165,16 @@ class ConnectionFilterTest : BaseTest() {
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                stopEndPoints()
-                throw e
-            }
+            client
+        }
+
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads()
+            throw e
         }
 
         waitForThreads()
@@ -160,43 +188,46 @@ class ConnectionFilterTest : BaseTest() {
         val serverConnectSuccess = atomic(false)
         val clientConnectSuccess = atomic(false)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.filter(IpSubnetFilterRule(IPv4.WILDCARD, 0))
+            server.filter(IpSubnetFilterRule(IPv6.WILDCARD, 0))
 
             server.onConnect {
                 serverConnectSuccess.value = true
-                println("Closing server connection")
                 close()
             }
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
-            client.filter(IpSubnetFilterRule(IPv4.WILDCARD, 0))
-            client.filter(IpSubnetFilterRule(IPv6.WILDCARD, 0))
+
 
             client.onConnect {
                 clientConnectSuccess.value = true
             }
 
             client.onDisconnect {
-                println("**************************** CLOSE")
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                stopEndPoints()
-                throw e
-            }
+            client
+        }
+
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads()
+            throw e
         }
 
         waitForThreads()
@@ -209,39 +240,48 @@ class ConnectionFilterTest : BaseTest() {
 
     @Test(expected = ClientException::class)
     fun rejectServer() {
-        run {
-            val configuration = serverConfig()
-
-            val server: Server<Connection> = Server(configuration)
+        val server = run {
+            val serverConfig = serverConfig()
+            val server: Server<Connection> = Server(serverConfig)
             addEndPoint(server)
-            server.bind()
             server.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
 
             server.onConnect {
                 close()
             }
+
+            server
         }
 
-        run {
-            val config = clientConfig()
 
-            val client: Client<Connection> = Client(config)
+        val client = run {
+            val clientConfig = clientConfig()
+
+            val client: Client<Connection> = Client(clientConfig)
             addEndPoint(client)
 
             client.onDisconnect {
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                stopEndPoints()
-                throw e
-            }
+            client
         }
 
-        waitForThreads()
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads { errors ->
+                errors.filterNot {
+                    it.message?.contains("Connection was not permitted!") ?: false
+                }
+            }
+            throw e
+        }
+
+        // fail, since we should have thrown an exception
+        Assert.assertFalse(true)
     }
 
     @Test
@@ -251,23 +291,24 @@ class ConnectionFilterTest : BaseTest() {
         val serverConnectSuccess = atomic(false)
         val clientConnectSuccess = atomic(false)
 
-        run {
+        val server = run {
             val configuration = serverConfig() {
                 enableIpc = true
             }
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
             server.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
 
             server.onConnect {
-                serverConnectSuccess.lazySet(true)
+                serverConnectSuccess.value = true
                 close()
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig() {
                 enableIpc = true
             }
@@ -280,16 +321,19 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
+                logger.error("STARTING TO CLOSE CLIENT")
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                stopEndPoints()
-                // this is expected.
-            }
+            client
+        }
+
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            // this is expected.
         }
 
         waitForThreads()
@@ -300,35 +344,43 @@ class ConnectionFilterTest : BaseTest() {
 
     @Test(expected = ClientException::class)
     fun rejectClient() {
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
-
+            server.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
             server.onConnect {
                 close()
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
-            client.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
 
             client.onDisconnect {
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                stopEndPoints()
-                throw e
+            client
+        }
+
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads { errors ->
+                errors.filterNot {
+                    it.message?.contains("Connection was not permitted!") ?: false
+                }
             }
+            throw e
         }
 
         waitForThreads()
@@ -339,13 +391,12 @@ class ConnectionFilterTest : BaseTest() {
         val serverConnectSuccess = atomic(false)
         val clientConnectSuccess = atomic(false)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
-            server.filter {
+            server.filter { clientAddress, tagName ->
                 true
             }
 
@@ -353,9 +404,11 @@ class ConnectionFilterTest : BaseTest() {
                 serverConnectSuccess.value = true
                 close()
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
@@ -369,14 +422,17 @@ class ConnectionFilterTest : BaseTest() {
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                stopEndPoints()
-                throw e
-            }
+            client
         }
 
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads()
+            throw e
+        }
 
         waitForThreads()
 
@@ -389,46 +445,44 @@ class ConnectionFilterTest : BaseTest() {
         val serverConnectSuccess = atomic(false)
         val clientConnectSuccess = atomic(false)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
-
             server.onConnect {
                 serverConnectSuccess.value = true
-                logger.error { "closing" }
                 close()
             }
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
-            client.filter {
-                true
-            }
+
 
             client.onConnect {
                 clientConnectSuccess.value = true
             }
 
             client.onDisconnect {
-                logger.error { "on close" }
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                stopEndPoints()
-                throw e
-            }
+            client
         }
 
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads()
+            throw e
+        }
 
         waitForThreads()
 
@@ -439,22 +493,23 @@ class ConnectionFilterTest : BaseTest() {
 
     @Test(expected = ClientException::class)
     fun rejectCustomServer() {
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
-            server.filter {
+
+            server.filter { clientAddress, tagName ->
                 false
             }
 
             server.onConnect {
                 close()
             }
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
@@ -464,12 +519,20 @@ class ConnectionFilterTest : BaseTest() {
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                stopEndPoints()
-                throw e
+            client
+        }
+
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads{ errors ->
+                errors.filterNot {
+                    it.message?.contains("Connection was not permitted!") ?: false
+                }
             }
+            throw e
         }
 
         waitForThreads()
@@ -477,39 +540,104 @@ class ConnectionFilterTest : BaseTest() {
 
     @Test(expected = ClientException::class)
     fun rejectCustomClient() {
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.filter { clientAddress, tagName ->
+                false
+            }
 
             server.onConnect {
                 close()
             }
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
-            client.filter {
+
+            client.onDisconnect {
+                stopEndPoints()
+            }
+
+            client
+        }
+
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads{ errors ->
+                errors.filterNot {
+                    it.message?.contains("Connection was not permitted!") ?: false
+                }
+            }
+
+            throw e
+        }
+
+        waitForThreads()
+    }
+
+
+    @Test
+    fun acceptAllCustomClientNoPendingMessages() {
+        val serverConnectSuccess = atomic(false)
+        val clientConnectSuccess = atomic(false)
+
+        val server = run {
+            val configuration = serverConfig()
+
+            val server: Server<Connection> = Server(configuration)
+            addEndPoint(server)
+
+            server.enableBufferedMessages { clientAddress, tagName ->
                 false
+            }
+
+            server.onConnect {
+                serverConnectSuccess.value = true
+                close()
+            }
+            server
+        }
+
+        val client = run {
+            val config = clientConfig()
+
+            val client: Client<Connection> = Client(config)
+            addEndPoint(client)
+
+
+            client.onConnect {
+                clientConnectSuccess.value = true
             }
 
             client.onDisconnect {
                 stopEndPoints()
             }
 
-            try {
-                client.connect(LOCALHOST)
-            } catch (e: Exception) {
-                stopEndPoints()
-                throw e
-            }
+            client
+        }
+
+        server.bind(2000)
+        try {
+            client.connect(LOCALHOST, 2000)
+        } catch (e: Exception) {
+            stopEndPoints()
+            waitForThreads()
+            throw e
         }
 
         waitForThreads()
+
+        Assert.assertTrue(serverConnectSuccess.value)
+        Assert.assertTrue(clientConnectSuccess.value)
     }
 }

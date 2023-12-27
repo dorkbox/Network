@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.BaseTest
-import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import java.util.concurrent.*
 import java.util.concurrent.atomic.*
 
 class RmiDelayedInvocationTest : BaseTest() {
@@ -50,7 +50,8 @@ class RmiDelayedInvocationTest : BaseTest() {
      * uses the first remote object to get the second remote object.
      */
     fun rmi(config: Configuration.() -> Unit = {}) {
-        run {
+        val countDownLatch = CountDownLatch(1)
+        val server = run {
             val configuration = serverConfig()
             config(configuration)
             register(configuration.serialization)
@@ -58,11 +59,11 @@ class RmiDelayedInvocationTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.rmiGlobal.save(TestObjectImpl(iterateLock), OBJ_ID)
-            server.bind()
+            server.rmiGlobal.save(TestObjectImpl(countDownLatch), OBJ_ID)
+            server
         }
 
-        run {
+        val client = run {
             val configuration = clientConfig()
             config(configuration)
 
@@ -85,18 +86,16 @@ class RmiDelayedInvocationTest : BaseTest() {
                     }
 
                     // sometimes, this method is never called right away.
+                    // this will also count-down the latch
                     remoteObject.setOther(i.toFloat())
 
-                    runBlocking {
-                        synchronized(iterateLock) {
-                            try {
-                                (iterateLock as Object).wait(1)
-                            } catch (e: InterruptedException) {
-                                logger.error("Failed after: $i")
-                                e.printStackTrace()
-                                abort = true
-                            }
-                        }
+                    try {
+                        // it should be instant!!
+                        countDownLatch.await(10, TimeUnit.SECONDS)
+                    } catch (e: InterruptedException) {
+                        logger.error("Failed after: $i")
+                        e.printStackTrace()
+                        abort = true
                     }
                 }
                 logger.error("Done with delay invocation test")
@@ -104,8 +103,11 @@ class RmiDelayedInvocationTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOCALHOST)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
     }
@@ -115,15 +117,14 @@ class RmiDelayedInvocationTest : BaseTest() {
         fun other(): Float
     }
 
-    private class TestObjectImpl(private val iterateLock: Any) : TestObject {
+    private class TestObjectImpl(private val latch: CountDownLatch) : TestObject {
         @Transient
         private val ID = idCounter.getAndIncrement()
         private var aFloat = 0f
 
         override fun setOther(aFloat: Float) {
             this.aFloat = aFloat
-
-            synchronized(iterateLock) { (iterateLock as Object).notify() }
+            latch.countDown()
         }
 
         override fun other(): Float {

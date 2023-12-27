@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
+ */
+/*
  * Copyright (c) 2008, Nathan Sweet
  * All rights reserved.
  *
@@ -34,11 +35,9 @@
  */
 package dorkboxTest.network.rmi
 
-import ch.qos.logback.classic.Level
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
-import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
@@ -51,32 +50,64 @@ import org.junit.Test
 
 class RmiSimpleTest : BaseTest() {
 
+    enum class ConnectType(val ip4: Boolean, val ip6: Boolean, val ipc: Boolean) {
+        IPC(false, false, true),
+        IPC4(true, false, true),
+        IPC6(false, true, true),
+        IPC46(true, true, true),
+        IPC64(true, true, true),
+        IP4(true, false, false),
+        IP6(false, true, false),
+        IP46(true, true, false),
+        IP64(true, true, false)
+    }
+
+
     @Test
     fun rmiIPv4NetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = false)
+        rmiGlobal(ConnectType.IP4)
     }
 
     @Test
     fun rmiIPv6NetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = false)
+        rmiGlobal(ConnectType.IP6)
     }
 
     @Test
     fun rmiBothIPv4ConnectNetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = true)
+        rmiGlobal(ConnectType.IP46)
     }
 
     @Test
     fun rmiBothIPv6ConnectNetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = true, runIpv4Connect = true)
+        rmiGlobal(ConnectType.IP64)
     }
 
     @Test
     fun rmiIpcNetworkGlobal() {
-        rmiGlobal {
-            enableIpc = true
-        }
+        rmiGlobal(ConnectType.IPC)
     }
+
+    @Test
+    fun rmiIpcNetworkGlobalFallback4() {
+        rmiGlobal(ConnectType.IPC4)
+    }
+
+    @Test
+    fun rmiIpcNetworkGlobalFallback6() {
+        rmiGlobal(ConnectType.IPC6)
+    }
+
+    @Test
+    fun rmiIpcNetworkGlobalFallback46() {
+        rmiGlobal(ConnectType.IPC46)
+    }
+
+    @Test
+    fun rmiIpcNetworkGlobalFallback64() {
+        rmiGlobal(ConnectType.IPC64)
+    }
+
 
 
 
@@ -85,50 +116,57 @@ class RmiSimpleTest : BaseTest() {
 
     @Test
     fun rmiIPv4NetworkConnection() {
-        rmi(isIpv4 = true, isIpv6 = false)
+        rmi(ConnectType.IP4)
     }
 
     @Test
     fun rmiIPv6NetworkConnection() {
-        rmi(isIpv4 = false, isIpv6 = true)
+        rmi(ConnectType.IP6)
     }
 
     @Test
     fun rmiBothIPv4ConnectNetworkConnection() {
-        rmi(isIpv4 = true, isIpv6 = true)
+        rmi(ConnectType.IP46)
     }
 
 
     @Test
     fun rmiBothIPv6ConnectNetworkConnection() {
-        rmi(isIpv4 = true, isIpv6 = true, runIpv4Connect = true)
+        rmi(ConnectType.IP64)
     }
 
     @Test
     fun rmiIpcNetworkConnection() {
-        rmi {
-            enableIpc = true
-        }
+        rmi(ConnectType.IPC)
     }
 
-    private fun doConnect(isIpv4: Boolean, isIpv6: Boolean, runIpv4Connect: Boolean, client: Client<Connection>) {
-        when {
-            isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST)
-            isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST)
-            isIpv4 -> client.connect(IPv4.LOCALHOST)
-            isIpv6 -> client.connect(IPv6.LOCALHOST)
-            else -> client.connect()
-        }
+    @Test
+    fun rmiIpcFallback4NetworkConnection() {
+        rmi(ConnectType.IPC4)
     }
 
+    @Test
+    fun rmiIpcFallback6NetworkConnection() {
+        rmi(ConnectType.IPC6)
+    }
+
+    @Test
+    fun rmiIpcFallback46NetworkConnection() {
+        rmi(ConnectType.IPC46)
+    }
+
+    @Test
+    fun rmiIpcFallback64NetworkConnection() {
+        rmi(ConnectType.IPC64)
+    }
 
     // GLOBAL rmi stuff cannot CREATE or DELETE (only save/get)
-    private fun rmiGlobal(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
-        run {
+    private fun rmiGlobal(clientType: ConnectType, serverType: ConnectType = clientType) {
+        val server = run {
             val configuration = serverConfig()
-            configuration.enableIPv4 = isIpv4
-            configuration.enableIPv6 = isIpv6
-            config(configuration)
+            configuration.enableIPv4 = serverType.ip4
+            configuration.enableIPv6 = serverType.ip6
+            configuration.enableIpc = serverType.ipc
 
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
             configuration.serialization.register(MessageWithTestCow::class.java)
@@ -139,7 +177,6 @@ class RmiSimpleTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind()
 
             server.rmiGlobal.save(TestCowImpl(44), 44)
 
@@ -159,22 +196,28 @@ class RmiSimpleTest : BaseTest() {
                 RmiCommonTest.runTests(this@onMessage, rmi.get(4), 4)
                 server.logger.error("Done with test for: Server -> Client")
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val configuration = clientConfig()
-            config(configuration)
+            configuration.enableIPv4 = clientType.ip4
+            configuration.enableIPv6 = clientType.ip6
+            configuration.enableIpc = clientType.ipc
             //            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
             client.onConnect {
-                rmi.save(TestCowImpl(4), 4)
+                runBlocking {
+                    rmi.save(TestCowImpl(4), 4)
 
-                client.logger.error("Running test for: Client -> Server")
-                RmiCommonTest.runTests(this, rmi.getGlobal(44), 44)
-                client.logger.error("Done with test for: Client -> Server")
+                    client.logger.error("Running test for: Client -> Server")
+                    RmiCommonTest.runTests(this@onConnect, rmi.getGlobal(44), 44)
+                    client.logger.error("Done with test for: Client -> Server")
+                }
             }
 
             client.onMessage<MessageWithTestCow> { m ->
@@ -183,17 +226,25 @@ class RmiSimpleTest : BaseTest() {
                 val id = `object`.id()
                 Assert.assertEquals(4, id)
                 client.logger.error("Finished test for: Client -> Server")
-                stopEndPoints(2000)
+                stopEndPoints()
             }
-
-            doConnect(isIpv4, isIpv6, runIpv4Connect, client)
 
             client.logger.error("Starting test for: Client -> Server")
 
-            // this creates a GLOBAL object on the server (instead of a connection specific object)
-            runBlocking {
+            client
+        }
 
-            }
+        server.bind(2000)
+        when (clientType) {
+            ConnectType.IPC -> client.connectIpc()
+            ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IP4 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IP6 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IP46 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IP64 -> client.connect(IPv6.LOCALHOST, 2000)
         }
 
         waitForThreads()
@@ -201,14 +252,12 @@ class RmiSimpleTest : BaseTest() {
 
 
 
-    fun rmi(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
-        setLogLevel(Level.TRACE)
-
-        run {
+    fun rmi(clientType: ConnectType, serverType: ConnectType = clientType) {
+        val server = run {
             val configuration = serverConfig()
-            configuration.enableIPv4 = isIpv4
-            configuration.enableIPv6 = isIpv6
-            config(configuration)
+            configuration.enableIPv4 = serverType.ip4
+            configuration.enableIPv6 = serverType.ip6
+            configuration.enableIpc = serverType.ipc
 
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
             configuration.serialization.register(MessageWithTestCow::class.java)
@@ -217,7 +266,7 @@ class RmiSimpleTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind()
+
 
             server.onMessage<MessageWithTestCow> { m ->
                 server.logger.error("Received finish signal for test for: Client -> Server")
@@ -231,16 +280,19 @@ class RmiSimpleTest : BaseTest() {
                 // NOTE: THIS IS BI-DIRECTIONAL!
                 rmi.create<TestCow>(123) {
                     server.logger.error("Running test for: Server -> Client")
-                    RmiCommonTest.runTests(this@onMessage, this, 123)
+                    RmiCommonTest.runTests(this@onMessage, this@create, 123)
                     server.logger.error("Done with test for: Server -> Client")
                 }
             }
+            server
         }
 
-        run {
+        val client = run {
             val configuration = clientConfig()
-            config(configuration)
-//            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+            configuration.enableIPv4 = clientType.ip4
+            configuration.enableIPv6 = clientType.ip6
+            configuration.enableIpc = clientType.ipc
+//            configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
@@ -248,7 +300,7 @@ class RmiSimpleTest : BaseTest() {
             client.onConnect {
                 rmi.create<TestCow>(23) {
                     client.logger.error("Running test for: Client -> Server")
-                    RmiCommonTest.runTests(this@onConnect, this, 23)
+                    RmiCommonTest.runTests(this@onConnect, this@create, 23)
                     client.logger.error("Done with test for: Client -> Server")
                 }
             }
@@ -259,11 +311,117 @@ class RmiSimpleTest : BaseTest() {
                 val id = `object`.id()
                 Assert.assertEquals(123, id)
                 client.logger.error("Finished test for: Client -> Server")
-                stopEndPoints(2000)
+                stopEndPoints()
             }
 
-            doConnect(isIpv4, isIpv6, runIpv4Connect, client)
+            client
         }
+
+        server.bind(2000)
+        when (clientType) {
+            ConnectType.IPC -> client.connectIpc()
+            ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IP4 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IP6 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IP46 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IP64 -> client.connect(IPv6.LOCALHOST, 2000)
+        }
+
+        waitForThreads()
+    }
+
+
+    @Test
+    fun rmiTimeoutIpc() {
+        rmiBasicIpc { connection, testCow ->
+            RmiCommonTest.runTimeoutTest(connection, testCow)
+        }
+    }
+
+    @Test
+    fun rmiSyncIpc() {
+        rmiBasicIpc { connection, testCow ->
+            RmiCommonTest.runSyncTest(connection, testCow)
+        }
+    }
+
+    @Test
+    fun rmiASyncIpc() {
+        rmiBasicIpc { connection, testCow ->
+            RmiCommonTest.runASyncTest(connection, testCow)
+        }
+    }
+
+    fun rmiBasicIpc(runFun: (Connection, TestCow) -> Unit) {
+        val server = run {
+            val configuration = serverConfig()
+            configuration.enableIPv4 = false
+            configuration.enableIPv6 = false
+            configuration.enableIpc = true
+
+            configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
+            configuration.serialization.register(MessageWithTestCow::class.java)
+            configuration.serialization.register(UnsupportedOperationException::class.java)
+
+
+            val server = Server<Connection>(configuration)
+            addEndPoint(server)
+
+
+            server.onMessage<MessageWithTestCow> { m ->
+                server.logger.error("Received finish signal for test for: Client -> Server")
+                val `object` = m.testCow
+                val id = `object`.id()
+                Assert.assertEquals(23, id)
+                server.logger.error("Finished test for: Client -> Server")
+
+
+                server.logger.error("Starting test for: Server -> Client")
+                // NOTE: THIS IS BI-DIRECTIONAL!
+                rmi.create<TestCow>(123) {
+                    server.logger.error("Running test for: Server -> Client")
+                    runFun(this@onMessage, this@create)
+                    server.logger.error("Done with test for: Server -> Client")
+                }
+            }
+            server
+        }
+
+        val client = run {
+            val configuration = clientConfig()
+            configuration.enableIPv4 = false
+            configuration.enableIPv6 = false
+            configuration.enableIpc = true
+//            configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
+
+            val client = Client<Connection>(configuration)
+            addEndPoint(client)
+
+            client.onConnect {
+                rmi.create<TestCow>(23) {
+                    client.logger.error("Running test for: Client -> Server")
+                    runFun(this@onConnect, this@create)
+                    client.logger.error("Done with test for: Client -> Server")
+                }
+            }
+
+            client.onMessage<MessageWithTestCow> { m ->
+                client.logger.error("Received finish signal for test for: Client -> Server")
+                val `object` = m.testCow
+                val id = `object`.id()
+                Assert.assertEquals(123, id)
+                client.logger.error("Finished test for: Client -> Server")
+                stopEndPoints()
+            }
+
+            client
+        }
+
+        server.bindIpc()
+        client.connectIpc()
 
         waitForThreads()
     }

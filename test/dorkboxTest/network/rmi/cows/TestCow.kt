@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,9 @@ package dorkboxTest.network.rmi.cows
 interface TestCow : TestCowBase {
     fun moo()
     fun moo(value: String)
-    suspend fun moo(value: String, delay: Long)
+    fun mooTwo(value: String): String
+    fun moo(value: String, delay: Long)
+    suspend fun mooSuspend(value: String, delay: Long)
     fun id(): Int
     suspend fun slow(): Float
 

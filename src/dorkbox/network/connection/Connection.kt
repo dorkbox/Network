@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,61 +15,102 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.handshake.ConnectionCounts
-import dorkbox.network.handshake.RandomId65kAllocator
+import dorkbox.network.Client
+import dorkbox.network.Server
+import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
+import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
+import dorkbox.network.connection.buffer.BufferedMessages
+import dorkbox.network.connection.buffer.BufferedSession
 import dorkbox.network.ping.Ping
-import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.RmiSupportConnection
-import io.aeron.FragmentAssembler
-import io.aeron.Publication
-import io.aeron.Subscription
+import io.aeron.Image
+import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
+import io.aeron.protocol.DataHeaderFlyweight
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
-import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
-import java.lang.Thread.sleep
-import java.net.InetAddress
-import java.util.concurrent.*
+import javax.crypto.SecretKey
 
 /**
- * This connection is established once the registration information is validated, and the various connect/filter checks have passed
+ * This connection is established once the registration information is validated, and the various connect/filter checks have passed.
+ *
+ * Connections are also BUFFERED, meaning that if the connection between a client-server goes down because of a network glitch, then the
+ * data being sent is not lost (it is buffered) and then re-sent once a new connection has the same UUID within the timout period.
+ *
+ * References to the old connection will also redirect to the new connection.
  */
 open class Connection(connectionParameters: ConnectionParams<*>) {
-    private var messageHandler: FragmentAssembler
-    internal val subscription: Subscription
-    internal val publication: Publication
+    private val messageHandler: FragmentHandler
 
     /**
-     * The publication port (used by aeron) for this connection. This is from the perspective of the server!
+     * The specific connection details for this connection!
+     *
+     * NOTE: remember, the connection details are for the connection, but the toString() info is reversed for the client
+     *     (so that we can line-up client/server connection logs)
      */
-    private val subscriptionPort: Int
-    private val publicationPort: Int
+    val info = connectionParameters.connectionInfo
 
     /**
-     * the stream id of this connection. Can be 0 for IPC connections
+     * the endpoint associated with this connection
      */
-    val streamId: Int
+    internal val endPoint = connectionParameters.endPoint
+
+    internal val subscription = info.sub
+    internal val publication = info.pub
+    private lateinit var image: Image
+
+    // only accessed on a single thread!
+    private val connectionExpirationTimoutNanos = endPoint.config.connectionExpirationTimoutNanos
+    // the timeout starts from when the connection is first created, so that we don't get "instant" timeouts when the server rejects a connection
+    private var connectionTimeoutTimeNanos = System.nanoTime()
 
     /**
-     * the session id of this connection. This value is UNIQUE
+     * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has its own logic on the remote endpoint,
+     * and can have its own back-pressure.
      */
-    val id: Int
+    internal val sendIdleStrategy = endPoint.config.sendIdleStrategy
 
     /**
-     * the remote address, as a string. Will be null for IPC connections
+     * This is the client UUID. This is useful determine if the same client is connecting multiple times to a server (instead of only using IP address)
      */
-    val remoteAddress: InetAddress?
+    val uuid = connectionParameters.publicKey
 
     /**
-     * the remote address, as a string. Will be "ipc" for IPC connections
+     * The unique session id of this connection, assigned by the server.
+     *
+     * Specifically this is the subscription session ID for the server
      */
-    val remoteAddressString: String
+    val id = if (endPoint::class.java == Client::class.java) {
+        info.sessionIdPub
+    } else {
+        info.sessionIdSub
+    }
+
+    /**
+     * The tag name for a connection permits an INCOMING client to define a custom string. The max length is 32
+     */
+    val tag = info.tagName
+
+    /**
+     * The remote address, as a string. Will be null for IPC connections
+     */
+    val remoteAddress = info.remoteAddress
+
+    /**
+     * The remote address, as a string. Will be "IPC" for IPC connections
+     */
+    val remoteAddressString = info.remoteAddressString
+
+    /**
+     * The remote port. Will be 0 for IPC connections
+     */
+    val remotePort = info.portPub
 
     /**
      * @return true if this connection is an IPC connection
      */
-    val isIpc = connectionParameters.connectionInfo.remoteAddress == null
+    val isIpc = info.isIpc
 
     /**
      * @return true if this connection is a network connection
@@ -77,9 +118,26 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     val isNetwork = !isIpc
 
     /**
-     * the endpoint associated with this connection
+     * used when the connection is buffered
      */
-    internal val endPoint = connectionParameters.endPoint
+    private val bufferedSession: BufferedSession
+
+    /**
+     * used to determine if this connection will have buffered messages enabled or not.
+     */
+    internal val enableBufferedMessages = connectionParameters.enableBufferedMessages
+
+    /**
+     * The largest size a SINGLE message via AERON can be. Because the maximum size we can send in a "single fragment" is the
+     * publication.maxPayloadLength() function (which is the MTU length less header). We could depend on Aeron for fragment reassembly,
+     * but that has a (very low) maximum reassembly size -- so we have our own mechanism for object fragmentation/assembly, which
+     * is (in reality) only limited by available ram.
+     */
+    internal val maxMessageSize = if (isNetwork) {
+        endPoint.config.networkMtuSize - DataHeaderFlyweight.HEADER_LENGTH
+    } else {
+        endPoint.config.ipcMtuSize - DataHeaderFlyweight.HEADER_LENGTH
+    }
 
 
     private val listenerManager = atomic<ListenerManager<Connection>?>(null)
@@ -87,105 +145,120 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     private val isClosed = atomic(false)
 
-    // enableNotifyDisconnect : we don't always want to enable notifications on disconnect
-    internal var closeAction: suspend () -> Unit = {}
-
-    // only accessed on a single thread!
-    private var connectionLastCheckTimeNanos = 0L
-    private var connectionTimeoutTimeNanos = 0L
-
-    // always offset by the linger amount, since we cannot act faster than the linger for adding/removing publications
-    private val connectionCheckIntervalNanos = connectionParameters.endPoint.config.connectionCheckIntervalNanos + endPoint.aeronDriver.getLingerNs()
-    private val connectionExpirationTimoutNanos = connectionParameters.endPoint.config.connectionExpirationTimoutNanos + endPoint.aeronDriver.getLingerNs()
-
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
-    private val remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
-
-    // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
-    // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
-    // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
-//    private val aes_gcm_iv = atomic(0)
+    internal val remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
 
     /**
      * Methods supporting Remote Method Invocation and Objects
      */
     val rmi: RmiSupportConnection<out Connection>
 
-    // a record of how many messages are in progress of being sent. When closing the connection, this number must be 0
-    private val messagesInProgress = atomic(0)
-
-    // we customize the toString() value for this connection, and it's just better to cache it's value (since it's a modestly complex string)
+    // we customize the toString() value for this connection, and it's just better to cache its value (since it's a modestly complex string)
     private val toString0: String
 
+    /**
+     * @return the AES key
+     */
+    internal val cryptoKey: SecretKey = connectionParameters.cryptoKey
+
+    // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 4 (external counter) + 4 (GCM counter)
+    // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
+    // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
+    internal val aes_gcm_iv = atomic(0)
+
+    // Used to track that this connection WILL be closed, but has not yet been closed.
+    @Volatile
+    internal var closeRequested = false
 
 
     init {
-        val connectionInfo = connectionParameters.connectionInfo
+        // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
+        //  we exclusively read from the DirectBuffer on a single thread.
 
-        id = connectionInfo.sessionId // NOTE: this is UNIQUE per server!
+        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+        //  publication of any state to other threads and not be:
+        //   - long running
+        //   - re-entrant with the client
+        messageHandler = FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+            // Subscriptions are NOT multi-thread safe, so only processed on the thread that calls .poll()!
+            endPoint.dataReceive(buffer, offset, length, header, this@Connection)
+        }
 
-        subscription = connectionInfo.subscription
-        publication = connectionInfo.publication
-
-        // can only get this AFTER we have built the sub/pub
-        streamId = connectionInfo.streamId // NOTE: this is UNIQUE per server!
-        subscriptionPort = connectionInfo.subscriptionPort
-        publicationPort = connectionInfo.publicationPort
-
-        remoteAddress = connectionInfo.remoteAddress
-        remoteAddressString = connectionInfo.remoteAddressString
-
-        toString0 = "[${id}/${streamId}] $remoteAddressString [$publicationPort|$subscriptionPort]"
-
-        messageHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-            // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
-
-            // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
-            //  we exclusively read from the DirectBuffer on a single thread.
-            endPoint.processMessage(buffer, offset, length, header, this@Connection)
+        bufferedSession = when (endPoint) {
+            is Server -> endPoint.bufferedManager.onConnect(this)
+            is Client -> endPoint.bufferedManager!!.onConnect(this)
+            else  -> throw RuntimeException("Unable to determine type, aborting!")
         }
 
         @Suppress("LeakingThis")
-        rmi = connectionParameters.endPoint.rmiConnectionSupport.getNewRmiSupport(this)
+        rmi = endPoint.rmiConnectionSupport.getNewRmiSupport(this)
+
+        // For toString() and logging
+        toString0 = info.getLogInfo(logger.isDebugEnabled)
     }
 
     /**
-     * @return true if the remote public key changed. This can be useful if specific actions are necessary when the key has changed.
+     * When this is called, we should always have a subscription image!
      */
-    fun hasRemoteKeyChanged(): Boolean {
-        return remoteKeyChanged
+    internal fun setImage() {
+        var triggered = false
+        while (subscription.hasNoImages()) {
+            triggered = true
+            Thread.sleep(50)
+        }
+
+        if (triggered) {
+            logger.error("Delay while configuring subscription!")
+        }
+
+        image = subscription.imageAtIndex(0)
     }
-
-//    /**
-//     * This is the per-message sequence number.
-//     *
-//     * The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 4 (external counter) + 4 (GCM counter)
-//     * The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
-//     * counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
-//     */
-//    fun nextGcmSequence(): Long {
-//        return aes_gcm_iv.getAndIncrement()
-//    }
-//
-//    /**
-//     * @return the AES key. key=32 byte, iv=12 bytes (AES-GCM implementation).
-//     */
-//    fun cryptoKey(): SecretKey {
-//        TODO()
-////        return channelWrapper.cryptoKey()
-//    }
-
-
-
 
     /**
      * Polls the AERON media driver subscription channel for incoming messages
      */
     internal fun poll(): Int {
-        // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
-        //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-        return subscription.poll(messageHandler, 1)
+        return image.poll(messageHandler, 1)
+    }
+
+
+
+    /**
+     * Safely sends objects to a destination, if `abortEarly` is true, there are no retries if sending the message fails.
+     *
+     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
+     */
+    internal fun send(message: Any, abortEarly: Boolean): Boolean {
+        if (logger.isTraceEnabled) {
+            // The handshake sessionId IS NOT globally unique
+            // don't automatically create the lambda when trace is disabled! Because this uses 'outside' scoped info, it's a new lambda each time!
+            if (logger.isTraceEnabled) {
+                logger.trace("[$toString0] send: ${message.javaClass.simpleName} : $message")
+            }
+        }
+
+        val success = endPoint.write(message, publication, sendIdleStrategy, this@Connection, maxMessageSize, abortEarly)
+
+        return if (!success && message !is DisconnectMessage) {
+            // queue up the messages, because we couldn't write them for whatever reason!
+            // NEVER QUEUE THE DISCONNECT MESSAGE!
+            bufferedSession.queueMessage(this@Connection, message, abortEarly)
+        } else {
+            success
+        }
+    }
+
+    private fun sendNoBuffer(message: Any): Boolean {
+        if (logger.isTraceEnabled) {
+            // The handshake sessionId IS NOT globally unique
+            // don't automatically create the lambda when trace is disabled! Because this uses 'outside' scoped info, it's a new lambda each time!
+            if (logger.isTraceEnabled) {
+                logger.trace("[$toString0] send: ${message.javaClass.simpleName} : $message")
+            }
+        }
+
+        return endPoint.write(message, publication, sendIdleStrategy, this@Connection, maxMessageSize, false)
     }
 
     /**
@@ -194,11 +267,20 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
     fun send(message: Any): Boolean {
-        messagesInProgress.getAndIncrement()
-        val success = endPoint.send(message, publication, this)
-        messagesInProgress.getAndDecrement()
+        return send(message, false)
+    }
 
-        return success
+
+    /**
+     * Safely sends objects to a destination, where the callback is notified once the remote endpoint has received the message.
+     *
+     * This is to guarantee happens-before, and using this will depend upon APP+NETWORK latency, and is (by design) not as performant as
+     * sending a regular message!
+     *
+     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
+     */
+    fun send(message: Any, onSuccessCallback: Connection.() -> Unit): Boolean {
+        return sendSync(message, onSuccessCallback)
     }
 
     /**
@@ -206,17 +288,19 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @return true if the message was successfully sent by aeron
      */
-    suspend fun ping(pingTimeoutSeconds: Int = PingManager.DEFAULT_TIMEOUT_SECONDS, function: suspend Ping.() -> Unit): Boolean {
-        return endPoint.ping(this, pingTimeoutSeconds, function)
+    fun ping(function: Ping.() -> Unit = {}): Boolean {
+        return sendPing(function)
     }
 
     /**
-     * A message in progress means that we have requested to to send an object over the network, but it hasn't finished sending over the network
+     * This is the per-message sequence number.
      *
-     * @return the number of messages in progress for this connection.
+     * The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 4 (external counter) + 4 (GCM counter)
+     * The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
+     * counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
      */
-    fun messagesInProgress(): Int {
-        return messagesInProgress.value
+    internal fun nextGcmSequence(): Int {
+        return aes_gcm_iv.getAndIncrement()
     }
 
     /**
@@ -229,10 +313,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * (via connection.addListener), meaning that ONLY that listener attached to
      * the connection is notified on that event (ie, admin type listeners)
      */
-    suspend fun onDisconnect(function: suspend Connection.() -> Unit) {
+    fun onDisconnect(function: Connection.() -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
-            origManager ?: ListenerManager(logger)
+            origManager ?: ListenerManager(logger, endPoint.eventDispatch)
         }
 
         listenerManager.value!!.onDisconnect(function)
@@ -241,10 +325,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Adds a function that will be called only for this connection, when a client/server receives a message
      */
-    suspend fun <MESSAGE> onMessage(function: suspend Connection.(MESSAGE) -> Unit) {
+    fun <MESSAGE> onMessage(function: Connection.(MESSAGE) -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
-            origManager ?: ListenerManager(logger)
+            origManager ?: ListenerManager(logger, endPoint.eventDispatch)
         }
 
         listenerManager.value!!.onMessage(function)
@@ -255,8 +339,45 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * This is ALWAYS called on a new dispatch
      */
-    internal suspend fun notifyOnMessage(message: Any): Boolean {
+    internal fun notifyOnMessage(message: Any): Boolean {
         return listenerManager.value?.notifyOnMessage(this, message) ?: false
+    }
+
+    internal fun sendBufferedMessages() {
+        if (enableBufferedMessages) {
+            val bufferedMessage = BufferedMessages()
+            val numberDrained = bufferedSession.pendingMessagesQueue.drainTo(bufferedMessage.messages)
+
+            if (numberDrained > 0) {
+                // now send all buffered/pending messages
+                if (logger.isDebugEnabled) {
+                    logger.debug("Sending buffered messages: ${bufferedSession.pendingMessagesQueue.size}")
+                }
+
+                sendNoBuffer(bufferedMessage)
+            }
+        }
+    }
+
+    /**
+     * @return true if this connection has had close() called
+     */
+    fun isClosed(): Boolean {
+        return isClosed.value
+    }
+
+    /**
+     * Is this a "dirty" disconnect, meaning that it has timed out, but not been explicitly closed
+     */
+    internal fun isDirtyClose(): Boolean {
+        return !closeRequested && !isClosed() && isClosedWithTimeout()
+    }
+
+    /**
+     * Is this connection considered still safe for polling (or rather, has it been closed in an unusual way?)
+     */
+    internal fun canPoll(): Boolean {
+        return !closeRequested && !isClosed() && !isClosedWithTimeout()
     }
 
     /**
@@ -265,33 +386,20 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @return `true` if this connection has been closed via aeron
      */
-    fun isClosedViaAeron(): Boolean {
+    internal fun isClosedWithTimeout(): Boolean {
         // we ONLY want to actually, legit check, 1 time every XXX ms.
         val now = System.nanoTime()
 
-        if (now - connectionLastCheckTimeNanos < connectionCheckIntervalNanos) {
-            // we haven't waited long enough for another check. always return false (true means we are closed)
-            return false
-        }
-        connectionLastCheckTimeNanos = now
-
         // as long as we are connected, we reset the state, so that if there is a network blip, we want to make sure that it is
-        // a network blip for a while, instead of just once or twice. (which can happen)
+        // a network blip for a while, instead of just once or twice. (which WILL happen)
         if (subscription.isConnected && publication.isConnected) {
             // reset connection timeout
-            connectionTimeoutTimeNanos = 0L
+            connectionTimeoutTimeNanos = now
 
             // we are still connected (true means we are closed)
             return false
         }
 
-        //
-        // aeron is not connected
-        //
-
-        if (connectionTimeoutTimeNanos == 0L) {
-            connectionTimeoutTimeNanos = now
-        }
 
         // make sure that our "isConnected" state lasts LONGER than the expiry timeout!
 
@@ -300,92 +408,154 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         return now - connectionTimeoutTimeNanos >= connectionExpirationTimoutNanos
     }
 
+
     /**
      * Closes the connection, and removes all connection specific listeners
      */
     fun close() {
-        close(enableRemove = true)
+        close(sendDisconnectMessage = true,
+              closeEverything = true)
     }
 
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    internal fun close(enableRemove: Boolean) {
+    internal fun close(sendDisconnectMessage: Boolean, closeEverything: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
+
         // the compareAndSet is used to make sure that if we call close() MANUALLY, (and later) when the auto-cleanup/disconnect is called -- it doesn't
         // try to do it again.
+        closeRequested = true
 
+        // make sure that EVERYTHING before "close()" runs before we do.
+        // If there are multiple clients/servers sharing the same NetworkPoller -- then they will wait on each other!
+        val close = endPoint.eventDispatch.CLOSE
+        if (!close.isDispatch()) {
+            close.launch {
+                close(sendDisconnectMessage = sendDisconnectMessage, closeEverything = closeEverything)
+            }
+            return
+        }
+
+        closeImmediately(sendDisconnectMessage = sendDisconnectMessage, closeEverything = closeEverything)
+    }
+
+
+    // connection.close() -> this
+    // endpoint.close() -> connection.close() -> this
+    internal fun closeImmediately(sendDisconnectMessage: Boolean, closeEverything: Boolean) {
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
-        if (isClosed.compareAndSet(expect = false, update = true)) {
-            val aeronLogInfo = "${id}/${streamId}"
-            logger.debug {"[$aeronLogInfo] connection closing"}
+        if (!isClosed.compareAndSet(expect = false, update = true)) {
+            logger.debug("[$toString0] connection ignoring close request.")
+            return
+        }
 
-            subscription.close()
+        if (logger.isDebugEnabled) {
+            logger.debug("[$toString0] connection closing. sendDisconnectMessage=$sendDisconnectMessage, closeEverything=$closeEverything")
+        }
 
-            // send out a "close" message. MAYBE it gets to the remote endpoint, maybe not. If it DOES, then the remote endpoint starts
-            // the close process faster.
-            try {
-                endPoint.send(CloseMessage(), publication, this)
-            } catch (ignored: Exception) {
+        // make sure to save off the RMI objects for session management
+        if (!closeEverything) {
+            when (endPoint) {
+                is Server     -> endPoint.bufferedManager.onDisconnect(this)
+                is Client -> endPoint.bufferedManager!!.onDisconnect(this)
+                else  -> throw RuntimeException("Unable to determine type, aborting!")
             }
+        }
 
-
-
-            val timoutInNanos = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
-            var closeTimeoutTime = System.nanoTime()
-
-            // we do not want to close until AFTER all publications have been sent. Calling this WITHOUT waiting will instantly stop everything
-            // we want a timeout-check, otherwise this will run forever
-            while (messagesInProgress.value != 0 && System.nanoTime() - closeTimeoutTime < timoutInNanos) {
-                sleep(50)
+        if (!closeEverything) {
+            when (endPoint) {
+                is Server -> endPoint.bufferedManager.onDisconnect(this)
+                is Client -> endPoint.bufferedManager!!.onDisconnect(this)
+                else  -> throw RuntimeException("Unable to determine type, aborting!")
             }
+        }
 
-            // on close, we want to make sure this file is DELETED!
-            val logFile = endPoint.aeronDriver.getMediaDriverPublicationFile(publication.registrationId())
-            publication.close()
+        // on close, we want to make sure this file is DELETED!
+        try {
+            // we might not be able to close this connection!!
+            endPoint.aeronDriver.close(subscription, toString0)
+        }
+        catch (e: Exception) {
+            endPoint.listenerManager.notifyError(e)
+        }
 
-
-            closeTimeoutTime = System.nanoTime()
-            while (logFile.exists() && System.nanoTime() - closeTimeoutTime < timoutInNanos) {
-                if (logFile.delete()) {
-                    break
+        // notify the remote endPoint that we are closing
+        // we send this AFTER we close our subscription (so that no more messages will be received, when the remote end ping-pong's this message back)
+        if (sendDisconnectMessage) {
+            if (publication.isConnected) {
+                if (logger.isDebugEnabled) {
+                    logger.debug("Sending disconnect message to ${endPoint.otherTypeName}")
                 }
-                sleep(100)
-            }
 
-            if (logFile.exists()) {
-                logger.error("[$aeronLogInfo] Unable to delete aeron publication log on close: $logFile")
-            }
+                // sometimes the remote end has already disconnected, THERE WILL BE ERRORS if this happens (but they are ok)
+                if (closeEverything) {
+                    send(DisconnectMessage.CLOSE_EVERYTHING, true)
+                } else {
+                    send(DisconnectMessage.CLOSE_SIMPLE, true)
+                }
 
-            if (enableRemove) {
-                endPoint.removeConnection(this)
+                // wait for .5 seconds to (help) make sure that the messages are sent before shutdown! This is not guaranteed!
+                if (logger.isDebugEnabled) {
+                    logger.debug("Waiting for disconnect message to send")
+                }
+                Thread.sleep(500L)
+            } else {
+                if (logger.isDebugEnabled) {
+                    logger.debug("Publication is not connected with ${endPoint.otherTypeName}, not sending disconnect message.")
+                }
             }
+        }
 
-            // NOTE: notifyDisconnect() is called inside closeAction()!!
+        // on close, we want to make sure this file is DELETED!
+        try {
+            // we might not be able to close this connection.
+            endPoint.aeronDriver.close(publication, toString0)
+        }
+        catch (e: Exception) {
+            endPoint.listenerManager.notifyError(e)
+        }
 
-            // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
-            // lock-stop ordering for how disconnect and connect work with each-other
-            runBlocking {
-                closeAction()
+        // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
+        // if there are errors within the driver, we do not want to notify disconnect, as we will automatically reconnect.
+        endPoint.listenerManager.notifyDisconnect(this)
+
+        endPoint.removeConnection(this)
+
+
+        val connection = this
+        if (endPoint.isServer()) {
+            // clean up the resources associated with this connection when it's closed
+            if (logger.isDebugEnabled) {
+                logger.debug("[${connection}] freeing resources")
             }
-            logger.debug {"[$aeronLogInfo] connection closed"}
+            sessionIdAllocator.free(info.sessionIdPub)
+            sessionIdAllocator.free(info.sessionIdSub)
+
+            streamIdAllocator.free(info.streamIdPub)
+            streamIdAllocator.free(info.streamIdSub)
+
+            if (remoteAddress != null) {
+                // unique for UDP endpoints
+                (endPoint as Server).handshake.connectionsPerIpCounts.decrementSlow(remoteAddress)
+            }
+        }
+
+        if (logger.isDebugEnabled) {
+            logger.debug("[$toString0] connection closed")
         }
     }
 
-    // called in postCloseAction(), so we don't expose our internal listenerManager
-    internal suspend fun doNotifyDisconnect() {
+
+    // called in a ListenerManager.notifyDisconnect(), so we don't expose our internal listenerManager
+    internal fun notifyDisconnect() {
         val connectionSpecificListenerManager = listenerManager.value
-        connectionSpecificListenerManager?.notifyDisconnect(this@Connection)
+        connectionSpecificListenerManager?.directNotifyDisconnect(this@Connection)
     }
 
 
-    //
-    //
-    // Generic object methods
-    //
-    //
     override fun toString(): String {
         return toString0
     }
@@ -409,17 +579,93 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         return id == other1.id
     }
 
-    // cleans up the connection information
-    internal fun cleanup(connectionsPerIpCounts: ConnectionCounts, sessionIdAllocator: RandomId65kAllocator, streamIdAllocator: RandomId65kAllocator) {
-        sessionIdAllocator.free(id)
+    internal fun receiveSendSync(sendSync: SendSync) {
+        if (sendSync.message != null) {
+            // this is on the "remote end".
+            sendSync.message = null
 
-        if (isIpc) {
-            streamIdAllocator.free(publicationPort)
-            streamIdAllocator.free(subscriptionPort)
+            if (!send(sendSync)) {
+                logger.error("Error returning send-sync: $sendSync")
+            }
         } else {
-            // unique for UDP endpoints
-            connectionsPerIpCounts.decrementSlow(remoteAddress!!)
-            streamIdAllocator.free(streamId)
+            // this is on the "local end" when the response comes back
+            val responseId = sendSync.id
+
+            // process the ping message so that our ping callback does something
+
+            // this will be null if the ping took longer than XXX seconds and was cancelled
+            val result = EndPoint.responseManager.removeWaiterCallback<Connection.() -> Unit>(responseId, logger)
+            if (result != null) {
+                result(this)
+            } else {
+                logger.error("Unable to receive send-sync, there was no waiting response for $sendSync ($responseId)")
+            }
         }
+    }
+
+
+    /**
+     * Safely sends objects to a destination, the callback is notified once the remote endpoint has received the message.
+     *
+     * This is to guarantee happens-before, and using this will depend upon APP+NETWORK latency, and is (by design) not as performant as
+     * sending a regular message!
+     *
+     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
+     */
+    private fun sendSync(message: Any, onSuccessCallback: Connection.() -> Unit): Boolean {
+        val id = EndPoint.responseManager.prepWithCallback(logger, onSuccessCallback)
+
+        val sendSync = SendSync()
+        sendSync.message = message
+        sendSync.id = id
+
+        // if there is no ping response EVER, it means that the connection is in a critically BAD state!
+        // eventually, all the ping replies (or, in our case, the RMI replies that have timed out) will
+        // become recycled.
+        // Is it a memory-leak? No, because the memory will **EVENTUALLY** get freed.
+
+        return send(sendSync, false)
+    }
+
+
+    internal fun receivePing(ping: Ping) {
+        if (ping.pongTime == 0L) {
+            // this is on the "remote end".
+            ping.pongTime = System.currentTimeMillis()
+
+            if (!send(ping)) {
+                logger.error("Error returning ping: $ping")
+            }
+        } else {
+            // this is on the "local end" when the response comes back
+            ping.finishedTime = System.currentTimeMillis()
+
+            val responseId = ping.packedId
+
+            // process the ping message so that our ping callback does something
+
+            // this will be null if the ping took longer than XXX seconds and was cancelled
+            val result = EndPoint.responseManager.removeWaiterCallback<Ping.() -> Unit>(responseId, logger)
+            if (result != null) {
+                result(ping)
+            } else {
+                logger.error("Unable to receive ping, there was no waiting response for $ping ($responseId)")
+            }
+        }
+    }
+
+    private fun sendPing(function: Ping.() -> Unit): Boolean {
+        val id = EndPoint.responseManager.prepWithCallback(logger, function)
+
+        val ping = Ping()
+        ping.packedId = id
+        ping.pingTime = System.currentTimeMillis()
+
+        // if there is no ping response EVER, it means that the connection is in a critically BAD state!
+        // eventually, all the ping replies (or, in our case, the RMI replies that have timed out) will
+        // become recycled.
+        // Is it a memory-leak? No, because the memory will **EVENTUALLY** get freed.
+
+        return send(ping)
     }
 }

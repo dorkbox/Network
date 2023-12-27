@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,25 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Copyright (c) 2008, Nathan Sweet
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following
- * conditions are met:
- *
- * - Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
- * - Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
- * disclaimer in the documentation and/or other materials provided with the distribution.
- * - Neither the name of Esoteric Software nor the names of its contributors may be used to endorse or promote products derived
- * from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
- * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
- * SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package dorkboxTest.network.rmi
 
@@ -50,7 +31,6 @@ import org.junit.Test
 class RmiSimpleActionsTest : BaseTest() {
     @Test
     fun testGlobalDelete() {
-
         val configuration = serverConfig()
         configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
         configuration.serialization.register(MessageWithTestCow::class.java)
@@ -82,6 +62,9 @@ class RmiSimpleActionsTest : BaseTest() {
         Assert.assertTrue(server.rmiGlobal.delete(testCowImpl))
         Assert.assertFalse(server.rmiGlobal.delete(testCowImpl))
         Assert.assertFalse(server.rmiGlobal.delete(newId2))
+
+        stopEndPoints()
+        waitForThreads()
     }
 
     @Test
@@ -91,16 +74,18 @@ class RmiSimpleActionsTest : BaseTest() {
 
     private fun doConnect(isIpv4: Boolean, isIpv6: Boolean, runIpv4Connect: Boolean, client: Client<Connection>) {
         when {
-            isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST)
-            isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST)
-            isIpv4 -> client.connect(IPv4.LOCALHOST)
-            isIpv6 -> client.connect(IPv6.LOCALHOST)
-            else -> client.connect()
+            isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST, 2000)
+            isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST, 2000)
+            isIpv4 -> client.connect(IPv4.LOCALHOST, 2000)
+            isIpv6 -> client.connect(IPv6.LOCALHOST, 2000)
+            else -> client.connectIpc()
         }
     }
 
     fun rmiConnectionDelete(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
-        run {
+        var RMI_ID = 0
+
+        val server = run {
             val configuration = serverConfig()
             configuration.enableIPv4 = isIpv4
             configuration.enableIPv6 = isIpv6
@@ -115,7 +100,6 @@ class RmiSimpleActionsTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind()
 
             server.onMessage<MessageWithTestCow> { m ->
                 server.logger.error("Received finish signal for test for: Client -> Server")
@@ -127,14 +111,20 @@ class RmiSimpleActionsTest : BaseTest() {
 
                 server.logger.error("Finished test for: Client -> Server")
 
-                rmi.delete(23)
-                // `object` is still a reference to the object!
-                // so we don't want to pass that back -- so pass back a new one
-                send(MessageWithTestCow(TestCowImpl(1)))
+                rmi.delete(RMI_ID)
+
+                val newID = RMI_ID+123
+                val testCow = TestCowImpl(newID)
+                // we must manually save the object -- because if we don't we'll auto-create it when it gets sent across the network.
+                // this happens BECAUSE `TestCow` is an RMI object!!
+                rmi.save(testCow, newID)
+                send(MessageWithTestCow(testCow))
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val configuration = clientConfig()
             config(configuration)
             //            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
@@ -142,17 +132,25 @@ class RmiSimpleActionsTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
+
+
             client.onConnect {
                 rmi.create<TestCow>(23) {
+                    RMI_ID = it
                     client.logger.error("Running test for: Client -> Server")
-                    RmiCommonTest.runTests(this@onConnect, this, 23)
+//                    RmiCommonTest.runTests(this@onConnect, this@create, 23)
+                    val m = MessageWithTestCow(this)
+                    m.number = 678
+                    m.text = "sometext"
+                    this@onConnect.send(m)
+
                     client.logger.error("Done with test for: Client -> Server")
                 }
             }
 
             client.onMessage<MessageWithTestCow> { _ ->
                 // check if 23 still exists (it should not)
-                val obj = rmi.get<TestCow>(23)
+                val obj = rmi.get<TestCow>(RMI_ID)
 
                 try {
                     obj.id()
@@ -161,11 +159,107 @@ class RmiSimpleActionsTest : BaseTest() {
                     // this is expected
                 }
 
-                stopEndPoints(2000)
+                stopEndPoints()
             }
 
-            doConnect(isIpv4, isIpv6, runIpv4Connect, client)
+            client
         }
+
+        server.bind(2000)
+        doConnect(isIpv4, isIpv6, runIpv4Connect, client)
+
+        waitForThreads()
+    }
+
+    @Test
+    fun rmiReconnectPersistence() {
+        var RMI_ID = 0
+
+        val server = run {
+            val configuration = serverConfig()
+
+            configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
+            configuration.serialization.register(MessageWithTestCow::class.java)
+            configuration.serialization.register(UnsupportedOperationException::class.java)
+
+            // for Client -> Server RMI
+            configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
+
+            val server = Server<Connection>(configuration)
+            addEndPoint(server)
+
+            server.onMessage<MessageWithTestCow> { m ->
+                server.logger.error("Received finish signal for test for: Client -> Server")
+
+                val `object` = m.testCow
+                val id = `object`.id()
+
+                Assert.assertEquals(23, id)
+
+                server.logger.error("Finished test for: Client -> Server")
+
+                rmi.delete(RMI_ID)
+
+                val newID = RMI_ID+123
+                val testCow = TestCowImpl(newID)
+                // we must manually save the object -- because if we don't we'll auto-create it when it gets sent across the network.
+                // this happens BECAUSE `TestCow` is an RMI object!!
+                rmi.save(testCow, newID)
+                send(MessageWithTestCow(testCow))
+            }
+
+            server
+        }
+
+        val client = run {
+            var firstRun = true
+            val configuration = clientConfig()
+            //            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+
+            val client = Client<Connection>(configuration)
+            addEndPoint(client)
+
+
+            client.onConnect {
+                rmi.create<TestCow>(23) {
+                    RMI_ID = it
+                    client.logger.error("Running test for: Client -> Server")
+//                    RmiCommonTest.runTests(this@onConnect, this@create, 23)
+
+                    val m = MessageWithTestCow(this)
+                    m.number = 678
+                    m.text = "sometext"
+                    this@onConnect.send(m)
+
+                    client.logger.error("Done with test for: Client -> Server")
+                }
+            }
+
+            client.onMessage<MessageWithTestCow> { _ ->
+                // check if 23 still exists (it should not)
+                val obj = rmi.get<TestCow>(RMI_ID)
+
+                try {
+                    obj.id()
+                    Assert.fail(".id() should throw a timeout/exception, the backing RMI object doesn't exist!")
+                } catch (e: Exception) {
+                    // this is expected
+                }
+
+                if (firstRun) {
+                    firstRun = false
+                    client.close(false)
+                    client.connectIpc()
+                } else {
+                    stopEndPoints()
+                }
+            }
+
+            client
+        }
+
+        server.bindIpc()
+        client.connectIpc()
 
         waitForThreads()
     }

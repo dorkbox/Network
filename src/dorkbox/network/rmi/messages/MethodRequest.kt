@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package dorkbox.network.rmi.messages
 
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
+import java.util.*
 
 /**
  * Internal message to invoke methods remotely.
@@ -47,6 +48,21 @@ class MethodRequest : RmiMessage {
     var args: Array<Any>? = null
 
     override fun toString(): String {
-        return "MethodRequest(isGlobal=$isGlobal, rmiObjectId=${RmiUtils.unpackLeft(packedId)}, rmiId=${RmiUtils.unpackRight(packedId)}, cachedMethod=$cachedMethod, args=${args?.contentToString()})"
+        var argString = ""
+        val args1 = args
+        if (!args1.isNullOrEmpty()) {
+            // long byte arrays have SERIOUS problems!
+            argString = Arrays.deepToString(args1.map {
+                when (it) {
+                    is ByteArray -> { "${it::class.java.simpleName}(length=${it.size})"}
+                    is Array<*>  -> { "${it::class.java.simpleName}(length=${it.size})"}
+                    is Collection<*>  -> { "${it::class.java.simpleName}(length=${it.size})"}
+                    else    -> { it }
+                }
+            }.toTypedArray())
+            argString = argString.substring(1, argString.length - 1)
+        }
+
+        return "MethodRequest(isGlobal=$isGlobal, rmiObjectId=${RmiUtils.unpackLeft(packedId)}, rmiId=${RmiUtils.unpackRight(packedId)}, cachedMethod=$cachedMethod, args=${argString})"
     }
 }

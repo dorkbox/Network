@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ class RmiNestedTest : BaseTest() {
      */
     @Test
     fun biDirectionalDoubleRmi() {
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectAnnotImpl::class.java)
@@ -75,11 +75,11 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind()
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -116,14 +116,18 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
         waitForThreads()
     }
 
     @Test
     fun doubleRmi() {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectAnnotImpl::class.java)
             configuration.serialization.rmi.register(OtherObject::class.java, OtherObjectImpl::class.java)
@@ -141,11 +145,11 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind()
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -181,14 +185,17 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
         waitForThreads()
     }
 
     @Test
     fun singleRmi() {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
             configuration.serialization.register(OtherObjectImpl::class.java)
@@ -206,11 +213,11 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind()
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -240,14 +247,18 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
         waitForThreads()
     }
 
     @Test
     fun singleReverseRmi() {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java, null)
             configuration.serialization.register(OtherObjectImpl::class.java)
@@ -279,11 +290,11 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind()
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
@@ -300,8 +311,12 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
         waitForThreads()
     }
 
@@ -310,9 +325,9 @@ class RmiNestedTest : BaseTest() {
 
 
     private interface TestObject {
-        suspend fun setValue(aFloat: Float)
-        suspend fun setOtherValue(aFloat: Float)
-        suspend fun getOtherValue(): Float
+        fun setValue(aFloat: Float)
+        fun setOtherValue(aFloat: Float)
+        fun getOtherValue(): Float
         fun other(): Float
         fun getOtherObject(): OtherObject
     }
@@ -329,20 +344,20 @@ class RmiNestedTest : BaseTest() {
         private val otherObject: OtherObject = OtherObjectImpl()
 
         private var aFloat = 0f
-        override suspend fun setValue(aFloat: Float) {
+        override fun setValue(aFloat: Float) {
             throw RuntimeException("Whoops!")
         }
 
-        suspend fun setValue(connection: Connection, aFloat: Float) {
+        fun setValue(connection: Connection, aFloat: Float) {
             connection.logger.error("receiving")
             this.aFloat = aFloat
         }
 
-        override suspend fun setOtherValue(aFloat: Float) {
+        override fun setOtherValue(aFloat: Float) {
             otherObject.setValue(aFloat)
         }
 
-        override suspend fun getOtherValue(): Float {
+        override fun getOtherValue(): Float {
             return otherObject.value()
         }
 
@@ -371,20 +386,20 @@ class RmiNestedTest : BaseTest() {
         private val otherObject: OtherObject = OtherObjectImpl()
 
         private var aFloat = 0f
-        override suspend fun setValue(aFloat: Float) {
-            throw RuntimeException("Whoops!")
+        override fun setValue(aFloat: Float) {
+            throw RuntimeException("Whoops!") // the connection param version should be called.
         }
 
-        suspend fun setValue(connection: Connection, aFloat: Float) {
+        fun setValue(connection: Connection, aFloat: Float) {
             connection.logger.error("receiving")
             this.aFloat = aFloat
         }
 
-        override suspend fun setOtherValue(aFloat: Float) {
+        override fun setOtherValue(aFloat: Float) {
             otherObject.setValue(aFloat)
         }
 
-        override suspend fun getOtherValue(): Float {
+        override fun getOtherValue(): Float {
             return otherObject.value()
         }
 

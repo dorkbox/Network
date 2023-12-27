@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
+ */
+/*
  * Copyright (c) 2008, Nathan Sweet
  * All rights reserved.
  *
@@ -34,7 +35,6 @@
  */
 package dorkboxTest.network.rmi
 
-import ch.qos.logback.classic.Level
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
@@ -47,6 +47,7 @@ import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
 import org.junit.Assert
 import org.junit.Test
+import java.util.concurrent.*
 
 class RmiDuplicateObjectTest : BaseTest() {
     @Test
@@ -79,20 +80,19 @@ class RmiDuplicateObjectTest : BaseTest() {
 
     private fun doConnect(isIpv4: Boolean, isIpv6: Boolean, runIpv4Connect: Boolean, client: Client<Connection>) {
         when {
-            isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST)
-            isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST)
-            isIpv4 -> client.connect(IPv4.LOCALHOST)
-            isIpv6 -> client.connect(IPv6.LOCALHOST)
-            else -> client.connect()
+            isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST, 2000)
+            isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST, 2000)
+            isIpv4 -> client.connect(IPv4.LOCALHOST, 2000)
+            isIpv6 -> client.connect(IPv6.LOCALHOST, 2000)
+            else -> client.connect(IPv4.LOCALHOST, 2000)
         }
     }
 
-    private val objs = mutableSetOf<Int>()
-
     fun rmi(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
-        setLogLevel(Level.TRACE)
+        val objs = mutableSetOf<Int>()
+        val latch = CountDownLatch(2)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.enableIPv4 = isIpv4
             configuration.enableIPv6 = isIpv6
@@ -105,21 +105,24 @@ class RmiDuplicateObjectTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind()
+
 
             server.onConnect {
-                server.forEachConnection {
-                    val testCow = it.rmi.get<TestCow>(4)
-                    testCow.moo()
+                logger.warn("Starting to moo")
+                // these are on separate threads (client.init) and this -- there can be race conditions, where the object doesn't exist yet!
+                val testCow = rmi.get<TestCow>(4)
+                testCow.moo()
 
-                    synchronized(objs) {
-                        objs.add(testCow.id())
-                    }
+                synchronized(objs) {
+                    objs.add(testCow.id())
                 }
+                latch.countDown()
             }
+
+            server
         }
 
-        run {
+        val client1 = run {
             val configuration = clientConfig()
             config(configuration)
 
@@ -127,12 +130,14 @@ class RmiDuplicateObjectTest : BaseTest() {
             addEndPoint(client)
 
             client.onInit {
+                logger.warn("Initializing moo 4")
                 rmi.save(TestCowImpl(4), 4)
             }
 
-            doConnect(isIpv4, isIpv6, runIpv4Connect, client)
+            client
         }
-        run {
+
+        val client2 = run {
             val configuration = clientConfig()
             config(configuration)
 
@@ -141,14 +146,21 @@ class RmiDuplicateObjectTest : BaseTest() {
 
 
             client.onInit {
-                rmi.save(TestCowImpl(5), 4)
+                logger.warn("Initializing moo 5")
+                rmi.save(TestCowImpl(5), 4) // both are saved as ID 4 (but internally are 4 and 5)
             }
 
-            doConnect(isIpv4, isIpv6, runIpv4Connect, client)
+            client
         }
 
-        waitForThreads(5)
 
+        server.bind(2000)
+        doConnect(isIpv4, isIpv6, runIpv4Connect, client1)
+        doConnect(isIpv4, isIpv6, runIpv4Connect, client2)
+
+        latch.await()
+        stopEndPoints()
+        waitForThreads()
 
         val actual = synchronized(objs) {
             objs.joinToString()

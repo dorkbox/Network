@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
+ */
+ /*
  * Copyright (c) 2008, Nathan Sweet
  * All rights reserved.
  *
@@ -66,18 +67,22 @@ class ListenerTest : BaseTest() {
     // quick and dirty test to also test connection sub-classing
     internal open inner class TestConnectionA(connectionParameters: ConnectionParams<TestConnectionA>) : Connection(connectionParameters) {
         open fun check() {
-            overrideCheck.value = true
+            overrideCheck.lazySet(true)
         }
     }
 
     @Test
     @Throws(SecurityException::class, InitializationException::class, IOException::class, InterruptedException::class)
     fun listener() {
-        val server: Server<TestConnectionA> = Server(serverConfig()) {
-            TestConnectionA(it)
+        val server = object : Server<TestConnectionA>(serverConfig()) {
+            override fun newConnection(connectionParameters: ConnectionParams<TestConnectionA>): TestConnectionA {
+                return TestConnectionA(connectionParameters)
+            }
         }
+
         addEndPoint(server)
 
+        // has session/stream count errors!
         // standard listener
         server.onMessage<String> { message ->
             logger.error ("server string message")
@@ -89,14 +94,14 @@ class ListenerTest : BaseTest() {
         // generic listener
         server.onMessage<Any> {
             // should be called!
-            serverOnMessage.value = true
+            serverOnMessage.lazySet(true)
             logger.error ("server any message")
         }
 
         // standard connect check
         server.onConnect {
             logger.error ("server connect")
-            serverConnect.value = true
+            serverConnect.lazySet(true)
 
             onMessage<Any> {
                 logger.error ("server connection any message")
@@ -112,37 +117,38 @@ class ListenerTest : BaseTest() {
         // standard listener disconnect check
         server.onDisconnect {
             logger.error ("server disconnect")
-            serverDisconnect.value = true
+            serverDisconnect.lazySet(true)
         }
-
-        server.bind()
 
 
 
 
         // ----
-        val client: Client<TestConnectionA> = Client(clientConfig()) {
-            TestConnectionA(it)
+        val client = object : Client<TestConnectionA>(clientConfig()) {
+            override fun newConnection(connectionParameters: ConnectionParams<TestConnectionA>): TestConnectionA {
+                return TestConnectionA(connectionParameters)
+            }
         }
+
         addEndPoint(client)
 
 
         client.onConnect {
-            logger.error { "client connect 1" }
+            logger.error("client connect 1")
             send(origString) // 20 a's
         }
 
         // standard connect check
         client.onConnect {
-            logger.error { "client connect 2" }
-            clientConnect.value = true
+            logger.error("client connect 2")
+            clientConnect.lazySet(true)
         }
 
 
         client.onMessage<String> { message ->
-            logger.error { "client string message" }
+            logger.error("client string message")
             if (origString != message) {
-                checkFail2.value = true
+                checkFail2.lazySet(true)
                 System.err.println("original string not equal to the string received")
                 stopEndPoints()
                 return@onMessage
@@ -158,11 +164,12 @@ class ListenerTest : BaseTest() {
         // standard listener disconnect check
         client.onDisconnect {
             logger.error ("client disconnect")
-            clientDisconnect.value = true
+            clientDisconnect.lazySet(true)
         }
 
 
-        client.connect(LOCALHOST)
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
 

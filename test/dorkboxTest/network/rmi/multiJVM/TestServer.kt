@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import dorkboxTest.network.rmi.cows.TestBabyCowImpl
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
 import dorkboxTest.network.rmi.multiJVM.TestClient.setup
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 
 /**
@@ -87,10 +86,7 @@ object TestServer {
 //            }
         }
 
-        server.bind()
-
-        runBlocking {
-            server.waitForClose()
-        }
+        server.bind(2000)
+        server.waitForClose()
     }
 }

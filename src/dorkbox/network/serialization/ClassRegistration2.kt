@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import dorkbox.network.connection.Connection
 
-internal class ClassRegistration2<CONNECTION: Connection>(clazz: Class<*>, serializer: Serializer<*>, id: Int) : ClassRegistration<CONNECTION>(clazz, serializer, id) {
+internal class ClassRegistration2(clazz: Class<*>, serializer: Serializer<*>, id: Int) : ClassRegistration(clazz, serializer, id) {
 
     override fun register(kryo: Kryo) {
         kryo.register(clazz, serializer, id)

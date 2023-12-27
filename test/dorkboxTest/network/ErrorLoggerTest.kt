@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,9 @@ class ErrorLoggerTest : BaseTest() {
 
     @Test
     fun customErrorLoggerTest() {
-        run {
+        val exception = Exception("server ERROR. SHOULD BE CAUGHT")
+
+        val server = run {
             val configuration = serverConfig()
             configuration.aeronErrorFilter = {
                 true // log all errors
@@ -45,18 +47,18 @@ class ErrorLoggerTest : BaseTest() {
             }
 
             server.onErrorGlobal { throwable ->
-                println("Global error")
+                println("Global error!!!!")
                 throwable.printStackTrace()
             }
 
             server.onMessage<Any> {
-                throw Exception("server ERROR. SHOULD BE CAUGHT")
+                throw exception
             }
 
-            server.bind()
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
             config.aeronErrorFilter = {
                 true // log all errors
@@ -68,12 +70,20 @@ class ErrorLoggerTest : BaseTest() {
             client.onConnect {
                 // can be any message, we just want the error-log to log something
                 send(TestObj())
+
+                pause(200)
                 stopEndPoints()
             }
 
-            client.connect(LOCALHOST)
+            client
         }
 
-        waitForThreads()
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
+        waitForThreads() { errors ->
+            // we don't want to fail the unit test for this exception
+            errors.filter { it != exception }
+        }
     }
 }

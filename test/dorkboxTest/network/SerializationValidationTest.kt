@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,16 @@ package dorkboxTest.network
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
-import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 
 class SerializationValidationTest : BaseTest() {
     @Test
     fun checkManyObjects() {
-        run {
+        // session/stream count errors
+        val server = run {
             val configuration = serverConfig()
             register(configuration.serialization)
 
@@ -36,11 +37,11 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<FinishedCommand> { _ ->
                 stopEndPoints()
             }
-            server.bind()
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -50,31 +51,19 @@ class SerializationValidationTest : BaseTest() {
                 send(FinishedCommand())
             }
 
-            client.connect(LOCALHOST)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
     }
 
     @Test
-    fun checkTakeKryo() {
-        @Suppress("UNCHECKED_CAST")
-        val serialization = serverConfig().serialization as Serialization<Connection>
-
-        val kryos = mutableListOf<KryoExtra<Connection>>()
-        for (i in 0 until 17) {
-            kryos.add(serialization.takeKryo())
-        }
-
-        kryos.forEach {
-            serialization.returnKryo(it)
-        }
-    }
-
-
-    @Test
     fun checkOutOfOrder() {
-        run {
+        // session/stream count errors
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
             configuration.serialization.register(TestObjectImpl::class.java) // this is again, on purpose to verify registration order!
@@ -87,11 +76,11 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<TestObject> { _ ->
                 stopEndPoints()
             }
-            server.bind()
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -101,7 +90,9 @@ class SerializationValidationTest : BaseTest() {
                 logger.error("Connected")
                 rmi.getGlobal<TestObject>(1).apply {
                     logger.error("Starting test")
-                    setValue(43.21f)
+                    runBlocking {
+                        setValue(43.21f)
+                    }
 
                     // Normal remote method call.
                     Assert.assertEquals(43.21f, other(), .0001f)
@@ -112,15 +103,18 @@ class SerializationValidationTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
     }
 
     @Test
     fun checkOutOfOrder2() {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java)
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
@@ -133,11 +127,11 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<TestObject> { _ ->
                 stopEndPoints()
             }
-            server.bind()
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -147,7 +141,9 @@ class SerializationValidationTest : BaseTest() {
                 logger.error("Connected")
                 rmi.getGlobal<TestObject>(1).apply {
                     logger.error("Starting test")
-                    setValue(43.21f)
+                    runBlocking {
+                        setValue(43.21f)
+                    }
 
                     // Normal remote method call.
                     Assert.assertEquals(43.21f, other(), .0001f)
@@ -158,8 +154,11 @@ class SerializationValidationTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
     }

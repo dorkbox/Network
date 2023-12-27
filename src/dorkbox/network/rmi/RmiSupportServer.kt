@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ListenerManager
-import mu.KLogger
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
+import org.slf4j.Logger
 
 /**
  * Only the server can create or delete a global object
@@ -30,7 +30,7 @@ import mu.KLogger
  *  Connection scope objects can be remotely created or deleted by either end of the connection. Only the server can create/delete a global scope object
  */
 class RmiSupportServer<CONNECTION : Connection> internal constructor(
-    private val logger: KLogger,
+    private val logger: Logger,
     private val rmiGlobalSupport: RmiManagerGlobal<CONNECTION>
 ) {
     /**
@@ -53,7 +53,7 @@ class RmiSupportServer<CONNECTION : Connection> internal constructor(
         val rmiId = rmiGlobalSupport.saveImplObject(`object`)
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
+            exception.cleanStackTrace()
             logger.error("RMI error", exception)
         }
         return rmiId
@@ -79,7 +79,7 @@ class RmiSupportServer<CONNECTION : Connection> internal constructor(
         val success = rmiGlobalSupport.saveImplObject(`object`, objectId)
         if (!success) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
+            exception.cleanStackTrace()
             logger.error("RMI error", exception)
         }
         return success
@@ -103,7 +103,7 @@ class RmiSupportServer<CONNECTION : Connection> internal constructor(
             rmiGlobalSupport.removeImplObject<Any?>(successRmiId)
         } else {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be deleted! It does not exist")
-            ListenerManager.cleanStackTrace(exception)
+            exception.cleanStackTrace()
             logger.error("RMI error", exception)
         }
 
@@ -126,9 +126,10 @@ class RmiSupportServer<CONNECTION : Connection> internal constructor(
         val success = previousObject != null
         if (!success) {
             val exception = Exception("RMI implementation UD '$objectId' could not be deleted! It does not exist")
-            ListenerManager.cleanStackTrace(exception)
+            exception.cleanStackTrace()
             logger.error("RMI error", exception)
         }
+
         return success
     }
 }

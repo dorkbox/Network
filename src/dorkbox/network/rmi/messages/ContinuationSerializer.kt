@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import kotlin.coroutines.Continuation
 
-class ContinuationSerializer() : Serializer<Continuation<*>>() {
+internal class ContinuationSerializer() : Serializer<Continuation<*>>() {
     init {
         isImmutable = true
     }

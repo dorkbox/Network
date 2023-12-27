@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,48 +21,47 @@ import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.connection.CryptoManagement
-import dorkbox.serializers.SerializationDefaults
 import dorkbox.storage.Storage
-import mu.KLogger
+import dorkbox.storage.serializer.SerializerBytes
+import org.slf4j.Logger
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
-import java.security.SecureRandom
 
 /**
  * This class provides a way for the network stack to use a database of some sort.
  */
 @Suppress("unused")
-class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : AutoCloseable {
+class SettingsStore(storageBuilder: Storage.Builder, val logger: Logger) : AutoCloseable {
     companion object {
         /**
          * Address 0.0.0.0 or ::0 may be used as a source address for this host on this network.
          *
          * Because we assigned BOTH to the same thing, it doesn't REALLY matter which one we use, so we use BOTH!
          */
-        internal val local4Buffer = IPv4.WILDCARD
-        internal val local6Buffer = IPv6.WILDCARD
+        private val local4Buffer = IPv4.WILDCARD
+        private val local6Buffer = IPv6.WILDCARD
 
-        internal const val saltKey = "_salt"
-        internal const val privateKey = "_private"
+        private const val saltKey = "_salt"
+        private const val privateKey_ = "_private"
     }
 
 
 
-    val store: Storage
+    private val store: Storage
 
     init {
         store = storageBuilder.logger(logger).apply {
             if (isStringBased) {
                 // have to load/save keys+values as strings
-                onLoad { key, value, load ->
-                    // key/value will be strings for a string based storage system
+                onLoad { _, key, value, load ->
+                    // key/value will ALWAYS be strings for a string based storage system
                     key as String
                     value as String
 
                     // we want the keys to be easy to read in case we are using string based storage
                     val xKey: Any? = when (key) {
-                        saltKey, privateKey -> key
+                        saltKey, privateKey_ -> key
                         else -> {
                             IP.toAddress(key)
                         }
@@ -75,10 +74,10 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
 
                     val xValue = value.decodeBase58()
                     load(xKey, xValue)
-                }.onSave { key, value, save ->
+                }.onSave { _, key, value, save ->
                     // we want the keys to be easy to read in case we are using string based storage
                     val xKey =  when (key) {
-                        saltKey, privateKey, Storage.versionTag -> key
+                        saltKey, privateKey_, Storage.versionTag -> key
                         is InetAddress -> IP.toString(key)
                         else -> null
                     }
@@ -104,11 +103,11 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
                 }
             } else {
                 // everything is stored as bytes. We use a serializer instead to register types for easy serialization
-                onNewSerializer {
+                serializer(SerializerBytes {
                     register(ByteArray::class.java)
-                    register(Inet4Address::class.java, SerializationDefaults.inet4AddressSerializer)
-                    register(Inet6Address::class.java, SerializationDefaults.inet6AddressSerializer)
-                }
+                    register(Inet4Address::class.java, Serialization.inet4AddressSerializer)
+                    register(Inet6Address::class.java, Serialization.inet6AddressSerializer)
+                })
            }
        }.build()
 
@@ -116,60 +115,55 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
         // have to init salt
         val currentValue: ByteArray? = store[saltKey]
         if (currentValue == null) {
-            val secureRandom = SecureRandom()
-
             // server salt is used to salt usernames and other various connection handshake parameters
             val bytes = ByteArray(32) // same size as our public/private key info
-            secureRandom.nextBytes(bytes)
+            CryptoManagement.secureRandom.nextBytes(bytes)
 
             // have to explicitly set it (so it will save)
             store[saltKey] = bytes
         }
     }
 
-
     /**
-     * @return the private key of the server
-     *
-     * @throws SecurityException
+     * @return true if both the private and public keys are non-null
      */
-    fun getPrivateKey(): ByteArray? {
-        checkAccess(CryptoManagement::class.java)
-        return store[privateKey]
+    fun validKeys(): Boolean {
+        val pubKey = store.get(local4Buffer) as ByteArray?
+        val privKey = store.get(privateKey_) as ByteArray?
+        return pubKey != null && privKey != null
     }
 
     /**
-     * Saves the private key of the server
+     * the private key of the server
      *
      * @throws SecurityException
      */
-    fun savePrivateKey(serverPrivateKey: ByteArray) {
-        store[privateKey] = serverPrivateKey
-    }
+    var privateKey: ByteArray
+        get() {
+            checkAccess(CryptoManagement::class.java)
+            return store[privateKey_]!!
+        }
+        set(value) {
+            store[privateKey_] = value
+        }
 
     /**
-     * @return the public key of the server
+     * the public key of the server
      *
      * @throws SecurityException
      */
-    fun getPublicKey(): ByteArray? {
-        return store[local4Buffer]
-    }
-
-    /**
-     * Saves the public key of the server
-     *
-     * @throws SecurityException
-     */
-    fun savePublicKey(serverPublicKey: ByteArray) {
-        store[local4Buffer] = serverPublicKey
-        store[local6Buffer] = serverPublicKey
-    }
+    var publicKey: ByteArray
+        get() { return store[local4Buffer]!! }
+        set(value) {
+            store[local4Buffer] = value
+            store[local6Buffer] = value
+        }
 
     /**
      * @return the server salt
      */
-    fun getSalt(): ByteArray {
+    val salt: ByteArray
+        get() {
         return store[saltKey]!!
     }
 
@@ -198,7 +192,13 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
      * Take the proper steps to close the storage system.
      */
     override fun close() {
-        store.close()
+        logger.debug("Closing storage...")
+        try {
+            store.close()
+        }
+        catch (exception: Exception) {
+            logger.error("Unable to close the storage!", exception)
+        }
     }
 
 
@@ -425,4 +425,6 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
         }
         return true
     }
+
+
 }

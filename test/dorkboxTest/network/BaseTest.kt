@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,25 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Copyright (c) 2008, Nathan Sweet
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following
- * conditions are met:
- *
- * - Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
- * - Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
- * disclaimer in the documentation and/or other materials provided with the distribution.
- * - Neither the name of Esoteric Software nor the names of its contributors may be used to endorse or promote products derived
- * from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
- * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
- * SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package dorkboxTest.network
 
@@ -40,34 +21,34 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
-import dorkbox.network.Client
-import dorkbox.network.ClientConfiguration
-import dorkbox.network.Configuration
-import dorkbox.network.Server
-import dorkbox.network.ServerConfiguration
+import dorkbox.hex.toHexString
+import dorkbox.network.*
+import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.os.OS
 import dorkbox.storage.Storage
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
 import dorkbox.util.exceptions.InitializationException
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.DelicateCoroutinesApi
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
 import org.slf4j.LoggerFactory
-import java.io.File
-import java.lang.Thread.sleep
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.concurrent.*
 
+@OptIn(DelicateCoroutinesApi::class)
 abstract class BaseTest {
     companion object {
         const val LOCALHOST = "localhost"
 
+        const val DEBUG = false
+
         // wait minimum of 3 minutes before we automatically fail the unit test.
-        var AUTO_FAIL_TIMEOUT: Long = 180L
+        var AUTO_FAIL_TIMEOUT: Long = if (DEBUG) 9999999999L else 180L
 
         init {
             if (OS.javaVersion >= 9) {
@@ -96,7 +77,7 @@ abstract class BaseTest {
 //                }
 //            }
 
-            setLogLevel(Level.TRACE)
+//            setLogLevel(Level.TRACE)
 //            setLogLevel(Level.ERROR)
 //            setLogLevel(Level.DEBUG)
 
@@ -108,13 +89,19 @@ abstract class BaseTest {
             }
         }
 
+        fun pause(timeToSleep: Long) {
+            Thread.sleep(timeToSleep)
+        }
+
         fun clientConfig(block: Configuration.() -> Unit = {}): ClientConfiguration {
 
             val configuration = ClientConfiguration()
+            configuration.appId = "network_test"
+            configuration.tag = "**Client**"
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-            configuration.port = 2200
 
             configuration.enableIpc = false
+            configuration.enableIPv6 = false
 
             block(configuration)
             return configuration
@@ -122,10 +109,11 @@ abstract class BaseTest {
 
         fun serverConfig(block: ServerConfiguration.() -> Unit = {}): ServerConfiguration {
             val configuration = ServerConfiguration()
+            configuration.appId = "network_test"
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-            configuration.port = 2200
 
             configuration.enableIpc = false
+            configuration.enableIPv6 = false
 
             configuration.maxClientCount = 50
             configuration.maxConnectionsPerIpAddress = 50
@@ -140,15 +128,30 @@ abstract class BaseTest {
             // assume SLF4J is bound to logback in the current environment
             val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
             rootLogger.detachAndStopAllAppenders()
-            rootLogger.level = level
 
             val context = rootLogger.loggerContext
 
             val jc = JoranConfigurator()
             jc.context = context
-            jc.doConfigure(File("logback.xml").absoluteFile)
+//            jc.doConfigure(File("logback.xml").absoluteFile)
             context.reset() // override default configuration
 
+            val encoder = PatternLayoutEncoder()
+            encoder.context = context
+            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] [%t] %msg%n"
+            encoder.start()
+
+            val consoleAppender = ConsoleAppender<ILoggingEvent>()
+            consoleAppender.context = context
+            consoleAppender.encoder = encoder
+            consoleAppender.start()
+
+
+            rootLogger.addAppender(consoleAppender)
+
+            // modify the level AFTER we setup the context!
+
+            rootLogger.level = level
 
             // we only want error messages
             val nettyLogger = LoggerFactory.getLogger("io.netty") as Logger
@@ -157,129 +160,208 @@ abstract class BaseTest {
             // we only want error messages
             val kryoLogger = LoggerFactory.getLogger("com.esotericsoftware") as Logger
             kryoLogger.level = Level.ERROR
-
-
-            val encoder = PatternLayoutEncoder()
-            encoder.context = context
-            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
-            encoder.start()
-            val consoleAppender = ConsoleAppender<ILoggingEvent>()
-            consoleAppender.context = context
-            consoleAppender.encoder = encoder
-            consoleAppender.start()
-            rootLogger.addAppender(consoleAppender)
         }
     }
-
-    @Volatile
-    private var latch = CountDownLatch(1)
 
     @Volatile
     private var autoFailThread: Thread? = null
 
     private val endPointConnections: MutableList<EndPoint<*>> = CopyOnWriteArrayList()
 
+    private var errors = mutableListOf<Throwable>()
+
     @Volatile
     private var isStopping = false
 
-    init {
-        println("---- " + this.javaClass.simpleName)
+    private val logger: org.slf4j.Logger = LoggerFactory.getLogger(this.javaClass.simpleName)!!
 
-        // we must always make sure that aeron is shut-down before starting again.
-        while (Server.isRunning(serverConfig())) {
-            println("Aeron was still running. Waiting for it to stop...")
-            sleep(2000)
+    init {
+        setLogLevel(Level.TRACE)
+
+        if (DEBUG) {
+            logger.error("---- " + this.javaClass.simpleName + " :: DEBUG UNIT TESTS ENABLED")
+        } else {
+            logger.error("---- " + this.javaClass.simpleName)
         }
+
+        AeronDriver.checkForMemoryLeaks()
     }
 
-    fun addEndPoint(endPointConnection: EndPoint<*>) {
-        endPointConnections.add(endPointConnection)
-        latch = CountDownLatch(endPointConnections.size + 1)
+
+    fun addEndPoint(endPoint: EndPoint<*>, runCheck: Boolean = true) {
+        if (runCheck && !endPoint.ensureStopped()) {
+            throw IllegalStateException("Unable to continue, AERON was unable to stop.")
+        }
+
+        endPoint.onInit { logger.error("UNIT TEST: init $id (${uuid.toHexString()})") }
+        endPoint.onConnect { logger.error("UNIT TEST: connect $id (${uuid.toHexString()})") }
+        endPoint.onDisconnect { logger.error("UNIT TEST: disconnect $id (${uuid.toHexString()})") }
+
+        endPoint.onError {
+            logger.error("UNIT TEST: ERROR! $id (${uuid.toHexString()})", it)
+            errors.add(it)
+        }
+
+        endPoint.onErrorGlobal {
+            logger.error("UNIT TEST: GLOBAL ERROR!", it)
+            errors.add(it)
+        }
+
+        endPointConnections.add(endPoint)
     }
 
     /**
-     * Immediately stop the endpoints
+     * Immediately stop the endpoints. DOES NOT WAIT FOR THEM TO CLOSE!
+     *
+     * Can stop from inside different callbacks
+     *  - message     (network event poller)
+     *  - connect     (eventdispatch.connect)
+     *  - disconnect  (eventdispatch.connect)
      */
     fun stopEndPoints(stopAfterMillis: Long = 0L) {
         if (isStopping) {
             return
         }
+
+//        if (EventDispatcher.isCurrentEvent()) {
+//            val mutex = Mutex(true)
+//
+//            // we want to redispatch, in the event we are already running inside the event dispatch
+//            // this gives us the chance to properly exit/close WITHOUT blocking currentEventDispatch
+//            // during the `waitForClose()` call
+//            GlobalScope.launch {
+//                stopEndPoints(stopAfterMillis)
+//                mutex.unlock()
+//            }
+//
+//            runBlocking {
+//                mutex.withLock { }
+//            }
+//
+//            return
+//        }
+
         isStopping = true
 
-        // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
-        // ARE NOT in the same thread group as netty!
         if (stopAfterMillis > 0L) {
-            sleep(stopAfterMillis)
+            Thread.sleep(stopAfterMillis)
         }
 
-        // we start with "1", so make sure adjust if we want an accurate count
-        println("Shutting down ${endPointConnections.size} (${latch.count - 1}) endpoints...")
+        val clients = endPointConnections.filterIsInstance<Client<Connection>>()
+        val servers = endPointConnections.filterIsInstance<Server<Connection>>()
 
-        val remainingConnections = mutableListOf<EndPoint<*>>()
+        logger.error("Unit test shutting down ${clients.size} clients...")
+        logger.error("Unit test shutting down ${servers.size} server...")
 
         // shutdown clients first
-        endPointConnections.forEach { endPoint ->
-            if (endPoint is Client) {
-                endPoint.close()
-                latch.countDown()
-                println("Done closing: ${endPoint.type.simpleName}")
-            } else {
-                remainingConnections.add(endPoint)
-            }
+        logger.error("Closing clients...")
+        clients.forEach { endPoint ->
+            endPoint.close()
         }
+        logger.error("NOT WAITING FOR CLIENT CLOSE.")
+
 
         // shutdown everything else (should only be servers) last
-        println("Shutting down ${remainingConnections.size} (${latch.count - 1}) endpoints...")
-        remainingConnections.forEach {
+        logger.error("Closing servers...")
+        servers.forEach {
             it.close()
-            latch.countDown()
         }
+        logger.error("NOT WAITING FOR SERVER CLOSE.")
 
-        // we start with "1", so make sure to end it
-        latch.countDown()
-        endPointConnections.clear()
+        logger.error("Closed endpoints...")
     }
     /**
-     * Wait for network client/server threads to shutdown for the specified time. 0 will wait forever
+     * Wait for network client/server threads to shut down for the specified time. 0 will wait forever
      *
      * it should close as close to naturally as possible, otherwise there are problems
      *
      * @param stopAfterSeconds how many seconds to wait, the default is 2 minutes.
      */
-    fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT, preShutdownAction: () -> Unit = {}) {
-        val latchTriggered = try {
-            if (stopAfterSeconds == 0L) {
-                latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
-            } else {
-                latch.await(stopAfterSeconds, TimeUnit.SECONDS)
-            }
-        } catch (e: InterruptedException) {
-            e.printStackTrace()
-            false
+    fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT, onShutdown: (List<Throwable>) -> List<Throwable> = { it }) {
+        val clients = endPointConnections.filterIsInstance<Client<Connection>>()
+        val servers = endPointConnections.filterIsInstance<Server<Connection>>()
+
+        val timeoutMS = TimeUnit.SECONDS.toMillis(stopAfterSeconds)
+        var successClients = true
+        var successServers = true
+
+        clients.forEach { endPoint ->
+            successClients = successClients && endPoint.waitForClose(timeoutMS)
+        }
+        servers.forEach { endPoint ->
+            successServers = successServers && endPoint.waitForClose(timeoutMS)
+        }
+
+        clients.forEach { endPoint ->
+            endPoint.stopDriver()
+        }
+        servers.forEach { endPoint ->
+            endPoint.stopDriver()
         }
 
         // run actions before we actually shutdown, but after we wait
-        if (!latchTriggered) {
-            preShutdownAction()
+        if (!successClients || !successServers) {
+            Assert.fail("Shutdown latch not triggered ($successClients|$successServers)!")
         }
 
-        // always stop the endpoints
-        stopEndPoints()
+        // we must always make sure that aeron is shut-down before starting again.
+        clients.forEach { endPoint ->
+            endPoint.ensureStopped()
+            endPoint.shutdownEventDispatcher() // once shutdown, it cannot be restarted!
+
+            if (!Client.ensureStopped(endPoint.config.copy())) {
+                throw IllegalStateException("Unable to continue, AERON client was unable to stop.")
+            }
+        }
+
+        servers.forEach { endPoint ->
+            endPoint.ensureStopped()
+            endPoint.shutdownEventDispatcher() // once shutdown, it cannot be restarted!
+
+            if (!Client.ensureStopped(endPoint.config.copy())) {
+                throw IllegalStateException("Unable to continue, AERON server was unable to stop.")
+            }
+        }
+
+        if (!AeronDriver.areAllInstancesClosed(logger)) {
+            throw RuntimeException("Unable to shutdown! There are still Aeron drivers loaded!")
+        }
+
+        logger.error("UNIT TEST, checking driver and memory leaks")
+
+        // have to make sure that the aeron driver is CLOSED.
+        Assert.assertTrue("The aeron drivers are not fully closed!", AeronDriver.areAllInstancesClosed())
+        AeronDriver.checkForMemoryLeaks()
+
+        endPointConnections.clear()
+
+        logger.error("Finished shutting down all endpoints... ($successClients, $successServers)")
+
+        if (errors.isNotEmpty()) {
+            val acceptableErrors = errors.filterNot { it.message?.contains("Unable to send message. (Connection in non-connected state, aborted attempt! Not connected)") ?: false }
+            val filteredErrors = onShutdown(acceptableErrors)
+            if (filteredErrors.isNotEmpty()) {
+                filteredErrors.forEach {
+                    it.printStackTrace()
+                }
+
+                Assert.fail("Exception caught, and it shouldn't have happened!")
+            }
+        }
     }
 
     @Before
     fun setupFailureCheck() {
-        autoFailThread = Thread(Runnable {
+        autoFailThread = Thread({
             // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
             // ARE NOT in the same thread group as netty!
             try {
                 Thread.sleep(AUTO_FAIL_TIMEOUT * 1000L)
 
                 // if the thread is interrupted, then it means we finished the test.
-                System.err.println("Test did not complete in a timely manner...")
-                runBlocking {
-                    stopEndPoints(0L)
-                }
+                LoggerFactory.getLogger(this.javaClass.simpleName).error("Test did not complete in a timely manner...")
+                stopEndPoints()
+                waitForThreads()
                 Assert.fail("Test did not complete in a timely manner.")
             } catch (ignored: InterruptedException) {
             }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,17 +34,31 @@ open class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
     override fun moo(value: String) {
         throw RuntimeException("Should never be executed!")
     }
-
     fun moo(connection: Connection, value: String) {
         moos += 2
         connection.logger.error("Moo! $moos: $value")
     }
 
-    override suspend fun moo(value: String, delay: Long) {
+    override fun mooTwo(value: String): String {
+//        println(value)
+        return "moo-two: $value"
+    }
+
+    override fun moo(value: String, delay: Long) {
         throw RuntimeException("Should never be executed!")
     }
 
-    suspend fun moo(connection: Connection, value: String, delay: Long) {
+    fun moo(connection: Connection, value: String, delay: Long) {
+        moos += 4
+        connection.logger.error("Moo! $moos: $value ($delay)")
+        Thread.sleep(delay)
+    }
+
+
+    override suspend fun mooSuspend(value: String, delay: Long) {
+        throw RuntimeException("Should never be executed!")
+    }
+    suspend fun mooSuspend(connection: Connection, value: String, delay: Long) {
         moos += 4
         connection.logger.error("Moo! $moos: $value ($delay)")
         delay(delay)
