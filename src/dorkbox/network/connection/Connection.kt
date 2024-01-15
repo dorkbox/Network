@@ -619,8 +619,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         sendSync.message = message
         sendSync.id = id
 
-        // if there is no ping response EVER, it means that the connection is in a critically BAD state!
-        // eventually, all the ping replies (or, in our case, the RMI replies that have timed out) will
+        // if there is no sync response EVER, it means that the connection is in a critically BAD state!
+        // eventually, all the ping/sync replies (or, in our case, the replies that have timed out) will
         // become recycled.
         // Is it a memory-leak? No, because the memory will **EVENTUALLY** get freed.
 

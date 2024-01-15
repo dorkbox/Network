@@ -64,6 +64,7 @@ internal class ClientHandshakeDriver(
             remotePort2: Int,
             clientListenPort: Int,
             handshakeTimeoutNs: Long,
+            connectionTimoutInNs: Long,
             reliable: Boolean,
             tagName: String,
             logger: Logger
@@ -98,11 +99,21 @@ internal class ClientHandshakeDriver(
 
             var pubSub: PubSub? = null
 
+            val timeoutInfo = if (connectionTimoutInNs > 0L) {
+                "[Handshake: ${Sys.getTimePrettyFull(handshakeTimeoutNs)}, Max connection attempt: ${Sys.getTimePrettyFull(connectionTimoutInNs)}]"
+            } else {
+                "[Handshake: ${Sys.getTimePrettyFull(handshakeTimeoutNs)}, Max connection attempt: Unlimited]"
+            }
+
+
             if (isUsingIPC) {
                 streamIdPub = config.ipcId
 
                 logInfo = "HANDSHAKE-IPC"
                 details = logInfo
+
+
+                logger.info("Client connecting via IPC. $timeoutInfo")
 
                 try {
                     pubSub = buildIPC(
@@ -149,6 +160,12 @@ internal class ClientHandshakeDriver(
 
                 streamIdPub = config.udpId
 
+
+                if (remoteAddress is Inet4Address) {
+                    logger.info("Client connecting to IPv4 $remoteAddressString. $timeoutInfo")
+                } else {
+                    logger.info("Client connecting to IPv6 $remoteAddressString. $timeoutInfo")
+                }
 
                 pubSub = buildUDP(
                     aeronDriver = aeronDriver,
