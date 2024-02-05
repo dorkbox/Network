@@ -235,6 +235,7 @@ internal class EventPoller {
         if (wasRunning) {
             pollExecutor.awaitTermination(200, TimeUnit.MILLISECONDS)
         }
-        logger.error("Closed Network Event Poller: wasRunning=$wasRunning")
+
+        logger.debug("Closed Network Event Poller: wasRunning=$wasRunning")
     }
 }
