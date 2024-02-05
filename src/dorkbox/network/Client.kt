@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 dorkbox, llc
+ * Copyright 2024 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -152,6 +152,9 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
     private var autoReconnect = false
 
     private val handshake = ClientHandshake(this, logger)
+
+    @Volatile
+    internal var clientConnectionInProgress = CountDownLatch(0)
 
     @Volatile
     private var slowDownForException = false
@@ -562,10 +565,12 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             handshakeTimeoutNs = TimeUnit.HOURS.toNanos(1)
         }
 
+
         val startTime = System.nanoTime()
         var success = false
         while (!stopConnectOnShutdown && (connectionTimoutInNs == 0L || System.nanoTime() - startTime < connectionTimoutInNs)) {
             logger.trace("Starting connect process...")
+            clientConnectionInProgress = CountDownLatch(1)
 
             if (isShutdown()) {
                 resetOnError()
@@ -600,7 +605,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
                 // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
                 handshakeConnection = ClientHandshakeDriver.build(
-                    config = config,
+                    endpoint = this,
                     aeronDriver = aeronDriver,
                     autoChangeToIpc = autoChangeToIpc,
                     remoteAddress = remoteAddress,
@@ -609,6 +614,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                     clientListenPort = config.port,
                     remotePort2 = port2,
                     handshakeTimeoutNs = handshakeTimeoutNs,
+                    connectionTimoutInNs = connectionTimoutInNs,
                     reliable = reliable,
                     tagName = tag,
                     logger = logger
@@ -626,12 +632,15 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                 connect0(handshake, handshakeConnection, handshakeTimeoutNs)
                 success = true
                 slowDownForException = false
+                clientConnectionInProgress.countDown()
 
                 // once we're done with the connection process, stop trying
                 break
             } catch (e: ClientRetryException) {
+                clientConnectionInProgress.countDown()
+                aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
+
                 if (stopConnectOnShutdown) {
-                    aeronDriver.closeIfSingle()
                     break
                 }
 
@@ -648,11 +657,9 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                     logger.info(message)
                 }
 
-                // maybe the aeron driver isn't running? (or isn't running correctly?)
-                aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, stop it
-
                 slowDownForException = true
             } catch (e: ClientRejectedException) {
+                clientConnectionInProgress.countDown()
                 aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, stop it
 
                 if (stopConnectOnShutdown) {
@@ -673,6 +680,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
                     throw e
                 }
             } catch (e: Exception) {
+                clientConnectionInProgress.countDown()
                 aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
 
                 if (stopConnectOnShutdown) {
@@ -696,7 +704,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
             endpointIsRunning.lazySet(false)
 
             if (stopConnectOnShutdown) {
-                val exception = ClientException("Client closed during connection attempt. Aborting connection attempts.").cleanStackTrace(3)
+                val exception = ClientException("Client closed during connection attempt to '$remoteAddressString'. Aborting connection attempts.").cleanStackTrace(3)
                 listenerManager.notifyError(exception)
                 // if we are waiting for this connection to connect (on a different thread, for example), make sure to release it.
                 closeLatch.countDown()
@@ -800,6 +808,7 @@ open class Client<CONNECTION : Connection>(config: ClientConfiguration = ClientC
 
         // we are now connected, so we can connect to the NEW client-specific ports
         val clientConnection = ClientConnectionDriver.build(
+            shutdown = shutdown,
             aeronDriver = aeronDriver,
             handshakeTimeoutNs = handshakeTimeoutNs,
             handshakeConnection = handshakeConnection,
