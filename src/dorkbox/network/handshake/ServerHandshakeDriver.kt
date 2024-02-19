@@ -73,6 +73,11 @@ internal class ServerHandshakeDriver(
         }
     }
 
+    fun unsafeClose() {
+        // we might not be able to close this connection.
+        aeronDriver.close(subscription, logInfo)
+    }
+
     override fun toString(): String {
         return info
     }

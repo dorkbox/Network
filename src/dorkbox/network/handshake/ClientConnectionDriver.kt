@@ -25,6 +25,7 @@ import dorkbox.network.connection.EndPoint
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.CommonContext
+import kotlinx.atomicfu.AtomicBoolean
 import java.net.Inet4Address
 import java.net.InetAddress
 
@@ -41,6 +42,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
     companion object {
         fun build(
+            shutdown: AtomicBoolean,
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             handshakeConnection: ClientHandshakeDriver,
@@ -68,6 +70,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
                 logInfo = "CONNECTION-IPC"
 
                 pubSub = buildIPC(
+                    shutdown = shutdown,
                     aeronDriver = aeronDriver,
                     handshakeTimeoutNs = handshakeTimeoutNs,
                     sessionIdPub = sessionIdPub,
@@ -92,6 +95,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
                 }
 
                 pubSub = buildUDP(
+                    shutdown = shutdown,
                     aeronDriver = aeronDriver,
                     handshakeTimeoutNs = handshakeTimeoutNs,
                     sessionIdPub = sessionIdPub,
@@ -114,6 +118,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
         @Throws(ClientTimedOutException::class)
         private fun buildIPC(
+            shutdown: AtomicBoolean,
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             sessionIdPub: Int,
@@ -139,7 +144,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            aeronDriver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
+            aeronDriver.waitForConnection(shutdown, publication, handshakeTimeoutNs, logInfo) { cause ->
                 ClientTimedOutException("$logInfo publication cannot connect with server!", cause)
             }
 
@@ -150,7 +155,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
 
             // wait for the REMOTE end to also connect to us!
-            aeronDriver.waitForConnection(subscription, handshakeTimeoutNs, logInfo) { cause ->
+            aeronDriver.waitForConnection(shutdown, subscription, handshakeTimeoutNs, logInfo) { cause ->
                 ClientTimedOutException("$logInfo subscription cannot connect with server!", cause)
             }
 
@@ -173,6 +178,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
         @Throws(ClientTimedOutException::class)
         private fun buildUDP(
+            shutdown: AtomicBoolean,
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             sessionIdPub: Int,
@@ -206,7 +212,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            aeronDriver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
+            aeronDriver.waitForConnection(shutdown, publication, handshakeTimeoutNs, logInfo) { cause ->
                 ClientTimedOutException("$logInfo publication cannot connect with server $remoteAddressString", cause)
             }
 
@@ -225,7 +231,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
 
             // wait for the REMOTE end to also connect to us!
-            aeronDriver.waitForConnection(subscription, handshakeTimeoutNs, logInfo) { cause ->
+            aeronDriver.waitForConnection(shutdown, subscription, handshakeTimeoutNs, logInfo) { cause ->
                 ClientTimedOutException("$logInfo subscription cannot connect with server!", cause)
             }
 

@@ -16,7 +16,6 @@
 
 package dorkbox.network.handshake
 
-import dorkbox.network.Configuration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.getLocalAddressString
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
@@ -34,6 +33,7 @@ import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.util.Sys
 import io.aeron.CommonContext
 import io.aeron.Subscription
+import kotlinx.atomicfu.AtomicBoolean
 import org.slf4j.Logger
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -55,7 +55,7 @@ internal class ClientHandshakeDriver(
 ) {
     companion object {
         fun build(
-            config: Configuration,
+            endpoint: EndPoint<*>,
             aeronDriver: AeronDriver,
             autoChangeToIpc: Boolean,
             remoteAddress: InetAddress?,
@@ -105,6 +105,8 @@ internal class ClientHandshakeDriver(
                 "[Handshake: ${Sys.getTimePrettyFull(handshakeTimeoutNs)}, Max connection attempt: Unlimited]"
             }
 
+            val config = endpoint.config
+            val shutdown = endpoint.shutdown
 
             if (isUsingIPC) {
                 streamIdPub = config.ipcId
@@ -117,6 +119,7 @@ internal class ClientHandshakeDriver(
 
                 try {
                     pubSub = buildIPC(
+                        shutdown = shutdown,
                         aeronDriver = aeronDriver,
                         handshakeTimeoutNs = handshakeTimeoutNs,
                         sessionIdPub = sessionIdPub,
@@ -168,6 +171,7 @@ internal class ClientHandshakeDriver(
                 }
 
                 pubSub = buildUDP(
+                    shutdown = shutdown,
                     aeronDriver = aeronDriver,
                     handshakeTimeoutNs = handshakeTimeoutNs,
                     remoteAddress = remoteAddress,
@@ -203,13 +207,15 @@ internal class ClientHandshakeDriver(
 
         @Throws(ClientTimedOutException::class)
         private fun buildIPC(
+            shutdown: AtomicBoolean,
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             sessionIdPub: Int,
-            streamIdPub: Int, streamIdSub: Int,
+            streamIdPub: Int,
+            streamIdSub: Int,
             reliable: Boolean,
             tagName: String,
-            logInfo: String
+            logInfo: String,
         ): PubSub {
             // Create a publication at the given address and port, using the given stream ID.
             // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
@@ -227,7 +233,7 @@ internal class ClientHandshakeDriver(
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            aeronDriver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
+            aeronDriver.waitForConnection(shutdown, publication, handshakeTimeoutNs, logInfo) { cause ->
                 ClientTimedOutException("$logInfo publication cannot connect with server in ${Sys.getTimePrettyFull(handshakeTimeoutNs)}", cause)
             }
 
@@ -253,6 +259,7 @@ internal class ClientHandshakeDriver(
 
         @Throws(ClientTimedOutException::class)
         private fun buildUDP(
+            shutdown: AtomicBoolean,
             aeronDriver: AeronDriver,
             handshakeTimeoutNs: Long,
             remoteAddress: InetAddress,
@@ -293,7 +300,7 @@ internal class ClientHandshakeDriver(
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            aeronDriver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
+            aeronDriver.waitForConnection(shutdown, publication, handshakeTimeoutNs, logInfo) { cause ->
                 streamIdAllocator.free(streamIdSub) // we don't continue, so close this as well
                 ClientTimedOutException("$logInfo publication cannot connect with server in ${Sys.getTimePrettyFull(handshakeTimeoutNs)}", cause)
             }

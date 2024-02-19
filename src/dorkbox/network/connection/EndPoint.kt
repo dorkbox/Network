@@ -146,7 +146,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal val endpointIsRunning = atomic(false)
 
     // this only prevents multiple shutdowns (in the event this close() is called multiple times)
-    private var shutdown = atomic(false)
+    internal var shutdown = atomic(false)
     internal val shutdownInProgress = atomic(false)
 
     @Volatile
@@ -949,19 +949,37 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *  1) We should reset 100% of the state+events, so that every time we connect, everything is redone
      *  2) We preserve the state+event, BECAUSE adding the onConnect/Disconnect/message event states might be VERY expensive.
      *
-     * NOTE: This method does NOT block, as the connection state is asynchronous. Use "waitForClose()" to wait for this to finish
+     * NOTE: This method does NOT block, as the connection state is asynchronous. Use "waitForClose()" to wait for this to finish.
      *
-     * @param closeEverything unless explicitly called, this is only false when a connection is closed in the client.
+     * This will unblock the tread waiting in "waitForClose()" when it is finished.
+     *
+     * @param closeEverything true only possible via the Client.close() or Server.close() methods.
      */
     internal fun close(
         closeEverything: Boolean,
         sendDisconnectMessage: Boolean,
-        releaseWaitingThreads: Boolean)
+        releaseWaitingThreads: Boolean,
+        redispatched: Boolean = false)
     {
+        if (isShutdown()) {
+            // we have already closed! Don't try to close again
+            logger.debug("Already shutting down endpoint, skipping multiple attempts...")
+            return
+        }
+
         if (!eventDispatch.CLOSE.isDispatch()) {
             eventDispatch.CLOSE.launch {
-                close(closeEverything, sendDisconnectMessage, releaseWaitingThreads)
+                // only time the redispatch is true!
+                close(closeEverything, sendDisconnectMessage, releaseWaitingThreads, true)
             }
+
+            if (closeEverything) {
+                waitForClose()
+                shutdownEventDispatcher() // once shutdown, it cannot be restarted!
+            }
+
+            logger.info("Done shutting down the endpoint.")
+
             return
         }
 
@@ -1004,18 +1022,19 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             }
         }
 
-
-
-        if (logger.isDebugEnabled) {
-            logger.debug("Shutting down endpoint...")
-        }
-
+        logger.debug("Shutting down endpoint...")
+        shutdown.lazySet(true)
 
         // always do this. It is OK to run this multiple times
         // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
         // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
         connections.forEach {
             it.closeImmediately(sendDisconnectMessage = sendDisconnectMessage, closeEverything = closeEverything)
+        }
+
+        if (this is Client<*>) {
+            // if there is a client connection IN PROGRESS... then we must wait for that to timeout so we can make sure everything is closed in the right order.
+            clientConnectionInProgress.await()
         }
 
 
@@ -1058,8 +1077,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         // we might be restarting the aeron driver, so make sure it's closed.
         aeronDriver.close()
 
-        shutdown.lazySet(true)
-
         // the shutdown here must be in the launchSequentially lambda, this way we can guarantee the driver is closed before we move on
         shutdownInProgress.lazySet(false)
         shutdownLatch.countDown()
@@ -1069,7 +1086,14 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             closeLatch.countDown()
         }
 
-        logger.info("Done shutting down the endpoint.")
+        if (!redispatched) {
+            if (closeEverything) {
+                waitForClose()
+                shutdownEventDispatcher() // once shutdown, it cannot be restarted!
+            }
+
+            logger.info("Done shutting down the endpoint.")
+        }
     }
 
     /**
@@ -1088,8 +1112,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * @param timeoutUnit what the unit count is
      */
     fun shutdownEventDispatcher(timeout: Long = 15, timeoutUnit: TimeUnit = TimeUnit.SECONDS) {
-        logger.info("Waiting for Event Dispatcher to shutdown...")
+        logger.debug("Waiting for Event Dispatcher to shutdown...")
         eventDispatch.shutdownAndWait(timeout, timeoutUnit)
+        logger.info("Done shutting down Event Dispatcher...")
     }
 
     /**

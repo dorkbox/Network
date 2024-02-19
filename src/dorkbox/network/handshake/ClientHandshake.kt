@@ -217,7 +217,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
             pubSub.sub.poll(handler, 1)
 
-            if (failedException != null || connectionHelloInfo != null) {
+            if (endPoint.isShutdown() || failedException != null || connectionHelloInfo != null) {
                 break
             }
 
@@ -283,7 +283,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
             handshakePubSub.sub.poll(handler, 1)
 
-            if (failedException != null || connectionDone) {
+            if (endPoint.isShutdown() || failedException != null || connectionDone) {
                 break
             }
 

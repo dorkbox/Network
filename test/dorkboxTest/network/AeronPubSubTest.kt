@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 dorkbox, llc
+ * Copyright 2024 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,7 +84,7 @@ class AeronPubSubTest : BaseTest() {
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            clientDriver.waitForConnection(publication, handshakeTimeoutNs, "client_$index") { cause ->
+            clientDriver.waitForConnection(atomic(false), publication, handshakeTimeoutNs, "client_$index") { cause ->
                 ClientTimedOutException("Client publication cannot connect with localhost server", cause)
             }
 
@@ -167,7 +167,7 @@ class AeronPubSubTest : BaseTest() {
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            clientDriver.waitForConnection(publication, handshakeTimeoutNs, "client_$index") { cause ->
+            clientDriver.waitForConnection(atomic(false), publication, handshakeTimeoutNs, "client_$index") { cause ->
                 ClientTimedOutException("Client publication cannot connect with localhost server", cause)
             }
 
@@ -250,7 +250,7 @@ class AeronPubSubTest : BaseTest() {
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            clientDriver.waitForConnection(publication, handshakeTimeoutNs, "client_$index") { cause ->
+            clientDriver.waitForConnection(atomic(false), publication, handshakeTimeoutNs, "client_$index") { cause ->
                 ClientTimedOutException("Client publication cannot connect with localhost server", cause)
             }
 
@@ -274,7 +274,7 @@ class AeronPubSubTest : BaseTest() {
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            clientDriver.waitForConnection(publication, handshakeTimeoutNs, "client_$index") { cause ->
+            clientDriver.waitForConnection(atomic(false), publication, handshakeTimeoutNs, "client_$index") { cause ->
                 ClientTimedOutException("Client publication cannot connect with localhost server", cause)
             }
 
@@ -367,7 +367,7 @@ class AeronPubSubTest : BaseTest() {
 
                 // can throw an exception! We catch it in the calling class
                 // we actually have to wait for it to connect before we continue
-                clientDriver.waitForConnection(publication, handshakeTimeoutNs, "client_$index") { cause ->
+                clientDriver.waitForConnection(atomic(false), publication, handshakeTimeoutNs, "client_$index") { cause ->
                     ClientTimedOutException("Client publication cannot connect with localhost server", cause)
                 }
 
@@ -395,7 +395,7 @@ class AeronPubSubTest : BaseTest() {
 
                 // can throw an exception! We catch it in the calling class
                 // we actually have to wait for it to connect before we continue
-                clientDriver.waitForConnection(publication, handshakeTimeoutNs, "client_$index") { cause ->
+                clientDriver.waitForConnection(atomic(false), publication, handshakeTimeoutNs, "client_$index") { cause ->
                     ClientTimedOutException("Client publication cannot connect with localhost server", cause)
                 }
 
@@ -487,7 +487,7 @@ class AeronPubSubTest : BaseTest() {
 
                 // can throw an exception! We catch it in the calling class
                 // we actually have to wait for it to connect before we continue
-                clientDriver.waitForConnection(publication, handshakeTimeoutNs, "client_$index") { cause ->
+                clientDriver.waitForConnection(atomic(false), publication, handshakeTimeoutNs, "client_$index") { cause ->
                     ClientTimedOutException("Client publication cannot connect with localhost server", cause)
                 }
 

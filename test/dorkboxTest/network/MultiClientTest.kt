@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 dorkbox, llc
+ * Copyright 2024 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,9 +33,6 @@ import java.util.concurrent.*
 
 @Suppress("UNUSED_ANONYMOUS_PARAMETER")
 class MultiClientTest : BaseTest() {
-    // this can be upped to 100 for stress testing, but for general unit tests this should be smaller (as this is sensitive on the load of the machine)
-    private val totalCount = 80
-
     private val clientConnectCount = atomic(0)
     private val serverConnectCount = atomic(0)
     private val disconnectCount = atomic(0)
@@ -43,6 +40,11 @@ class MultiClientTest : BaseTest() {
     @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
     @Test
     fun multiConnectClient() {
+        // this can be upped to 100 for stress testing, but for general unit tests this should be smaller (as this is sensitive on the load of the machine)
+        // THE ONLY limitation you will have with this, is the size of the temp drive space.
+        val totalCount = 30
+
+
         val server = run {
             val config = serverConfig()
             config.uniqueAeronDirectory = true

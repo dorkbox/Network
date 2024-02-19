@@ -64,6 +64,8 @@ internal object ServerHandshakePollers {
         private val isReliable = server.config.isReliable
         private val handshaker = server.handshaker
         private val handshakeTimeoutNs = handshake.handshakeTimeoutNs
+        private val shutdownInProgress = server.shutdownInProgress
+        private val shutdown = server.shutdown
 
         // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
         private val publications = ExpiringMap.builder()
@@ -93,6 +95,12 @@ internal object ServerHandshakePollers {
             val image = header.context() as Image
 
             val logInfo = "$sessionId/$streamId : IPC" // Server is the "source", client mirrors the server
+
+            if (shutdownInProgress.value) {
+                driver.deleteLogFile(image)
+                server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] server is shutting down. Aborting new connection attempts."))
+                return
+            }
 
             // ugh, this is verbose -- but necessary
             val message = try {
@@ -149,7 +157,7 @@ internal object ServerHandshakePollers {
 
                     try {
                         // we actually have to wait for it to connect before we continue
-                        driver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
+                        driver.waitForConnection(shutdown, publication, handshakeTimeoutNs, logInfo) { cause ->
                             ServerTimedoutException("$logInfo publication cannot connect with client in ${Sys.getTimePrettyFull(handshakeTimeoutNs)}", cause)
                         }
                     }
@@ -275,6 +283,8 @@ internal object ServerHandshakePollers {
         private val ipInfo = server.ipInfo
         private val handshaker = server.handshaker
         private val handshakeTimeoutNs = handshake.handshakeTimeoutNs
+        private val shutdownInProgress = server.shutdownInProgress
+        private val shutdown = server.shutdown
 
         private val serverPortSub = server.port1
         // MDC 'dynamic control mode' means that the server will to listen for status messages and NAK (from the client) on a port.
@@ -351,6 +361,12 @@ internal object ServerHandshakePollers {
             val logInfo = "$sessionId/$streamId:$clientAddressString"
 
 
+            if (shutdownInProgress.value) {
+                driver.deleteLogFile(image)
+                server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] server is shutting down. Aborting new connection attempts."))
+                return
+            }
+
             // ugh, this is verbose -- but necessary
             val message = try {
                 val msg = handshaker.readMessage(buffer, offset, length)
@@ -407,7 +423,7 @@ internal object ServerHandshakePollers {
                     try {
                         // we actually have to wait for it to connect before we continue.
                         //
-                        driver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
+                        driver.waitForConnection(shutdown, publication, handshakeTimeoutNs, logInfo) { cause ->
                             ServerTimedoutException("$logInfo publication cannot connect with client in ${Sys.getTimePrettyFull(handshakeTimeoutNs)}", cause)
                         }
                     } catch (e: Exception) {
@@ -556,7 +572,12 @@ internal object ServerHandshakePollers {
                 override fun close() {
                     delegate.close()
                     handler.clear()
-                    driver.close(server)
+                    try {
+                        driver.unsafeClose()
+                    }
+                    catch (ignored: Exception) {
+                        // we are already shutting down, ignore
+                    }
                     logger.info("Closed IPC poller")
                 }
 
@@ -605,7 +626,12 @@ internal object ServerHandshakePollers {
                 override fun close() {
                     delegate.close()
                     handler.clear()
-                    driver.close(server)
+                    try {
+                        driver.unsafeClose()
+                    }
+                    catch (ignored: Exception) {
+                        // we are already shutting down, ignore
+                    }
                     logger.info("Closed IPv4 poller")
                 }
 
@@ -652,7 +678,12 @@ internal object ServerHandshakePollers {
                 override fun close() {
                     delegate.close()
                     handler.clear()
-                    driver.close(server)
+                    try {
+                        driver.unsafeClose()
+                    }
+                    catch (ignored: Exception) {
+                        // we are already shutting down, ignore
+                    }
                     logger.info("Closed IPv4 poller")
                 }
 
@@ -700,7 +731,12 @@ internal object ServerHandshakePollers {
                 override fun close() {
                     delegate.close()
                     handler.clear()
-                    driver.close(server)
+                    try {
+                        driver.unsafeClose()
+                    }
+                    catch (ignored: Exception) {
+                        // we are already shutting down, ignore
+                    }
                     logger.info("Closed IPv4+6 poller")
                 }
 

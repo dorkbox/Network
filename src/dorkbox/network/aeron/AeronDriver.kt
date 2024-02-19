@@ -36,6 +36,7 @@ import io.aeron.driver.reports.LossReportReader
 import io.aeron.driver.reports.LossReportUtil
 import io.aeron.logbuffer.BufferClaim
 import io.aeron.protocol.DataHeaderFlyweight
+import kotlinx.atomicfu.AtomicBoolean
 import org.agrona.*
 import org.agrona.concurrent.AtomicBuffer
 import org.agrona.concurrent.IdleStrategy
@@ -525,6 +526,7 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
      * The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
      */
     fun waitForConnection(
+        shutdown: AtomicBoolean,
         publication: Publication,
         handshakeTimeoutNs: Long,
         logInfo: String,
@@ -539,6 +541,9 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
         while (System.nanoTime() - startTime < handshakeTimeoutNs) {
             if (publication.isConnected) {
                 return
+            }
+            if (shutdown.value) {
+                break
             }
 
             Thread.sleep(200L)
@@ -562,6 +567,7 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
      * For subscriptions, in the client we want to guarantee that the remote server has connected BACK to us!
      */
     fun waitForConnection(
+        shutdown: AtomicBoolean,
         subscription: Subscription,
         handshakeTimeoutNs: Long,
         logInfo: String,
@@ -576,6 +582,9 @@ class AeronDriver(config: Configuration, val logger: Logger, val endPoint: EndPo
         while (System.nanoTime() - startTime < handshakeTimeoutNs) {
             if (subscription.isConnected && subscription.imageCount() > 0) {
                 return
+            }
+            if (shutdown.value) {
+                break
             }
 
             Thread.sleep(200L)
